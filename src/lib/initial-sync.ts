@@ -251,35 +251,59 @@ type PageInfo = {
 
 // -- Helpers -----------------------------------------------------------------
 
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1000;
+const PAGE_DELAY_MS = 200;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function linearRequest<T>(
   apiToken: string,
   query: string,
   variables: Record<string, unknown>
 ): Promise<T> {
-  const res = await fetch(LINEAR_API, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: apiToken.trim(),
-    },
-    body: JSON.stringify({ query, variables }),
-  });
+  let lastError: Error | null = null;
 
-  if (!res.ok) {
-    throw new Error(`Linear API ${res.status}: ${await res.text()}`);
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      await sleep(RETRY_DELAY_MS * attempt);
+    }
+
+    const res = await fetch(LINEAR_API, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: apiToken.trim(),
+      },
+      body: JSON.stringify({ query, variables }),
+    });
+
+    if (res.status >= 500) {
+      lastError = new Error(`Linear API ${res.status} (attempt ${attempt + 1}/${MAX_RETRIES})`);
+      console.warn(lastError.message);
+      continue;
+    }
+
+    if (!res.ok) {
+      throw new Error(`Linear API ${res.status}: ${await res.text()}`);
+    }
+
+    const json = (await res.json()) as { data?: T; errors?: Array<{ message: string }> };
+
+    if (json.errors) {
+      throw new Error(`GraphQL: ${json.errors.map((e) => e.message).join(", ")}`);
+    }
+
+    if (!json.data) {
+      throw new Error("No data returned from Linear API");
+    }
+
+    return json.data;
   }
 
-  const json = (await res.json()) as { data?: T; errors?: Array<{ message: string }> };
-
-  if (json.errors) {
-    throw new Error(`GraphQL: ${json.errors.map((e) => e.message).join(", ")}`);
-  }
-
-  if (!json.data) {
-    throw new Error("No data returned from Linear API");
-  }
-
-  return json.data;
+  throw lastError ?? new Error("Linear API request failed after retries");
 }
 
 // -- Core sync logic ---------------------------------------------------------
@@ -300,6 +324,7 @@ export async function fetchAllIssues(
     allIssues.push(...data.issues.nodes);
     hasMore = data.issues.pageInfo.hasNextPage;
     cursor = data.issues.pageInfo.endCursor ?? undefined;
+    if (hasMore) await sleep(PAGE_DELAY_MS);
   }
 
   return allIssues;
@@ -321,6 +346,7 @@ async function fetchCommentsForIssue(
     allComments.push(...data.comments.nodes);
     hasMore = data.comments.pageInfo.hasNextPage;
     cursor = data.comments.pageInfo.endCursor ?? undefined;
+    if (hasMore) await sleep(PAGE_DELAY_MS);
   }
 
   return allComments;
@@ -341,6 +367,7 @@ export async function fetchAllTeams(
     all.push(...data.teams.nodes);
     hasMore = data.teams.pageInfo.hasNextPage;
     cursor = data.teams.pageInfo.endCursor ?? undefined;
+    if (hasMore) await sleep(PAGE_DELAY_MS);
   }
 
   return all;
@@ -362,6 +389,7 @@ export async function fetchAllProjects(
     all.push(...data.projects.nodes);
     hasMore = data.projects.pageInfo.hasNextPage;
     cursor = data.projects.pageInfo.endCursor ?? undefined;
+    if (hasMore) await sleep(PAGE_DELAY_MS);
   }
 
   return all;
@@ -382,6 +410,7 @@ export async function fetchAllInitiatives(
     all.push(...data.initiatives.nodes);
     hasMore = data.initiatives.pageInfo.hasNextPage;
     cursor = data.initiatives.pageInfo.endCursor ?? undefined;
+    if (hasMore) await sleep(PAGE_DELAY_MS);
   }
 
   return all;
