@@ -6,7 +6,7 @@ const PAGE_SIZE = 50;
 // -- GraphQL queries ---------------------------------------------------------
 
 const ISSUES_QUERY = `
-  query TeamIssues($teamId: String!, $after: String) {
+  query TeamIssues($teamId: ID!, $after: String) {
     issues(
       filter: { team: { id: { eq: $teamId } } }
       first: ${PAGE_SIZE}
@@ -39,7 +39,7 @@ const ISSUES_QUERY = `
 `;
 
 const COMMENTS_QUERY = `
-  query IssueComments($issueId: String!, $after: String) {
+  query IssueComments($issueId: ID!, $after: String) {
     comments(
       filter: { issue: { id: { eq: $issueId } } }
       first: ${PAGE_SIZE}
@@ -91,7 +91,7 @@ const TEAMS_QUERY = `
 `;
 
 const PROJECTS_QUERY = `
-  query TeamProjects($teamId: String!, $after: String) {
+  query TeamProjects($teamId: ID!, $after: String) {
     projects(
       filter: { accessibleTeams: { id: { eq: $teamId } } }
       first: ${PAGE_SIZE}
