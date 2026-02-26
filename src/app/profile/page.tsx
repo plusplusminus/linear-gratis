@@ -20,10 +20,15 @@ export default function ProfilePage() {
   const [syncStatus, setSyncStatus] = useState<{
     connected: boolean
     issueCount: number
+    commentCount: number
+    teamCount: number
+    projectCount: number
+    initiativeCount: number
     lastSyncedAt: string | null
     subscription: { id: string; teamId: string; createdAt: string } | null
   } | null>(null)
   const [syncLoading, setSyncLoading] = useState(false)
+  const [resyncLoading, setResyncLoading] = useState(false)
   const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const router = useRouter()
 
@@ -96,6 +101,40 @@ export default function ProfilePage() {
       console.error('Error toggling sync:', error)
     } finally {
       setSyncLoading(false)
+    }
+  }
+
+  const resync = async () => {
+    setResyncLoading(true)
+    setSyncMessage(null)
+    try {
+      const res = await fetch('/api/sync/initial', { method: 'POST' })
+      const data = await res.json() as {
+        success?: boolean
+        error?: string
+        issueCount?: number
+        commentCount?: number
+        teamCount?: number
+        projectCount?: number
+        initiativeCount?: number
+      }
+      if (res.ok && data.success) {
+        const parts = []
+        if (data.issueCount) parts.push(`${data.issueCount} issues`)
+        if (data.commentCount) parts.push(`${data.commentCount} comments`)
+        if (data.teamCount) parts.push(`${data.teamCount} teams`)
+        if (data.projectCount) parts.push(`${data.projectCount} projects`)
+        if (data.initiativeCount) parts.push(`${data.initiativeCount} initiatives`)
+        setSyncMessage({ type: 'success', text: `Synced ${parts.join(', ')}.` })
+        await loadSyncStatus()
+      } else {
+        setSyncMessage({ type: 'error', text: data.error || 'Sync failed.' })
+      }
+    } catch (error) {
+      setSyncMessage({ type: 'error', text: 'Something went wrong.' })
+      console.error('Error re-syncing:', error)
+    } finally {
+      setResyncLoading(false)
     }
   }
 
@@ -307,18 +346,35 @@ export default function ProfilePage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {syncStatus?.connected && (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-muted/50 rounded-lg p-3 border border-border/50">
-                  <p className="text-sm text-muted-foreground">Synced issues</p>
-                  <p className="text-2xl font-semibold">{syncStatus.issueCount}</p>
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-muted/50 rounded-lg p-3 border border-border/50">
+                    <p className="text-xs text-muted-foreground">Issues</p>
+                    <p className="text-xl font-semibold">{syncStatus.issueCount}</p>
+                  </div>
+                  <div className="bg-muted/50 rounded-lg p-3 border border-border/50">
+                    <p className="text-xs text-muted-foreground">Projects</p>
+                    <p className="text-xl font-semibold">{syncStatus.projectCount}</p>
+                  </div>
+                  <div className="bg-muted/50 rounded-lg p-3 border border-border/50">
+                    <p className="text-xs text-muted-foreground">Teams</p>
+                    <p className="text-xl font-semibold">{syncStatus.teamCount}</p>
+                  </div>
                 </div>
-                <div className="bg-muted/50 rounded-lg p-3 border border-border/50">
-                  <p className="text-sm text-muted-foreground">Last synced</p>
-                  <p className="text-sm font-medium mt-1">
+                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span>
                     {syncStatus.lastSyncedAt
-                      ? new Date(syncStatus.lastSyncedAt).toLocaleString()
+                      ? `Last synced ${new Date(syncStatus.lastSyncedAt).toLocaleString()}`
                       : 'Not yet synced'}
-                  </p>
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={resync}
+                    disabled={resyncLoading}
+                  >
+                    {resyncLoading ? 'Syncing...' : 'Re-sync now'}
+                  </Button>
                 </div>
               </div>
             )}
