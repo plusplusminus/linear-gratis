@@ -1,10 +1,10 @@
-import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
-
-// Initialise OpenNext for Cloudflare during local development
-// This allows us to use Cloudflare bindings (KV, D1, R2, etc.) in dev mode
-initOpenNextCloudflareForDev();
-
 import type { NextConfig } from "next";
+
+if (process.env.NODE_ENV === "development") {
+  import("@opennextjs/cloudflare").then(({ initOpenNextCloudflareForDev }) =>
+    initOpenNextCloudflareForDev()
+  );
+}
 
 const nextConfig: NextConfig = {
   webpack: (config, { isServer }) => {
