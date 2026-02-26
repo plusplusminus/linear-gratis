@@ -77,6 +77,25 @@ type LinearCommentData = {
   updatedAt?: string;
 };
 
+type LinearProjectData = {
+  id: string;
+  name?: string;
+  status?: { name?: string };
+  lead?: { name?: string };
+  priority?: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+type LinearInitiativeData = {
+  id: string;
+  name?: string;
+  status?: string;
+  owner?: { name?: string };
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 // -- Issue mapping (pure, exported for testing) ------------------------------
 
 export function mapIssueWebhookToRow(
@@ -200,6 +219,127 @@ export async function handleCommentEvent(
   }
 }
 
+// -- Project mapping (pure, exported for testing) ----------------------------
+
+export function mapProjectWebhookToRow(
+  action: string,
+  data: Record<string, unknown>,
+  userId: string
+): Record<string, unknown> {
+  const project = data as unknown as LinearProjectData;
+
+  const row: Record<string, unknown> = {
+    linear_id: project.id,
+    user_id: userId,
+    synced_at: new Date().toISOString(),
+    data,
+  };
+
+  if (project.name !== undefined) row.name = project.name;
+  if (project.status?.name !== undefined) row.status_name = project.status.name;
+  if (project.lead?.name !== undefined) row.lead_name = project.lead.name;
+  if (project.priority !== undefined) row.priority = project.priority;
+
+  if (action === "create") {
+    row.created_at = project.createdAt || new Date().toISOString();
+    row.updated_at = project.updatedAt || new Date().toISOString();
+  } else {
+    row.updated_at = project.updatedAt || new Date().toISOString();
+  }
+
+  return row;
+}
+
+// -- Initiative mapping (pure, exported for testing) -------------------------
+
+export function mapInitiativeWebhookToRow(
+  action: string,
+  data: Record<string, unknown>,
+  userId: string
+): Record<string, unknown> {
+  const initiative = data as unknown as LinearInitiativeData;
+
+  const row: Record<string, unknown> = {
+    linear_id: initiative.id,
+    user_id: userId,
+    synced_at: new Date().toISOString(),
+    data,
+  };
+
+  if (initiative.name !== undefined) row.name = initiative.name;
+  if (initiative.status !== undefined) row.status = initiative.status;
+  if (initiative.owner?.name !== undefined) row.owner_name = initiative.owner.name;
+
+  if (action === "create") {
+    row.created_at = initiative.createdAt || new Date().toISOString();
+    row.updated_at = initiative.updatedAt || new Date().toISOString();
+  } else {
+    row.updated_at = initiative.updatedAt || new Date().toISOString();
+  }
+
+  return row;
+}
+
+// -- Project event handler ---------------------------------------------------
+
+export async function handleProjectEvent(
+  action: string,
+  data: Record<string, unknown>,
+  userId: string
+): Promise<void> {
+  const project = data as unknown as LinearProjectData;
+
+  if (action === "remove") {
+    await supabaseAdmin
+      .from("synced_projects")
+      .delete()
+      .eq("user_id", userId)
+      .eq("linear_id", project.id);
+    return;
+  }
+
+  const row = mapProjectWebhookToRow(action, data, userId);
+
+  const { error } = await supabaseAdmin.from("synced_projects").upsert(row, {
+    onConflict: "user_id,linear_id",
+  });
+
+  if (error) {
+    console.error("Failed to upsert synced_project:", error);
+    throw error;
+  }
+}
+
+// -- Initiative event handler ------------------------------------------------
+
+export async function handleInitiativeEvent(
+  action: string,
+  data: Record<string, unknown>,
+  userId: string
+): Promise<void> {
+  const initiative = data as unknown as LinearInitiativeData;
+
+  if (action === "remove") {
+    await supabaseAdmin
+      .from("synced_initiatives")
+      .delete()
+      .eq("user_id", userId)
+      .eq("linear_id", initiative.id);
+    return;
+  }
+
+  const row = mapInitiativeWebhookToRow(action, data, userId);
+
+  const { error } = await supabaseAdmin.from("synced_initiatives").upsert(row, {
+    onConflict: "user_id,linear_id",
+  });
+
+  if (error) {
+    console.error("Failed to upsert synced_initiative:", error);
+    throw error;
+  }
+}
+
 // -- Main event router -------------------------------------------------------
 
 export async function routeWebhookEvent(
@@ -214,6 +354,12 @@ export async function routeWebhookEvent(
       break;
     case "Comment":
       await handleCommentEvent(action, data, userId);
+      break;
+    case "Project":
+      await handleProjectEvent(action, data, userId);
+      break;
+    case "Initiative":
+      await handleInitiativeEvent(action, data, userId);
       break;
     default:
       console.log(`Ignoring unhandled webhook event type: ${type}`);

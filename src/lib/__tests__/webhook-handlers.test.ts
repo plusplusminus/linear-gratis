@@ -4,6 +4,8 @@ import {
   verifyWebhookSignature,
   mapIssueWebhookToRow,
   mapCommentWebhookToRow,
+  mapProjectWebhookToRow,
+  mapInitiativeWebhookToRow,
 } from "../webhook-handlers";
 
 // -- Signature verification ---------------------------------------------------
@@ -187,5 +189,143 @@ describe("mapCommentWebhookToRow", () => {
 
     expect(row.data).toEqual(partial);
     expect(row.issue_linear_id).toBeUndefined();
+  });
+});
+
+// -- Project webhook → row mapping -------------------------------------------
+
+describe("mapProjectWebhookToRow", () => {
+  const userId = "user_abc123";
+
+  const fullProjectPayload = {
+    id: "project-1",
+    name: "Q1 Sprint",
+    description: "Our Q1 goals",
+    status: { id: "status-1", name: "In Progress", color: "#00ff00", type: "started" },
+    lead: { id: "user-1", name: "Alice" },
+    priority: 2,
+    priorityLabel: "High",
+    progress: 0.45,
+    health: "atRisk",
+    startDate: "2026-01-01",
+    targetDate: "2026-03-31",
+    url: "https://linear.app/team/project/q1-sprint",
+    teams: [{ id: "team-1", name: "Engineering", key: "ENG" }],
+    initiatives: [{ id: "init-1", name: "Revenue Growth" }],
+    milestones: [{ id: "ms-1", name: "MVP", targetDate: "2026-02-15" }],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-02-25T14:30:00.000Z",
+  };
+
+  it("stores full payload in data field", () => {
+    const row = mapProjectWebhookToRow("create", fullProjectPayload as unknown as Record<string, unknown>, userId);
+    expect(row.data).toEqual(fullProjectPayload);
+  });
+
+  it("extracts indexed columns from a full create payload", () => {
+    const row = mapProjectWebhookToRow("create", fullProjectPayload as unknown as Record<string, unknown>, userId);
+
+    expect(row.linear_id).toBe("project-1");
+    expect(row.user_id).toBe(userId);
+    expect(row.name).toBe("Q1 Sprint");
+    expect(row.status_name).toBe("In Progress");
+    expect(row.lead_name).toBe("Alice");
+    expect(row.priority).toBe(2);
+    expect(row.created_at).toBe("2026-01-01T00:00:00.000Z");
+    expect(row.updated_at).toBe("2026-02-25T14:30:00.000Z");
+    expect(row.synced_at).toBeDefined();
+  });
+
+  it("sets created_at only on create action", () => {
+    const createRow = mapProjectWebhookToRow("create", fullProjectPayload as unknown as Record<string, unknown>, userId);
+    const updateRow = mapProjectWebhookToRow("update", fullProjectPayload as unknown as Record<string, unknown>, userId);
+
+    expect(createRow.created_at).toBe("2026-01-01T00:00:00.000Z");
+    expect(updateRow.created_at).toBeUndefined();
+  });
+
+  it("handles partial update (only name changed)", () => {
+    const partial = { id: "project-1", name: "Q1 Sprint v2" };
+    const row = mapProjectWebhookToRow("update", partial as unknown as Record<string, unknown>, userId);
+
+    expect(row.linear_id).toBe("project-1");
+    expect(row.name).toBe("Q1 Sprint v2");
+    expect(row.data).toEqual(partial);
+    expect(row.status_name).toBeUndefined();
+    expect(row.lead_name).toBeUndefined();
+    expect(row.priority).toBeUndefined();
+  });
+
+  it("extracts status name for indexed column", () => {
+    const data = { id: "x", status: { id: "s1", name: "Completed", color: "#0f0", type: "completed" } };
+    const row = mapProjectWebhookToRow("update", data as unknown as Record<string, unknown>, userId);
+
+    expect(row.status_name).toBe("Completed");
+    expect((row.data as Record<string, unknown>).status).toEqual(data.status);
+  });
+});
+
+// -- Initiative webhook → row mapping ----------------------------------------
+
+describe("mapInitiativeWebhookToRow", () => {
+  const userId = "user_abc123";
+
+  const fullInitiativePayload = {
+    id: "init-1",
+    name: "Revenue Growth",
+    description: "Double ARR by EOY",
+    status: "Active",
+    health: "onTrack",
+    healthUpdatedAt: "2026-02-20T10:00:00.000Z",
+    targetDate: "2026-12-31",
+    owner: { id: "user-1", name: "Alice" },
+    projects: [{ id: "project-1", name: "Q1 Sprint" }],
+    subInitiatives: [{ id: "init-2", name: "Enterprise Sales" }],
+    parentInitiative: { id: "init-0", name: "Company Goals" },
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-02-25T14:30:00.000Z",
+  };
+
+  it("stores full payload in data field", () => {
+    const row = mapInitiativeWebhookToRow("create", fullInitiativePayload as unknown as Record<string, unknown>, userId);
+    expect(row.data).toEqual(fullInitiativePayload);
+  });
+
+  it("extracts indexed columns from a full create payload", () => {
+    const row = mapInitiativeWebhookToRow("create", fullInitiativePayload as unknown as Record<string, unknown>, userId);
+
+    expect(row.linear_id).toBe("init-1");
+    expect(row.user_id).toBe(userId);
+    expect(row.name).toBe("Revenue Growth");
+    expect(row.status).toBe("Active");
+    expect(row.owner_name).toBe("Alice");
+    expect(row.created_at).toBe("2026-01-01T00:00:00.000Z");
+    expect(row.updated_at).toBe("2026-02-25T14:30:00.000Z");
+    expect(row.synced_at).toBeDefined();
+  });
+
+  it("sets created_at only on create action", () => {
+    const createRow = mapInitiativeWebhookToRow("create", fullInitiativePayload as unknown as Record<string, unknown>, userId);
+    const updateRow = mapInitiativeWebhookToRow("update", fullInitiativePayload as unknown as Record<string, unknown>, userId);
+
+    expect(createRow.created_at).toBe("2026-01-01T00:00:00.000Z");
+    expect(updateRow.created_at).toBeUndefined();
+  });
+
+  it("handles partial update (only status changed)", () => {
+    const partial = { id: "init-1", status: "Completed" };
+    const row = mapInitiativeWebhookToRow("update", partial as unknown as Record<string, unknown>, userId);
+
+    expect(row.linear_id).toBe("init-1");
+    expect(row.status).toBe("Completed");
+    expect(row.data).toEqual(partial);
+    expect(row.name).toBeUndefined();
+    expect(row.owner_name).toBeUndefined();
+  });
+
+  it("handles priority 0 equivalent — status as simple string", () => {
+    const data = { id: "x", status: "Planned" };
+    const row = mapInitiativeWebhookToRow("update", data as unknown as Record<string, unknown>, userId);
+    expect(row.status).toBe("Planned");
   });
 });

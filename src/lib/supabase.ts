@@ -223,6 +223,46 @@ export type SyncSubscription = {
   updated_at: string
 }
 
+export type SyncedTeam = {
+  id: string
+  linear_id: string
+  user_id: string
+  name: string
+  key?: string
+  parent_team_id?: string
+  updated_at: string
+  created_at: string
+  synced_at: string
+  data: Record<string, unknown>
+}
+
+export type SyncedProject = {
+  id: string
+  linear_id: string
+  user_id: string
+  name: string
+  status_name?: string
+  lead_name?: string
+  priority: number
+  updated_at: string
+  created_at: string
+  synced_at: string
+  data: Record<string, unknown>
+}
+
+export type SyncedInitiative = {
+  id: string
+  linear_id: string
+  user_id: string
+  name: string
+  status?: string
+  owner_name?: string
+  updated_at: string
+  created_at: string
+  synced_at: string
+  data: Record<string, unknown>
+}
+
 export type NotificationQueueItem = {
   id: string
   user_id: string

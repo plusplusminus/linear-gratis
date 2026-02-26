@@ -54,6 +54,9 @@ export async function POST() {
       success: true,
       issueCount: result.issueCount,
       commentCount: result.commentCount,
+      teamCount: result.teamCount,
+      projectCount: result.projectCount,
+      initiativeCount: result.initiativeCount,
     });
   } catch (error) {
     console.error("POST /api/sync/initial error:", error);

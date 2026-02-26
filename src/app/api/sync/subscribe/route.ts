@@ -9,7 +9,7 @@ const WEBHOOK_URL =
   (process.env.NEXT_PUBLIC_APP_URL || "https://linear.gratis") +
   "/api/webhooks/linear";
 
-const DEFAULT_RESOURCE_TYPES = ["Issue", "Comment"];
+const DEFAULT_RESOURCE_TYPES = ["Issue", "Comment", "Project", "Initiative"];
 
 // -- POST: Create a webhook subscription -------------------------------------
 
@@ -156,7 +156,14 @@ export async function POST() {
     const syncResult = await runInitialSync(apiToken, user.id, teamId).catch(
       (err) => {
         console.error("Initial sync failed:", err);
-        return { success: false, issueCount: 0, commentCount: 0 };
+        return {
+          success: false,
+          issueCount: 0,
+          commentCount: 0,
+          teamCount: 0,
+          projectCount: 0,
+          initiativeCount: 0,
+        };
       }
     );
 
@@ -172,6 +179,9 @@ export async function POST() {
         success: syncResult.success,
         issueCount: syncResult.issueCount,
         commentCount: syncResult.commentCount,
+        teamCount: syncResult.teamCount,
+        projectCount: syncResult.projectCount,
+        initiativeCount: syncResult.initiativeCount,
       },
     });
   } catch (error) {
@@ -282,20 +292,39 @@ export async function GET() {
       .eq("is_active", true)
       .single();
 
-    // Count synced issues
-    const { count: issueCount } = await supabaseAdmin
-      .from("synced_issues")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id);
+    // Count all entity types in parallel
+    const [
+      { count: issueCount },
+      { count: commentCount },
+      { count: teamCount },
+      { count: projectCount },
+      { count: initiativeCount },
+    ] = await Promise.all([
+      supabaseAdmin.from("synced_issues").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      supabaseAdmin.from("synced_comments").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      supabaseAdmin.from("synced_teams").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      supabaseAdmin.from("synced_projects").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      supabaseAdmin.from("synced_initiatives").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+    ]);
 
-    // Get last synced time
-    const { data: lastSynced } = await supabaseAdmin
-      .from("synced_issues")
-      .select("synced_at")
-      .eq("user_id", user.id)
-      .order("synced_at", { ascending: false })
-      .limit(1)
-      .single();
+    // Get last synced time across all entity types
+    const syncedAtResults = await Promise.all(
+      ["synced_issues", "synced_comments", "synced_teams", "synced_projects", "synced_initiatives"].map((table) =>
+        supabaseAdmin
+          .from(table)
+          .select("synced_at")
+          .eq("user_id", user.id)
+          .order("synced_at", { ascending: false })
+          .limit(1)
+          .single()
+      )
+    );
+
+    const lastSyncedAt = syncedAtResults
+      .map((r) => r.data?.synced_at as string | undefined)
+      .filter(Boolean)
+      .sort()
+      .pop() ?? null;
 
     return NextResponse.json({
       connected: !!sub,
@@ -307,7 +336,11 @@ export async function GET() {
           }
         : null,
       issueCount: issueCount || 0,
-      lastSyncedAt: lastSynced?.synced_at || null,
+      commentCount: commentCount || 0,
+      teamCount: teamCount || 0,
+      projectCount: projectCount || 0,
+      initiativeCount: initiativeCount || 0,
+      lastSyncedAt,
     });
   } catch (error) {
     console.error("GET /api/sync/subscribe error:", error);

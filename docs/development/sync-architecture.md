@@ -28,19 +28,20 @@ This had three fatal flaws:
 ┌──────────────────────────────────────────────────────────────────┐
 │                        LINEAR (Source of Truth)                   │
 │                                                                  │
-│  Issues, Comments, Labels, Projects, Teams                       │
+│  Issues, Comments, Projects, Initiatives, Teams                  │
 └──────────┬───────────────────────────────────┬───────────────────┘
            │                                   ▲
            │ Webhook push                      │ GraphQL mutations
-           │ (on every change)                 │ (writes only)
+           │ (Issue, Comment, Project,         │ (writes only)
+           │  Initiative events)               │
            ▼                                   │
 ┌──────────────────────────────────────────────────────────────────┐
 │                     NEXT.JS API ROUTES                           │
 │                                                                  │
 │  /api/webhooks/linear     ← receives events, upserts to DB      │
 │  /api/sync/subscribe      ← registers webhook with Linear       │
-│  /api/sync/initial        ← backfills existing issues            │
-│  /api/sync/reconcile      ← catches missed webhooks              │
+│  /api/sync/initial        ← backfills all entities               │
+│  /api/sync/reconcile      ← catches missed webhooks + teams      │
 │  /api/public-view/[slug]  ← reads from Supabase (not Linear)    │
 │  /api/roadmap/[slug]      ← reads from Supabase (not Linear)    │
 └──────────┬───────────────────────────────────┬───────────────────┘
@@ -50,10 +51,13 @@ This had three fatal flaws:
 ┌──────────────────────────────────────────────────────────────────┐
 │                     SUPABASE (Read Cache)                         │
 │                                                                  │
-│  synced_issues      — cached Linear issues                       │
-│  synced_comments    — cached Linear comments                     │
-│  sync_subscriptions — webhook registrations per user             │
-│  notification_queue — pending email notifications                │
+│  synced_issues        — cached Linear issues                     │
+│  synced_comments      — cached Linear comments                   │
+│  synced_teams         — cached Linear teams + sub-teams          │
+│  synced_projects      — cached Linear projects                   │
+│  synced_initiatives   — cached Linear initiatives                │
+│  sync_subscriptions   — webhook registrations per user           │
+│  notification_queue   — pending email notifications              │
 │                                                                  │
 │  (Existing tables unchanged: profiles, public_views, roadmaps,   │
 │   roadmap_votes, roadmap_comments, customer_request_forms, etc.) │
@@ -78,6 +82,61 @@ This had three fatal flaws:
 - Webhooks close the loop: Linear → Supabase, keeping the cache fresh
 - Notifications are a side effect of webhook processing
 
+## Hybrid Storage Pattern
+
+All sync tables use the same storage strategy:
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  Indexed Columns         │  data JSONB                    │
+│  (for SQL filtering)     │  (full payload, zero data loss)│
+│                          │                                │
+│  state_name = "Done"     │  { id, title, description,     │
+│  priority = 2            │    state: { id, name, color,   │
+│  team_id = "abc"         │            type },             │
+│  project_id = "xyz"      │    assignee: { id, name },     │
+│                          │    labels: [...],              │
+│                          │    ... everything Linear sends }│
+└──────────────────────────────────────────────────────────┘
+```
+
+**Why?** Linear sends rich objects (state has `id`, `name`, `color`, `type`) but SQL queries need flat columns. Storing the full payload in `data` means we never lose fields, and read functions reconstruct the full shape from JSONB.
+
+## Entity Relationships
+
+```
+Organization
+├── Teams (org-level, no webhooks)
+│   ├── Sub-teams (via parent_team_id)
+│   └── Members
+├── Initiatives (org-level, has webhooks)
+│   ├── Projects (many-to-many)
+│   ├── Sub-initiatives
+│   └── Owner
+├── Projects (team-scoped for queries, span multiple teams)
+│   ├── Issues
+│   ├── Milestones
+│   ├── Lead
+│   └── Status + Health + Progress
+└── Issues (team-scoped)
+    ├── Comments
+    ├── Labels
+    ├── Assignee
+    └── State + Priority
+```
+
+## Webhook Coverage
+
+| Entity | Webhook Events | Sync Strategy |
+|--------|---------------|---------------|
+| Issue | create, update, remove | Webhook + initial sync + reconciliation |
+| Comment | create, update, remove | Webhook + initial sync + reconciliation |
+| Project | create, update, remove | Webhook + initial sync + reconciliation |
+| Initiative | create, update, remove | Webhook + initial sync + reconciliation |
+| Team | **None** | Initial sync + reconciliation only |
+
+Teams have no webhook events in Linear's API. They change rarely (team renames, new sub-teams) so reconciliation is sufficient.
+
 ## Data Flow: Read Path
 
 When a user visits a public view, roadmap, or admin page:
@@ -92,22 +151,6 @@ When a user visits a public view, roadmap, or admin page:
 
 Latency: ~50ms (Supabase query) vs ~500-2000ms (Linear API).
 
-## Data Flow: Write Path
-
-When a client adds a label, posts a comment, or creates an issue:
-
-```
-1. Browser calls POST /api/issues/123/labels  (future feature)
-2. API route calls Linear GraphQL mutation (issueLabelAdd, commentCreate, etc.)
-3. Returns optimistic success to browser
-4. Linear processes the mutation
-5. Linear fires webhook to /api/webhooks/linear
-6. Webhook handler upserts updated issue into synced_issues
-7. Next time the page loads, it reads the updated data from Supabase
-```
-
-The webhook confirms the write. If the webhook is missed, the reconciliation job catches it.
-
 ## Data Flow: Webhook Processing
 
 ```
@@ -121,10 +164,11 @@ The webhook confirms the write. If the webhook is missed, the reconciliation job
    c. Compare with linear-signature header → reject if mismatch
    d. Look up sync_subscriptions by webhook metadata to find user_id
    e. Switch on event type:
-      - Issue.create  → INSERT into synced_issues
-      - Issue.update  → UPDATE synced_issues SET ... WHERE linear_id = X
-      - Issue.remove  → DELETE FROM synced_issues WHERE linear_id = X
-      - Comment.create/update/remove → same pattern for synced_comments
+      - Issue create/update → upsert synced_issues (indexed cols + full data JSONB)
+      - Issue remove        → delete from synced_issues
+      - Comment create/update/remove → same pattern for synced_comments
+      - Project create/update/remove → same pattern for synced_projects
+      - Initiative create/update/remove → same pattern for synced_initiatives
    f. Check notification rules → enqueue emails if applicable
    g. Return 200
 ```
@@ -137,80 +181,122 @@ When a user first enables sync:
 1. User clicks "Enable Sync" on profile page
 2. POST /api/sync/subscribe:
    a. Generate random webhook secret
-   b. Call Linear webhookCreate mutation (url, resourceTypes, secret)
+   b. Call Linear webhookCreate mutation
+      - resourceTypes: ["Issue", "Comment", "Project", "Initiative"]
    c. Store webhook_id + encrypted secret in sync_subscriptions
-3. POST /api/sync/initial:
-   a. Fetch all issues from user's connected projects (paginated, 50 per page)
-   b. For each issue, fetch comments
-   c. Upsert everything into synced_issues and synced_comments
-   d. Set synced_at = now() on all records
+3. runInitialSync() fetches and upserts all entities:
+   a. Teams (org-level, all viewer teams)
+   b. Projects (team-scoped, with milestones/initiatives/teams)
+   c. Initiatives (org-level, graceful failure if token lacks scope)
+   d. Issues (team-scoped, with comments)
 4. From this point, webhooks keep data fresh
 ```
 
 ## Data Flow: Reconciliation
 
-Safety net for missed webhooks (network blips, server downtime, etc.):
+Safety net for missed webhooks and the only sync mechanism for Teams:
 
 ```
 1. Cron job runs every 5 minutes: GET /api/sync/reconcile
 2. For each active sync_subscription:
-   a. Find MAX(synced_at) from synced_issues for this user
-   b. Query Linear for issues WHERE updatedAt > max_synced_at
-   c. Upsert any differences into synced_issues
-   d. Log: "Reconciled 3 issues for user X"
+   a. Fetch API token from profile
+   b. Full-refresh teams (always — no webhooks for teams)
+   c. Full-refresh projects (team-scoped)
+   d. Full-refresh initiatives (org-level, graceful failure)
+   e. Full-refresh issues (team-scoped)
+   f. All use batchUpsert with hybrid storage (indexed cols + data JSONB)
 3. This catches:
    - Missed webhooks
-   - Issues created/updated during downtime
-   - Deleted issues (compare ID sets)
+   - Team changes (renames, new sub-teams)
+   - Issues/projects/initiatives created during downtime
 ```
 
 ## Database Tables
 
 ### synced_issues
 
-Local cache of Linear issues. One row per issue per user.
+Local cache of Linear issues. Hybrid storage: indexed columns for filtering + `data` JSONB for full payload.
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | uuid | Primary key (auto-generated) |
-| linear_id | text | Linear's issue UUID |
-| user_id | text | WorkOS user ID (owner of the Linear token) |
-| project_id | text | Linear project UUID |
-| team_id | text | Linear team UUID |
-| identifier | text | Human-readable ID (e.g., "ENG-123") |
-| title | text | Issue title |
-| description | text | Issue description (markdown) |
-| state | text | Status name (e.g., "In Progress") |
-| priority | integer | Priority value (0-4) |
-| assignee | text | Assignee display name |
-| labels | jsonb | Array of {id, name, color} |
-| due_date | date | Due date |
-| url | text | Linear issue URL |
-| created_at | timestamptz | Row creation / Linear created timestamp |
-| updated_at | timestamptz | Row update / Linear updated timestamp |
-| synced_at | timestamptz | When last synced to this table |
+| Column | Type | Purpose |
+|--------|------|---------|
+| id | uuid | Primary key |
+| linear_id | text | Linear issue UUID |
+| user_id | text | WorkOS user ID |
+| identifier | text | Human-readable ID ("ENG-123") — indexed for display |
+| team_id | text | Linear team UUID — indexed for filtering |
+| project_id | text | Linear project UUID — indexed for filtering |
+| state_name | text | Status name — indexed for filtering |
+| priority | integer | Priority (0-4) — indexed for sorting |
+| assignee_name | text | Assignee name — indexed for filtering |
+| synced_at | timestamptz | When last synced |
+| data | jsonb | **Full Linear payload** (state object, assignee object, labels array, etc.) |
 
 **Unique constraint:** `(user_id, linear_id)`
-**Indexes:** `linear_id`, `user_id`, `project_id`, `team_id`
 
 ### synced_comments
 
-Local cache of Linear issue comments.
-
-| Column | Type | Description |
-|--------|------|-------------|
+| Column | Type | Purpose |
+|--------|------|---------|
 | id | uuid | Primary key |
-| linear_id | text | Linear's comment UUID |
-| issue_linear_id | text | Parent issue's Linear UUID |
+| linear_id | text | Linear comment UUID |
 | user_id | text | WorkOS user ID |
-| body | text | Comment body (markdown) |
-| author_name | text | Comment author display name |
-| created_at | timestamptz | Row creation / Linear created timestamp |
-| updated_at | timestamptz | Row update / Linear updated timestamp |
+| issue_linear_id | text | Parent issue UUID — indexed for lookup |
 | synced_at | timestamptz | When last synced |
+| data | jsonb | **Full payload** (body, user object, timestamps) |
 
 **Unique constraint:** `(user_id, linear_id)`
-**Indexes:** `linear_id`, `user_id`, `issue_linear_id`
+
+### synced_teams
+
+Teams have no webhook events — synced via initial sync + reconciliation only.
+
+| Column | Type | Purpose |
+|--------|------|---------|
+| id | uuid | Primary key |
+| linear_id | text | Linear team UUID |
+| user_id | text | WorkOS user ID |
+| name | text | Team name — indexed, used for ordering |
+| key | text | Team key ("ENG") |
+| parent_team_id | text | Parent team UUID — indexed for hierarchy queries |
+| synced_at | timestamptz | When last synced |
+| data | jsonb | **Full payload** (displayName, description, icon, color, private, parent object, children array, members array) |
+
+**Unique constraint:** `(user_id, linear_id)`
+
+### synced_projects
+
+Projects can span multiple teams — no single `team_id` column.
+
+| Column | Type | Purpose |
+|--------|------|---------|
+| id | uuid | Primary key |
+| linear_id | text | Linear project UUID |
+| user_id | text | WorkOS user ID |
+| name | text | Project name — indexed |
+| status_name | text | Status name — indexed for filtering |
+| lead_name | text | Lead name — indexed |
+| priority | integer | Priority (0-4) — indexed |
+| synced_at | timestamptz | When last synced |
+| data | jsonb | **Full payload** (description, icon, color, url, progress, health, startDate, targetDate, status object, lead object, teams array, initiatives array, milestones array) |
+
+**Unique constraint:** `(user_id, linear_id)`
+
+### synced_initiatives
+
+Initiatives are org-level (not team-scoped).
+
+| Column | Type | Purpose |
+|--------|------|---------|
+| id | uuid | Primary key |
+| linear_id | text | Linear initiative UUID |
+| user_id | text | WorkOS user ID |
+| name | text | Initiative name — indexed |
+| status | text | Status string ("Planned", "Active", "Completed") — indexed |
+| owner_name | text | Owner name — indexed |
+| synced_at | timestamptz | When last synced |
+| data | jsonb | **Full payload** (description, icon, color, url, health, healthUpdatedAt, targetDate, owner object, projects array, subInitiatives array, parentInitiative object) |
+
+**Unique constraint:** `(user_id, linear_id)`
 
 ### sync_subscriptions
 
@@ -221,12 +307,10 @@ Tracks webhook registrations per user.
 | id | uuid | Primary key |
 | user_id | text | WorkOS user ID |
 | linear_team_id | text | Linear team UUID |
-| webhook_id | text | Linear webhook UUID (returned by webhookCreate) |
-| webhook_secret | text | Encrypted signing secret |
+| webhook_id | text | Linear webhook UUID |
+| webhook_secret | text | Signing secret |
 | events | text[] | Subscribed event types |
 | is_active | boolean | Whether sync is enabled |
-| created_at | timestamptz | When subscription was created |
-| updated_at | timestamptz | Last updated |
 
 ### notification_queue
 
@@ -236,25 +320,46 @@ Pending email notifications, populated by webhook handler.
 |--------|------|-------------|
 | id | uuid | Primary key |
 | user_id | text | Who to notify |
-| event_type | text | What happened (e.g., "issue.status_changed") |
+| event_type | text | What happened |
 | issue_linear_id | text | Which issue |
-| payload | jsonb | Full event data for email template |
-| sent_at | timestamptz | When email was sent (null if pending) |
-| created_at | timestamptz | When queued |
+| payload | jsonb | Full event data |
+| sent_at | timestamptz | When sent (null if pending) |
+
+## Data Available in JSONB
+
+### Issue `data` fields
+
+`id`, `identifier`, `title`, `description`, `priority`, `priorityLabel`, `url`, `dueDate`, `state` (object: id, name, color, type), `assignee` (object: id, name), `labels` (array: id, name, color), `team` (object: id, name, key), `project` (object: id, name), `createdAt`, `updatedAt`
+
+### Comment `data` fields
+
+`id`, `body`, `user` (object: id, name), `issue` (object: id), `createdAt`, `updatedAt`
+
+### Team `data` fields
+
+`id`, `name`, `displayName`, `key`, `description`, `icon`, `color`, `private`, `parent` (object: id, name, key), `children` (array: id), `members` (array: id, name), `createdAt`, `updatedAt`
+
+### Project `data` fields
+
+`id`, `name`, `description`, `icon`, `color`, `url`, `priority`, `priorityLabel`, `progress` (float 0-1), `health`, `startDate`, `targetDate`, `status` (object: id, name, color, type), `lead` (object: id, name), `teams` (array: id, name, key), `initiatives` (array: id, name), `milestones` (array: id, name, targetDate), `createdAt`, `updatedAt`
+
+### Initiative `data` fields
+
+`id`, `name`, `description`, `icon`, `color`, `url`, `status` (string: Planned/Active/Completed), `health`, `healthUpdatedAt`, `targetDate`, `owner` (object: id, name), `projects` (array: id, name), `subInitiatives` (array: id, name), `parentInitiative` (object: id, name), `createdAt`, `updatedAt`
 
 ## Freshness Guarantees
 
 | Scenario | Latency | Mechanism |
 |----------|---------|-----------|
-| Normal operation | < 5 seconds | Webhook fires near-instantly |
+| Normal operation (Issues, Comments, Projects, Initiatives) | < 5 seconds | Webhook fires near-instantly |
+| Teams | < 5 minutes | Reconciliation only (no webhooks) |
 | Missed webhook | < 5 minutes | Reconciliation cron catches it |
 | First sync | Seconds to minutes | Initial sync backfills all data |
 | Linear API down | Stale but available | Supabase cache serves last known state |
-| Supabase down | Unavailable | No fallback (Supabase is the read layer) |
 
 ## Fallback Behavior
 
-If a user hasn't enabled sync (no sync_subscription), the app falls back to the original behavior: direct Linear API calls on every request. This ensures:
+If a user hasn't enabled sync (no sync_subscription), the app falls back to direct Linear API calls. This ensures:
 
 - Existing users aren't broken
 - New users can use the app before enabling sync
@@ -263,24 +368,15 @@ If a user hasn't enabled sync (no sync_subscription), the app falls back to the 
 ## Security
 
 - **Webhook signatures**: Every incoming webhook is verified via HMAC-SHA256 with a per-user secret. Unverified payloads are rejected with 401.
-- **Token encryption**: Linear API tokens are encrypted at rest in Supabase using AES (existing mechanism in `src/lib/encryption.ts`).
-- **Webhook secrets**: Stored in sync_subscriptions. Generated server-side as 32-byte random hex. Only used for HMAC verification.
-- **No RLS**: All queries go through `supabaseAdmin` (service role), scoped by `user_id` in application code. This is intentional — auth is handled by WorkOS, not Supabase.
+- **Token encryption**: Linear API tokens are encrypted at rest using AES (`src/lib/encryption.ts`).
+- **Webhook secrets**: Generated server-side as 32-byte random hex. Only used for HMAC verification.
+- **No RLS**: All queries go through `supabaseAdmin` (service role), scoped by `user_id` in application code.
 
-## Future Features This Enables
+## Upgrading Existing Subscriptions
 
-This sync architecture is the foundation for:
-
-1. **Client-side label management** — Write to Linear via mutation, webhook confirms and updates cache
-2. **Client-side commenting** — Same pattern as labels
-3. **Email notifications** — Webhook handler populates notification_queue, background job sends emails
-4. **Real-time UI updates** — Supabase Realtime can push changes to connected clients via WebSocket
-5. **Activity feeds** — Webhook events can be logged as an activity stream
-6. **Digest emails** — notification_queue can be batched into daily/weekly summaries
+Linear webhook subscriptions are immutable — you can't add new event types to an existing webhook. Users who set up sync before Project/Initiative support was added need to disconnect and reconnect to pick up the new event types. The disconnect flow (`DELETE /api/sync/subscribe`) deletes the webhook from Linear and deactivates the subscription, then reconnecting creates a fresh webhook with all current event types.
 
 ## Implementation Status
-
-All specs completed on 2026-02-26:
 
 | Spec | Title | Est | Status |
 |------|-------|-----|--------|
@@ -293,18 +389,26 @@ All specs completed on 2026-02-26:
 | PPMLG-38 | Migrate roadmap API | 8h | Done |
 | PPMLG-39 | Reconciliation job | 4h | Done |
 | PPMLG-40 | Admin API migration | 4h | Done |
+| PPMLG-44 | Entity sync tables migration | 4h | Done |
+| PPMLG-45 | Teams sync: initial sync + read functions | 8h | Done |
+| PPMLG-46 | Projects sync: webhook + initial sync + read | 8h | Done |
+| PPMLG-47 | Initiatives sync: webhook + initial sync + read | 8h | Done |
+| PPMLG-48 | Expand webhook subscription + reconciliation | 8h | Done |
+| PPMLG-49 | Unit + integration tests for new entities | 8h | Done |
+| PPMLG-50 | Sync architecture docs update | 4h | Done |
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `supabase/migrations/20260226_sync_tables.sql` | Database migration for all 4 sync tables |
-| `src/lib/webhook-handlers.ts` | Signature verification, issue/comment upsert handlers |
-| `src/lib/initial-sync.ts` | Paginated backfill from Linear GraphQL |
-| `src/lib/sync-read.ts` | Shared Supabase read helpers (issues, comments, metadata, roadmap) |
-| `src/lib/supabase.ts` | TypeScript types for sync tables |
+| `supabase/migrations/20260226_sync_tables_v2.sql` | Issues + Comments tables (hybrid storage) |
+| `supabase/migrations/20260226_entity_sync_tables.sql` | Teams, Projects, Initiatives tables |
+| `src/lib/webhook-handlers.ts` | Signature verification, event handlers for Issue/Comment/Project/Initiative |
+| `src/lib/initial-sync.ts` | Paginated backfill from Linear GraphQL (all 5 entity types) |
+| `src/lib/sync-read.ts` | Read helpers: mapping functions + query functions for all entity types |
+| `src/lib/supabase.ts` | TypeScript types for all sync tables |
 | `src/app/api/webhooks/linear/route.ts` | Webhook receiver endpoint |
-| `src/app/api/sync/subscribe/route.ts` | POST/DELETE/GET subscription management |
+| `src/app/api/sync/subscribe/route.ts` | POST/DELETE/GET subscription + sync status |
 | `src/app/api/sync/initial/route.ts` | Manual re-sync trigger |
-| `src/app/api/sync/reconcile/route.ts` | Cron + manual reconciliation |
-| `vercel.json` | Cron config (reconcile every 5 min) |
+| `src/app/api/sync/reconcile/route.ts` | Cron + manual reconciliation (all entity types) |
+| `src/lib/__tests__/*.test.ts` | 153 tests covering all mapping, reading, and round-trip scenarios |
