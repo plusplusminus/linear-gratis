@@ -176,6 +176,40 @@ export async function fetchHubIssues(
 }
 
 /**
+ * Fetch a single issue by Linear ID, scoped to a hub.
+ * Returns the issue with description, dueDate, and hub-visible labels, or null.
+ */
+export async function fetchHubIssueDetail(
+  hubId: string,
+  issueLinearId: string
+) {
+  const mappings = await getHubMappings(hubId);
+  if (mappings.length === 0) return null;
+
+  const teamIds = mappings.map((m) => m.linear_team_id);
+  const allowedLabelIds = mergeVisibility(mappings, "visible_label_ids");
+
+  const { data: row } = await supabaseAdmin
+    .from("synced_issues")
+    .select("linear_id, data, created_at, updated_at, team_id")
+    .eq("user_id", WORKSPACE_USER_ID)
+    .eq("linear_id", issueLinearId)
+    .single();
+
+  if (!row || !teamIds.includes(row.team_id)) return null;
+
+  const issue = mapRowToLinearIssue(
+    row as { linear_id: string; data: Record<string, unknown>; created_at: string; updated_at: string }
+  );
+  const d = row.data as Record<string, unknown>;
+
+  return filterLabels(stripAssignee({
+    ...issue,
+    dueDate: (d.dueDate as string) ?? undefined,
+  }), allowedLabelIds);
+}
+
+/**
  * Fetch roadmap issues scoped to a hub, supporting multiple project IDs.
  */
 export async function fetchHubRoadmapIssues(
@@ -259,7 +293,7 @@ export async function fetchHubComments(
       .order("created_at", { ascending: true }),
     supabaseAdmin
       .from("hub_comments")
-      .select("id, author_name, author_email, body, created_at, updated_at")
+      .select("id, author_name, author_email, body, push_status, push_error, created_at, updated_at")
       .eq("hub_id", hubId)
       .eq("issue_linear_id", issueLinearId)
       .order("created_at", { ascending: true }),
@@ -276,6 +310,8 @@ export async function fetchHubComments(
     body: row.body,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    push_status: row.push_status as string | undefined,
+    push_error: row.push_error as string | undefined,
     user: {
       id: "",
       name: row.author_name,
@@ -315,6 +351,70 @@ export async function fetchHubTeams(hubId: string) {
       row as { linear_id: string; data: Record<string, unknown>; created_at: string; updated_at: string }
     )
   );
+}
+
+/**
+ * Fetch per-team stats for a hub's landing page.
+ * Returns project count, open issue count, and last activity per team.
+ */
+export async function fetchHubTeamStats(hubId: string) {
+  const mappings = await getHubMappings(hubId);
+  if (mappings.length === 0) return new Map<string, { projectCount: number; openIssueCount: number; lastActivity: string | null }>();
+
+  const teamIds = mappings.map((m) => m.linear_team_id);
+
+  // Fetch open issue counts and latest updated_at per team
+  // "Open" = not in completed/cancelled state types
+  const { data: issues } = await supabaseAdmin
+    .from("synced_issues")
+    .select("team_id, data, updated_at")
+    .eq("user_id", WORKSPACE_USER_ID)
+    .in("team_id", teamIds);
+
+  // Fetch projects and count per team
+  const { data: projects } = await supabaseAdmin
+    .from("synced_projects")
+    .select("linear_id, data")
+    .eq("user_id", WORKSPACE_USER_ID);
+
+  const stats = new Map<string, { projectCount: number; openIssueCount: number; lastActivity: string | null }>();
+
+  for (const teamId of teamIds) {
+    stats.set(teamId, { projectCount: 0, openIssueCount: 0, lastActivity: null });
+  }
+
+  // Count open issues and track latest activity per team
+  const completedTypes = new Set(["completed", "cancelled"]);
+  for (const issue of issues || []) {
+    const teamStat = stats.get(issue.team_id);
+    if (!teamStat) continue;
+
+    const d = issue.data as Record<string, unknown>;
+    const stateType = (d.state as Record<string, unknown> | undefined)?.type as string | undefined;
+    if (!stateType || !completedTypes.has(stateType)) {
+      teamStat.openIssueCount++;
+    }
+
+    if (!teamStat.lastActivity || issue.updated_at > teamStat.lastActivity) {
+      teamStat.lastActivity = issue.updated_at;
+    }
+  }
+
+  // Count projects per team (projects have teams array in data)
+  const allowedProjectIds = mergeVisibility(mappings, "visible_project_ids");
+  for (const proj of projects || []) {
+    if (allowedProjectIds && !allowedProjectIds.includes(proj.linear_id)) continue;
+    const d = proj.data as Record<string, unknown>;
+    const projTeams = d.teams as Array<{ id: string }> | undefined;
+    if (Array.isArray(projTeams)) {
+      for (const pt of projTeams) {
+        const teamStat = stats.get(pt.id);
+        if (teamStat) teamStat.projectCount++;
+      }
+    }
+  }
+
+  return stats;
 }
 
 /**
@@ -407,6 +507,17 @@ export async function fetchHubInitiatives(
       row as { linear_id: string; data: Record<string, unknown>; created_at: string; updated_at: string }
     )
   );
+}
+
+/**
+ * Get the set of hub-visible label IDs.
+ * Returns null if unscoped (all labels visible).
+ */
+export async function getHubVisibleLabelIds(
+  hubId: string
+): Promise<string[] | null> {
+  const mappings = await getHubMappings(hubId);
+  return mergeVisibility(mappings, "visible_label_ids");
 }
 
 /**

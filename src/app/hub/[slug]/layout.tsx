@@ -2,7 +2,9 @@ import { withAuth } from "@workos-inc/authkit-nextjs";
 import { redirect } from "next/navigation";
 import { resolveHubBySlug, getHubMembership } from "@/lib/hub-auth";
 import { isPPMAdmin } from "@/lib/ppm-admin";
-import { HubAuthProvider } from "@/contexts/hub-auth-context";
+import { fetchHubTeams } from "@/lib/hub-read";
+import { HubProvider, type HubTeam } from "@/contexts/hub-context";
+import { HubShell } from "@/components/hub/hub-shell";
 
 export default async function HubLayout({
   children,
@@ -17,10 +19,10 @@ export default async function HubLayout({
   const hub = await resolveHubBySlug(slug);
   if (!hub) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-neutral-950">
-        <div className="w-full max-w-sm rounded-lg border border-neutral-800 bg-neutral-900 p-8 text-center">
-          <h1 className="text-lg font-medium text-white">Portal not found</h1>
-          <p className="mt-2 text-sm text-neutral-400">
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="w-full max-w-sm rounded-lg border border-border bg-card p-8 text-center">
+          <h1 className="text-lg font-medium text-foreground">Portal not found</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
             This client portal does not exist or is no longer active.
           </p>
         </div>
@@ -42,8 +44,6 @@ export default async function HubLayout({
       redirect(`/hub/${slug}/login`);
     }
   } else {
-    // No org — must be a PPM admin (middleware already checked this,
-    // but double-check here for safety)
     const admin = await isPPMAdmin(user.id);
     if (!admin) {
       redirect(`/hub/${slug}/login`);
@@ -53,14 +53,13 @@ export default async function HubLayout({
   // Verify hub membership or PPM admin status
   const membership = await getHubMembership(hub.id, user.id, user.email);
   if (!membership) {
-    // PPM admin bypass — they're not in hub_members but have full access
     const admin = await isPPMAdmin(user.id);
     if (!admin) {
       return (
-        <div className="flex min-h-screen items-center justify-center bg-neutral-950">
-          <div className="w-full max-w-sm rounded-lg border border-neutral-800 bg-neutral-900 p-8 text-center">
-            <h1 className="text-lg font-medium text-white">Access denied</h1>
-            <p className="mt-2 text-sm text-neutral-400">
+        <div className="flex min-h-screen items-center justify-center bg-background">
+          <div className="w-full max-w-sm rounded-lg border border-border bg-card p-8 text-center">
+            <h1 className="text-lg font-medium text-foreground">Access denied</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
               You are not a member of this portal. Contact your project manager
               for access.
             </p>
@@ -70,5 +69,24 @@ export default async function HubLayout({
     }
   }
 
-  return <HubAuthProvider hubId={hub.id}>{children}</HubAuthProvider>;
+  // Fetch teams for sidebar navigation
+  const rawTeams = await fetchHubTeams(hub.id);
+  const teams: HubTeam[] = rawTeams.map((t) => ({
+    id: t.id,
+    name: t.name,
+    key: t.key,
+    color: t.color,
+    icon: t.icon,
+  }));
+
+  return (
+    <HubProvider
+      hubId={hub.id}
+      hubSlug={hub.slug}
+      hubName={hub.name}
+      teams={teams}
+    >
+      <HubShell>{children}</HubShell>
+    </HubProvider>
+  );
 }

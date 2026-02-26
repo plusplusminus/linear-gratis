@@ -9,9 +9,19 @@ import {
 } from "react";
 import type { HubMemberRole } from "@/lib/supabase";
 
-type HubAuthState = {
+export type HubTeam = {
+  id: string;
+  name: string;
+  key: string;
+  color?: string;
+  icon?: string;
+};
+
+export type HubContextValue = {
   hubId: string;
-  hubName: string | null;
+  hubSlug: string;
+  hubName: string;
+  teams: HubTeam[];
   userId: string;
   email: string;
   firstName: string | null;
@@ -21,18 +31,35 @@ type HubAuthState = {
   isLoading: boolean;
 };
 
-const HubAuthContext = createContext<HubAuthState | null>(null);
+const HubContext = createContext<HubContextValue | null>(null);
 
-export function HubAuthProvider({
+/**
+ * Combined hub context provider.
+ * Server-side data (hubId, slug, name, teams) is passed directly.
+ * Client-side data (user, role) is fetched from /api/hubs/[hubId]/me.
+ */
+export function HubProvider({
   hubId,
+  hubSlug,
+  hubName,
+  teams,
   children,
 }: {
   hubId: string;
+  hubSlug: string;
+  hubName: string;
+  teams: HubTeam[];
   children: ReactNode;
 }) {
-  const [state, setState] = useState<HubAuthState>({
-    hubId,
-    hubName: null,
+  const [authState, setAuthState] = useState<{
+    userId: string;
+    email: string;
+    firstName: string | null;
+    lastName: string | null;
+    role: HubMemberRole;
+    isViewOnly: boolean;
+    isLoading: boolean;
+  }>({
     userId: "",
     email: "",
     firstName: null,
@@ -48,7 +75,6 @@ export function HubAuthProvider({
         const res = await fetch(`/api/hubs/${hubId}/me`);
         if (!res.ok) return;
         const data = (await res.json()) as {
-          hubName: string | null;
           userId: string;
           email: string;
           firstName: string | null;
@@ -56,9 +82,7 @@ export function HubAuthProvider({
           role: HubMemberRole;
           isViewOnly: boolean;
         };
-        setState({
-          hubId,
-          hubName: data.hubName,
+        setAuthState({
           userId: data.userId,
           email: data.email,
           firstName: data.firstName,
@@ -68,21 +92,31 @@ export function HubAuthProvider({
           isLoading: false,
         });
       } catch {
-        setState((prev) => ({ ...prev, isLoading: false }));
+        setAuthState((prev) => ({ ...prev, isLoading: false }));
       }
     }
     fetchMe();
   }, [hubId]);
 
   return (
-    <HubAuthContext.Provider value={state}>{children}</HubAuthContext.Provider>
+    <HubContext.Provider
+      value={{
+        hubId,
+        hubSlug,
+        hubName,
+        teams,
+        ...authState,
+      }}
+    >
+      {children}
+    </HubContext.Provider>
   );
 }
 
-export function useHubAuth(): HubAuthState {
-  const ctx = useContext(HubAuthContext);
+export function useHub(): HubContextValue {
+  const ctx = useContext(HubContext);
   if (!ctx) {
-    throw new Error("useHubAuth must be used within a HubAuthProvider");
+    throw new Error("useHub must be used within a HubProvider");
   }
   return ctx;
 }
