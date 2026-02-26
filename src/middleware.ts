@@ -14,6 +14,20 @@ export default async function middleware(request: NextRequest) {
     return handleAuthkitHeaders(request, headers, { redirect: authorizationUrl })
   }
 
+  // Admin routes: require auth + PPM admin
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+    if (!session.user && authorizationUrl) {
+      return handleAuthkitHeaders(request, headers, { redirect: authorizationUrl })
+    }
+    if (session.user) {
+      const isAdmin = await lookupPPMAdmin(session.user.id)
+      if (!isAdmin) {
+        return new NextResponse('Forbidden', { status: 403 })
+      }
+    }
+    return handleAuthkitHeaders(request, headers)
+  }
+
   // Hub routes: redirect unauthenticated users to hub-specific login
   const hubMatch = pathname.match(/^\/hub\/([^/]+)/)
   if (hubMatch) {
