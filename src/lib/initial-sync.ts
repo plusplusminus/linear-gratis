@@ -1,4 +1,5 @@
-import { supabaseAdmin } from "./supabase";
+import { supabaseAdmin, type HubTeamMapping } from "./supabase";
+import { getWorkspaceToken } from "./workspace";
 
 const LINEAR_API = "https://api.linear.app/graphql";
 const PAGE_SIZE = 20;
@@ -649,6 +650,147 @@ export async function runInitialSync(
     const message =
       error instanceof Error ? error.message : "Unknown sync error";
     console.error("Initial sync failed:", message);
+    return { ...result, error: message };
+  }
+}
+
+// -- Hub-scoped sync ---------------------------------------------------------
+
+const WORKSPACE_USER_ID = "workspace";
+
+export type HubTeamSyncResult = {
+  teamId: string;
+  teamName: string | null;
+  issueCount: number;
+  projectCount: number;
+  commentCount: number;
+};
+
+export type HubSyncResult = {
+  success: boolean;
+  hubId: string;
+  teamResults: HubTeamSyncResult[];
+  teamCount: number;
+  initiativeCount: number;
+  error?: string;
+};
+
+/**
+ * Run sync for a Client Hub: fetches data for all configured teams
+ * and stores everything with user_id = 'workspace'.
+ *
+ * Does NOT filter by visible_project_ids — stores all data for the team.
+ * Visibility filtering happens at read time (hub-read.ts).
+ */
+export async function runHubSync(
+  hubId: string,
+  teamMappings: HubTeamMapping[]
+): Promise<HubSyncResult> {
+  const result: HubSyncResult = {
+    success: false,
+    hubId,
+    teamResults: [],
+    teamCount: 0,
+    initiativeCount: 0,
+  };
+
+  try {
+    const apiToken = await getWorkspaceToken();
+
+    // 1. Teams — org-level, fetch once
+    const teams = await fetchAllTeams(apiToken);
+    if (teams.length > 0) {
+      await batchUpsert(
+        "synced_teams",
+        teams.map((t) => mapTeamToRow(t, WORKSPACE_USER_ID)),
+        "user_id,linear_id"
+      );
+    }
+    result.teamCount = teams.length;
+
+    // 2. Initiatives — org-level, fetch once
+    try {
+      const initiatives = await fetchAllInitiatives(apiToken);
+      if (initiatives.length > 0) {
+        await batchUpsert(
+          "synced_initiatives",
+          initiatives.map((i) => mapInitiativeToRow(i, WORKSPACE_USER_ID)),
+          "user_id,linear_id"
+        );
+      }
+      result.initiativeCount = initiatives.length;
+    } catch (err) {
+      console.warn("Initiative sync failed (may lack org scope):", err);
+    }
+
+    // 3. Per-team: projects, issues, comments
+    for (const mapping of teamMappings) {
+      const teamResult: HubTeamSyncResult = {
+        teamId: mapping.linear_team_id,
+        teamName: mapping.linear_team_name,
+        issueCount: 0,
+        projectCount: 0,
+        commentCount: 0,
+      };
+
+      try {
+        // Projects for this team
+        const projects = await fetchAllProjects(apiToken, mapping.linear_team_id);
+        if (projects.length > 0) {
+          await batchUpsert(
+            "synced_projects",
+            projects.map((p) => mapProjectToRow(p, WORKSPACE_USER_ID)),
+            "user_id,linear_id"
+          );
+        }
+        teamResult.projectCount = projects.length;
+
+        // Issues for this team
+        const issues = await fetchAllIssues(apiToken, mapping.linear_team_id);
+        if (issues.length > 0) {
+          await batchUpsert(
+            "synced_issues",
+            issues.map((issue) => mapIssueToRow(issue, WORKSPACE_USER_ID)),
+            "user_id,linear_id"
+          );
+        }
+        teamResult.issueCount = issues.length;
+
+        // Comments for each issue
+        for (const issue of issues) {
+          const comments = await fetchCommentsForIssue(apiToken, issue.id);
+          if (comments.length > 0) {
+            const rows = comments.map((c) =>
+              mapCommentToRow(c, issue.id, WORKSPACE_USER_ID)
+            );
+            const { error } = await supabaseAdmin
+              .from("synced_comments")
+              .upsert(rows, { onConflict: "user_id,linear_id" });
+
+            if (error) {
+              console.error(`Comment upsert error for issue ${issue.id}:`, error);
+            } else {
+              teamResult.commentCount += comments.length;
+            }
+          }
+        }
+      } catch (error) {
+        console.error(
+          `Hub sync failed for team ${mapping.linear_team_id}:`,
+          error
+        );
+        // Continue with other teams — don't fail the whole hub sync
+      }
+
+      result.teamResults.push(teamResult);
+    }
+
+    result.success = true;
+    return result;
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown hub sync error";
+    console.error(`Hub sync failed for hub ${hubId}:`, message);
     return { ...result, error: message };
   }
 }

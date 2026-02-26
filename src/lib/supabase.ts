@@ -273,3 +273,68 @@ export type NotificationQueueItem = {
   created_at: string
 }
 
+// ============================================================
+// Client Hub types (multi-tenant client portal)
+// ============================================================
+
+export type ClientHub = {
+  id: string
+  name: string
+  slug: string
+  is_active: boolean
+  created_by: string
+  workos_org_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type HubTeamMapping = {
+  id: string
+  hub_id: string
+  linear_team_id: string
+  linear_team_name: string | null
+  visible_project_ids: string[]
+  visible_initiative_ids: string[]
+  visible_label_ids: string[]
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+/** Client roles: 'default' | 'view_only'. 'admin' is synthetic (PPM admins only, never stored). */
+export type HubMemberRole = 'default' | 'view_only' | 'admin'
+
+export type HubMember = {
+  id: string
+  hub_id: string
+  user_id: string | null
+  email: string | null
+  role: HubMemberRole
+  invited_by: string | null
+  workos_invitation_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type WorkspaceSetting = {
+  id: string
+  key: string
+  value: string
+  updated_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type HubComment = {
+  id: string
+  hub_id: string
+  issue_linear_id: string
+  linear_comment_id: string | null
+  author_user_id: string
+  author_name: string
+  author_email: string | null
+  body: string
+  created_at: string
+  updated_at: string
+}
+

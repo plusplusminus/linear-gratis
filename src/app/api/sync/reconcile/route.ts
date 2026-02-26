@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { withAuth } from "@workos-inc/authkit-nextjs";
+import { withAdminAuth } from "@/lib/admin-auth";
 import { supabaseAdmin } from "@/lib/supabase";
-import { decryptToken } from "@/lib/encryption";
+import { getWorkspaceToken } from "@/lib/workspace";
 import {
   fetchAllIssues,
   fetchAllTeams,
@@ -14,7 +14,11 @@ import {
   batchUpsert,
 } from "@/lib/initial-sync";
 
-type ReconcileResult = {
+const WORKSPACE_USER_ID = "workspace";
+
+type HubReconcileResult = {
+  hubsReconciled: number;
+  teamsReconciled: number;
   issuesUpserted: number;
   teamsUpserted: number;
   projectsUpserted: number;
@@ -22,15 +26,16 @@ type ReconcileResult = {
   errors: number;
 };
 
-// POST: Manual reconciliation (authenticated user)
+// POST: Manual reconciliation (triggers full hub reconciliation)
 export async function POST() {
   try {
-    const { user } = await withAuth();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const auth = await withAdminAuth();
+    if ("error" in auth) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
+    const { user } = auth;
 
-    const result = await reconcileForUser(user.id);
+    const result = await reconcileAllHubs();
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     console.error("POST /api/sync/reconcile error:", error);
@@ -41,8 +46,7 @@ export async function POST() {
   }
 }
 
-// GET: Cron-triggered reconciliation for all active subscriptions
-// Secured by CRON_SECRET header (Vercel cron sends this automatically)
+// GET: Cron-triggered reconciliation for all active hubs
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");
@@ -52,43 +56,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Fetch all active subscriptions
-    const { data: subs } = await supabaseAdmin
-      .from("sync_subscriptions")
-      .select("user_id, linear_team_id")
+    const { data: hubs } = await supabaseAdmin
+      .from("client_hubs")
+      .select("id")
       .eq("is_active", true);
 
-    if (!subs || subs.length === 0) {
-      return NextResponse.json({ success: true, message: "No active subscriptions" });
+    if (!hubs || hubs.length === 0) {
+      return NextResponse.json({ success: true, message: "No active hubs" });
     }
 
-    const totals: ReconcileResult = {
-      issuesUpserted: 0,
-      teamsUpserted: 0,
-      projectsUpserted: 0,
-      initiativesUpserted: 0,
-      errors: 0,
-    };
-
-    for (const sub of subs) {
-      try {
-        const result = await reconcileForUser(sub.user_id);
-        totals.issuesUpserted += result.issuesUpserted;
-        totals.teamsUpserted += result.teamsUpserted;
-        totals.projectsUpserted += result.projectsUpserted;
-        totals.initiativesUpserted += result.initiativesUpserted;
-        totals.errors += result.errors;
-      } catch (error) {
-        console.error(`Reconcile failed for user ${sub.user_id}:`, error);
-        totals.errors++;
-      }
-    }
-
-    return NextResponse.json({
-      success: true,
-      subscriptions: subs.length,
-      ...totals,
-    });
+    const result = await reconcileAllHubs();
+    return NextResponse.json({ success: true, ...result });
   } catch (error) {
     console.error("GET /api/sync/reconcile error:", error);
     return NextResponse.json(
@@ -98,8 +76,14 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function reconcileForUser(userId: string): Promise<ReconcileResult> {
-  const result: ReconcileResult = {
+/**
+ * Reconcile all active hubs. Org-level entities (teams, initiatives) are
+ * fetched once. Per-team entities are deduplicated across hubs.
+ */
+async function reconcileAllHubs(): Promise<HubReconcileResult> {
+  const result: HubReconcileResult = {
+    hubsReconciled: 0,
+    teamsReconciled: 0,
     issuesUpserted: 0,
     teamsUpserted: 0,
     projectsUpserted: 0,
@@ -107,94 +91,97 @@ async function reconcileForUser(userId: string): Promise<ReconcileResult> {
     errors: 0,
   };
 
-  // Get subscription
-  const { data: sub } = await supabaseAdmin
-    .from("sync_subscriptions")
-    .select("linear_team_id")
-    .eq("user_id", userId)
-    .eq("is_active", true)
-    .single();
+  const apiToken = await getWorkspaceToken();
 
-  if (!sub) return result;
-
-  // Get API token
-  const { data: profile } = await supabaseAdmin
-    .from("profiles")
-    .select("linear_api_token")
-    .eq("id", userId)
-    .single();
-
-  if (!profile?.linear_api_token) return result;
-
-  const apiToken = decryptToken(profile.linear_api_token);
-  const teamId = sub.linear_team_id;
-
-  // 1. Teams — always full-refresh (no webhook events for teams)
+  // 1. Org-level: teams (once)
   try {
     const teams = await fetchAllTeams(apiToken);
     if (teams.length > 0) {
       await batchUpsert(
         "synced_teams",
-        teams.map((t) => mapTeamToRow(t, userId)),
+        teams.map((t) => mapTeamToRow(t, WORKSPACE_USER_ID)),
         "user_id,linear_id"
       );
     }
     result.teamsUpserted = teams.length;
   } catch (error) {
-    console.error(`Teams reconcile failed for user ${userId}:`, error);
+    console.error("Reconcile: teams failed:", error);
     result.errors++;
   }
 
-  // 2. Projects — full-refresh (team-scoped)
-  try {
-    const projects = await fetchAllProjects(apiToken, teamId);
-    if (projects.length > 0) {
-      await batchUpsert(
-        "synced_projects",
-        projects.map((p) => mapProjectToRow(p, userId)),
-        "user_id,linear_id"
-      );
-    }
-    result.projectsUpserted = projects.length;
-  } catch (error) {
-    console.error(`Projects reconcile failed for user ${userId}:`, error);
-    result.errors++;
-  }
-
-  // 3. Initiatives — full-refresh (org-level, may lack scope)
+  // 2. Org-level: initiatives (once)
   try {
     const initiatives = await fetchAllInitiatives(apiToken);
     if (initiatives.length > 0) {
       await batchUpsert(
         "synced_initiatives",
-        initiatives.map((i) => mapInitiativeToRow(i, userId)),
+        initiatives.map((i) => mapInitiativeToRow(i, WORKSPACE_USER_ID)),
         "user_id,linear_id"
       );
     }
     result.initiativesUpserted = initiatives.length;
   } catch (error) {
-    console.warn(`Initiatives reconcile failed for user ${userId} (may lack org scope):`, error);
-    // Don't count as error — token may not have org scope
+    console.warn("Reconcile: initiatives failed (may lack org scope):", error);
   }
 
-  // 4. Issues — full-refresh using same function as initial sync
-  try {
-    const issues = await fetchAllIssues(apiToken, teamId);
-    if (issues.length > 0) {
-      await batchUpsert(
-        "synced_issues",
-        issues.map((issue) => mapIssueToRow(issue, userId)),
-        "user_id,linear_id"
-      );
-    }
-    result.issuesUpserted = issues.length;
-  } catch (error) {
-    console.error(`Issues reconcile failed for user ${userId}:`, error);
-    result.errors++;
+  // 3. Collect all unique team IDs across active hubs
+  const { data: mappings } = await supabaseAdmin
+    .from("hub_team_mappings")
+    .select("hub_id, linear_team_id")
+    .eq("is_active", true);
+
+  if (!mappings || mappings.length === 0) {
+    console.log("Reconcile: no team mappings found");
+    return result;
   }
+
+  // Deduplicate: sync each team only once
+  const syncedTeamIds = new Set<string>();
+  const hubIds = new Set<string>();
+
+  for (const mapping of mappings) {
+    hubIds.add(mapping.hub_id);
+
+    if (syncedTeamIds.has(mapping.linear_team_id)) continue;
+    syncedTeamIds.add(mapping.linear_team_id);
+
+    try {
+      const projects = await fetchAllProjects(apiToken, mapping.linear_team_id);
+      if (projects.length > 0) {
+        await batchUpsert(
+          "synced_projects",
+          projects.map((p) => mapProjectToRow(p, WORKSPACE_USER_ID)),
+          "user_id,linear_id"
+        );
+      }
+      result.projectsUpserted += projects.length;
+
+      const issues = await fetchAllIssues(apiToken, mapping.linear_team_id);
+      if (issues.length > 0) {
+        await batchUpsert(
+          "synced_issues",
+          issues.map((issue) => mapIssueToRow(issue, WORKSPACE_USER_ID)),
+          "user_id,linear_id"
+        );
+      }
+      result.issuesUpserted += issues.length;
+
+      result.teamsReconciled++;
+    } catch (error) {
+      console.error(
+        `Reconcile: team ${mapping.linear_team_id} failed:`,
+        error
+      );
+      result.errors++;
+    }
+  }
+
+  result.hubsReconciled = hubIds.size;
 
   console.log(
-    `Reconcile for user ${userId}: ${result.issuesUpserted} issues, ${result.teamsUpserted} teams, ${result.projectsUpserted} projects, ${result.initiativesUpserted} initiatives, ${result.errors} errors`
+    `Reconcile complete: ${result.hubsReconciled} hubs, ${result.teamsReconciled} teams, ` +
+      `${result.issuesUpserted} issues, ${result.projectsUpserted} projects, ` +
+      `${result.initiativesUpserted} initiatives, ${result.errors} errors`
   );
 
   return result;

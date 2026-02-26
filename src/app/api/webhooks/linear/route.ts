@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase";
+import { getWorkspaceSetting } from "@/lib/workspace";
+import { isTeamConfigured } from "@/lib/hub-team-lookup";
 import {
   verifyWebhookSignature,
   routeWebhookEvent,
@@ -14,6 +15,36 @@ type WebhookPayload = {
   webhookId?: string;
   webhookTimestamp?: number;
 };
+
+const WORKSPACE_USER_ID = "workspace";
+
+/**
+ * Extract team ID from a webhook payload.
+ * Returns null for org-level entities (Initiative).
+ */
+function extractTeamId(payload: WebhookPayload): string | null {
+  const { type, data } = payload;
+
+  switch (type) {
+    case "Issue": {
+      if (typeof data.teamId === "string") return data.teamId;
+      const team = data.team as { id?: string } | undefined;
+      return team?.id ?? null;
+    }
+    case "Comment": {
+      const issue = data.issue as { team?: { id?: string } } | undefined;
+      return issue?.team?.id ?? null;
+    }
+    case "Project": {
+      const teams = (data as { teams?: Array<{ id: string }> }).teams;
+      return teams?.[0]?.id ?? null;
+    }
+    case "Initiative":
+      return null;
+    default:
+      return null;
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -37,66 +68,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Look up all active subscriptions and try to verify against each.
-    // Linear includes webhookId in some payloads — use it if available.
-    let userId: string | null = null;
-
-    if (payload.webhookId) {
-      const { data: sub } = await supabaseAdmin
-        .from("sync_subscriptions")
-        .select("user_id, webhook_secret")
-        .eq("webhook_id", payload.webhookId)
-        .eq("is_active", true)
-        .single();
-
-      if (sub?.webhook_secret) {
-        const valid = verifyWebhookSignature(
-          rawBody,
-          signature,
-          sub.webhook_secret
-        );
-        if (valid) userId = sub.user_id;
-      }
+    // Verify against workspace webhook secret
+    const workspaceSecret = await getWorkspaceSetting("linear_webhook_secret");
+    if (!workspaceSecret) {
+      return NextResponse.json(
+        { error: "No webhook configured" },
+        { status: 401 }
+      );
     }
 
-    // Fallback: try all active subscriptions
-    if (!userId) {
-      const { data: subs } = await supabaseAdmin
-        .from("sync_subscriptions")
-        .select("user_id, webhook_secret")
-        .eq("is_active", true);
-
-      if (subs) {
-        for (const sub of subs) {
-          if (!sub.webhook_secret) continue;
-          try {
-            const valid = verifyWebhookSignature(
-              rawBody,
-              signature,
-              sub.webhook_secret
-            );
-            if (valid) {
-              userId = sub.user_id;
-              break;
-            }
-          } catch {
-            // timingSafeEqual throws if lengths differ — skip
-            continue;
-          }
-        }
-      }
+    let verified = false;
+    try {
+      verified = verifyWebhookSignature(rawBody, signature, workspaceSecret);
+    } catch {
+      // timingSafeEqual throws if lengths differ
     }
 
-    if (!userId) {
+    if (!verified) {
       return NextResponse.json(
         { error: "Invalid signature" },
         { status: 401 }
       );
     }
 
-    // Route the event — don't let handler errors prevent a 200 response
+    // Discard events from teams not configured in any hub
+    const teamId = extractTeamId(payload);
+    if (teamId) {
+      const configured = await isTeamConfigured(teamId);
+      if (!configured) {
+        return NextResponse.json({ success: true });
+      }
+    }
+    // teamId === null → org-level entity (Initiative) — always process
+
+    // Route the event
     try {
-      await routeWebhookEvent(payload, userId);
+      await routeWebhookEvent(payload, WORKSPACE_USER_ID);
     } catch (error) {
       console.error("Webhook handler error:", error);
     }

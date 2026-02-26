@@ -1,17 +1,51 @@
 import { authkit, handleAuthkitHeaders } from '@workos-inc/authkit-nextjs'
 import { NextResponse, type NextRequest } from 'next/server'
-import { lookupCustomDomain } from '@/lib/edge-db'
+import { lookupCustomDomain, lookupHubBySlug, lookupPPMAdmin } from '@/lib/edge-db'
 
 export default async function middleware(request: NextRequest) {
   const { session, headers, authorizationUrl } = await authkit(request)
   const { pathname } = request.nextUrl
 
-  // Enforce auth on protected routes
+  // Enforce auth on protected PPM routes
   const protectedPaths = ['/forms', '/views', '/roadmaps', '/profile', '/docs']
   const isProtected = protectedPaths.some(p => pathname === p || pathname.startsWith(p + '/'))
 
   if (isProtected && !session.user && authorizationUrl) {
     return handleAuthkitHeaders(request, headers, { redirect: authorizationUrl })
+  }
+
+  // Hub routes: redirect unauthenticated users to hub-specific login
+  const hubMatch = pathname.match(/^\/hub\/([^/]+)/)
+  if (hubMatch) {
+    const slug = hubMatch[1]
+    const isLoginPage = pathname === `/hub/${slug}/login`
+
+    // Login page is always accessible
+    if (!isLoginPage && !session.user) {
+      const loginUrl = new URL(`/hub/${slug}/login`, request.url)
+      return handleAuthkitHeaders(request, headers, { redirect: loginUrl.toString() })
+    }
+
+    // If authenticated, verify org match or PPM admin status
+    if (!isLoginPage && session.user) {
+      const hub = await lookupHubBySlug(slug)
+
+      if (session.organizationId) {
+        // Client user — verify org matches hub
+        if (hub && hub.workos_org_id && session.organizationId !== hub.workos_org_id) {
+          const loginUrl = new URL(`/hub/${slug}/login`, request.url)
+          return handleAuthkitHeaders(request, headers, { redirect: loginUrl.toString() })
+        }
+      } else {
+        // No org in session — PPM user. Only allow if they're an admin.
+        const isAdmin = await lookupPPMAdmin(session.user.id)
+        if (!isAdmin) {
+          return new NextResponse('Forbidden', { status: 403 })
+        }
+      }
+    }
+
+    return handleAuthkitHeaders(request, headers)
   }
 
   const hostname = request.headers.get('host') || ''
