@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { AuthProvider } from "@/contexts/auth-context";
+import { AuthKitProvider } from "@workos-inc/authkit-nextjs/components";
 import { ThemeProvider } from "@/contexts/theme-context";
 import { Toaster } from "sonner";
 
@@ -107,9 +107,9 @@ export default function RootLayout({
           defaultTheme="system"
           storageKey="linear-integration-theme"
         >
-          <AuthProvider>
+          <AuthKitProvider>
             {children}
-          </AuthProvider>
+          </AuthKitProvider>
           <Toaster richColors position="bottom-right" />
         </ThemeProvider>
       </body>

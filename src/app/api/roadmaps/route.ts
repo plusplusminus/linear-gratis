@@ -1,32 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { withAuth } from '@workos-inc/authkit-nextjs';
+import { supabaseAdmin } from '@/lib/supabase';
 import type { Roadmap } from '@/lib/supabase';
 import bcrypt from 'bcryptjs';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
-});
-
 export async function GET(request: NextRequest) {
   try {
-    // Get the user from the Authorization header (Supabase token)
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
-    }
-
-    const token = authHeader.replace('Bearer ', '');
-
-    // Verify the user's token and get their ID
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-
-    if (authError || !user) {
+    const { user } = await withAuth();
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
     }
 
@@ -60,18 +41,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    // Get the user from the Authorization header
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
-    }
-
-    const token = authHeader.replace('Bearer ', '');
-
-    // Verify the user's token and get their ID
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-
-    if (authError || !user) {
+    const { user } = await withAuth();
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
     }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useAuth } from "@/contexts/auth-context";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -65,9 +65,6 @@ export default function RoadmapsPage() {
 
     setLoading(true);
     try {
-      // Get the session token
-      const { data: { session } } = await supabase.auth.getSession();
-
       // Load user profile and roadmaps in parallel
       const [profileResult, roadmapsResult] = await Promise.all([
         supabase
@@ -75,11 +72,7 @@ export default function RoadmapsPage() {
           .select("linear_api_token")
           .eq("id", user.id)
           .single(),
-        fetch("/api/roadmaps", {
-          headers: {
-            Authorization: `Bearer ${session?.access_token}`,
-          },
-        }),
+        fetch("/api/roadmaps"),
       ]);
 
       // Handle profile
@@ -181,13 +174,10 @@ export default function RoadmapsPage() {
 
     setSubmitting(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-
       const response = await fetch("/api/roadmaps", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${session?.access_token}`,
         },
         body: JSON.stringify({
           name: roadmapName.trim(),
@@ -227,13 +217,8 @@ export default function RoadmapsPage() {
     }
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-
       const response = await fetch(`/api/roadmaps/${roadmapId}`, {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${session?.access_token}`,
-        },
       });
 
       if (response.ok) {

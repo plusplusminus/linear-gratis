@@ -1,33 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { withAuth } from '@workos-inc/authkit-nextjs';
+import { supabaseAdmin } from '@/lib/supabase';
 import type { Roadmap } from '@/lib/supabase';
 import bcrypt from 'bcryptjs';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
-});
-
-async function verifyUser(request: NextRequest) {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.replace('Bearer ', '');
-  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-
-  if (error || !user) {
-    return null;
-  }
-
-  return user;
-}
 
 export async function GET(
   request: NextRequest,
@@ -35,8 +10,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const user = await verifyUser(request);
-
+    const { user } = await withAuth();
     if (!user) {
       return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
     }
@@ -78,8 +52,7 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const user = await verifyUser(request);
-
+    const { user } = await withAuth();
     if (!user) {
       return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
     }
@@ -166,8 +139,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const user = await verifyUser(request);
-
+    const { user } = await withAuth();
     if (!user) {
       return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
     }

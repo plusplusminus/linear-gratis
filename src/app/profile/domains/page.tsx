@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAuth } from "@/contexts/auth-context";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
@@ -23,7 +23,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Navigation } from "@/components/navigation";
 import { ConfirmationModal } from "@/components/confirmation-modal";
-import { supabase, CustomDomain } from "@/lib/supabase";
+import { supabase, type CustomDomain } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import {
   Globe,
@@ -81,18 +81,7 @@ export default function CustomDomainsPage() {
 
     setLoading(true);
     try {
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-
-      if (!token) {
-        throw new Error("No access token");
-      }
-
-      const response = await fetch("/api/domains", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await fetch("/api/domains");
 
       if (response.ok) {
         const data = (await response.json()) as { domains: CustomDomain[] };
@@ -152,18 +141,10 @@ export default function CustomDomainsPage() {
     setSubmitting(true);
 
     try {
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-
-      if (!token) {
-        throw new Error("No access token");
-      }
-
       const response = await fetch("/api/domains", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           domain: newDomain,
@@ -194,18 +175,8 @@ export default function CustomDomainsPage() {
     if (!user) return;
 
     try {
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-
-      if (!token) {
-        throw new Error("No access token");
-      }
-
       const response = await fetch(`/api/domains/${domainId}/verify`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       });
 
       const result = await response.json() as {
@@ -248,18 +219,8 @@ export default function CustomDomainsPage() {
     setDeleting(true);
 
     try {
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-
-      if (!token) {
-        throw new Error("No access token");
-      }
-
       const response = await fetch(`/api/domains/${domainToDelete.id}`, {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       });
 
       if (response.ok) {

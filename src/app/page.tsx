@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuth } from "@/contexts/auth-context";
+import { useAuth } from "@/hooks/use-auth";
 import { LinearIssueForm } from "@/components/linear-issue-form";
 import { Navigation } from "@/components/navigation";
 import { Button } from "@/components/ui/button";

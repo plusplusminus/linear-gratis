@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAuth } from "@/contexts/auth-context";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Navigation } from "@/components/navigation";
-import { supabase, BrandingSettings } from "@/lib/supabase";
+import type { BrandingSettings } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import { Palette, Upload, Trash2, Save, RefreshCw } from "lucide-react";
 
@@ -64,18 +64,7 @@ export default function BrandingPage() {
 
     setLoading(true);
     try {
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-
-      if (!token) {
-        throw new Error("No access token");
-      }
-
-      const response = await fetch("/api/branding", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await fetch("/api/branding");
 
       if (response.ok) {
         const data = (await response.json()) as { branding: BrandingSettings | null };
@@ -97,18 +86,10 @@ export default function BrandingPage() {
     setMessage(null);
 
     try {
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-
-      if (!token) {
-        throw new Error("No access token");
-      }
-
       const response = await fetch("/api/branding", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(branding),
       });
@@ -137,22 +118,12 @@ export default function BrandingPage() {
     setMessage(null);
 
     try {
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-
-      if (!token) {
-        throw new Error("No access token");
-      }
-
       const formData = new FormData();
       formData.append("file", file);
       formData.append("type", type);
 
       const response = await fetch("/api/branding/upload-logo", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
         body: formData,
       });
 

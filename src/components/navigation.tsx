@@ -1,6 +1,6 @@
 'use client'
 
-import { useAuth } from '@/contexts/auth-context'
+import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { SimpleThemeToggle } from '@/components/theme-toggle'
 import Link from 'next/link'
@@ -75,6 +75,11 @@ export function Navigation() {
                 <Link href="/profile/domains">
                   <Button variant="ghost" size="sm" className="font-medium">
                     Domains
+                  </Button>
+                </Link>
+                <Link href="/docs">
+                  <Button variant="ghost" size="sm" className="font-medium">
+                    Docs
                   </Button>
                 </Link>
                 <Link href="/profile">
