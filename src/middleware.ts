@@ -32,6 +32,7 @@ export default async function middleware(request: NextRequest) {
     'localhost:3000',
     'localhost',
     'workers.dev',
+    'vercel.app',
     process.env.NEXT_PUBLIC_APP_DOMAIN || '',
   ].filter(Boolean)
 
