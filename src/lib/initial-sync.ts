@@ -1,7 +1,7 @@
 import { supabaseAdmin } from "./supabase";
 
 const LINEAR_API = "https://api.linear.app/graphql";
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 20;
 
 // -- GraphQL queries ---------------------------------------------------------
 
