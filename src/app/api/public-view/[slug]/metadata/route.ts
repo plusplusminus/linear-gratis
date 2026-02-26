@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { decryptToken } from '@/lib/encryption';
+import { userHasSync, fetchSyncedMetadata } from '@/lib/sync-read';
 
 export async function GET(
   request: NextRequest,
@@ -31,21 +32,39 @@ export async function GET(
       );
     }
 
-    // Get the user's Linear token
-    const { data: profileData, error: profileError } = await supabaseAdmin
+    // Try synced metadata first
+    const hasSyncData = await userHasSync(viewData.user_id);
+
+    if (hasSyncData) {
+      const metadata = await fetchSyncedMetadata(viewData.user_id, {
+        projectId: viewData.project_id || undefined,
+        teamId: viewData.team_id || undefined,
+      });
+
+      if (metadata) {
+        return NextResponse.json({
+          success: true,
+          states: metadata.states,
+          labels: metadata.labels,
+          members: metadata.members,
+        });
+      }
+    }
+
+    // Fallback to Linear API
+    const { data: profileData } = await supabaseAdmin
       .from('profiles')
       .select('linear_api_token')
       .eq('id', viewData.user_id)
       .single();
 
-    if (profileError || !profileData?.linear_api_token) {
+    if (!profileData?.linear_api_token) {
       return NextResponse.json(
         { error: 'Unable to load metadata - Linear API token not found' },
         { status: 500 }
       );
     }
 
-    // Decrypt the token and fetch metadata
     const decryptedToken = decryptToken(profileData.linear_api_token);
 
     const metadataResponse = await fetch(`${request.nextUrl.origin}/api/linear/metadata`, {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { decryptToken } from '@/lib/encryption';
+import { userHasSync, fetchSyncedComments } from '@/lib/sync-read';
 
 export type IssueComment = {
   id: string;
@@ -104,7 +105,42 @@ export async function GET(
       );
     }
 
-    // Get the user's Linear token
+    // Try synced data first
+    const hasSyncData = await userHasSync(viewData.user_id);
+
+    if (hasSyncData) {
+      const { data: syncedIssue } = await supabaseAdmin
+        .from('synced_issues')
+        .select('*')
+        .eq('user_id', viewData.user_id)
+        .eq('linear_id', issueId)
+        .single();
+
+      if (syncedIssue) {
+        const comments = await fetchSyncedComments(viewData.user_id, issueId);
+
+        const issueDetail: IssueDetail = {
+          id: syncedIssue.linear_id,
+          identifier: syncedIssue.identifier,
+          title: syncedIssue.title,
+          description: syncedIssue.description ?? undefined,
+          priority: syncedIssue.priority ?? 0,
+          priorityLabel: ['No priority', 'Urgent', 'High', 'Medium', 'Low'][syncedIssue.priority ?? 0] || 'No priority',
+          url: syncedIssue.url ?? '',
+          state: { id: '', name: syncedIssue.state ?? 'Unknown', color: '', type: '' },
+          assignee: syncedIssue.assignee ? { id: '', name: syncedIssue.assignee } : undefined,
+          labels: Array.isArray(syncedIssue.labels) ? syncedIssue.labels as Array<{ id: string; name: string; color: string }> : [],
+          createdAt: syncedIssue.created_at,
+          updatedAt: syncedIssue.updated_at,
+          comments,
+          history: [], // History not synced — only available via Linear API
+        };
+
+        return NextResponse.json({ success: true, issue: issueDetail });
+      }
+    }
+
+    // Fallback to Linear API
     const { data: profileData, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('linear_api_token')
@@ -118,10 +154,8 @@ export async function GET(
       );
     }
 
-    // Decrypt the token
     const decryptedToken = decryptToken(profileData.linear_api_token);
 
-    // Fetch issue details from Linear using GraphQL
     const query = `
       query IssueDetail($issueId: String!) {
         issue(id: $issueId) {

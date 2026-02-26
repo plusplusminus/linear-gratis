@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 import type { Roadmap, KanbanColumn } from '@/lib/supabase';
 import { decryptToken } from '@/lib/encryption';
 import { fetchRoadmapIssues, type RoadmapIssue } from '@/lib/linear';
+import { userHasSync, fetchSyncedRoadmapIssues } from '@/lib/sync-read';
 import bcrypt from 'bcryptjs';
 
 type VoteCount = {
@@ -177,23 +178,6 @@ export async function POST(
 }
 
 async function fetchRoadmapData(roadmap: Roadmap) {
-  // Get the user's Linear token
-  const { data: profileData, error: profileError } = await supabaseAdmin
-    .from('profiles')
-    .select('linear_api_token')
-    .eq('id', roadmap.user_id)
-    .single();
-
-  if (profileError || !profileData?.linear_api_token) {
-    return NextResponse.json(
-      { error: 'Unable to load data - Linear API token not found' },
-      { status: 500 }
-    );
-  }
-
-  // Decrypt the token and fetch issues from Linear API
-  const decryptedToken = decryptToken(profileData.linear_api_token);
-
   if (!roadmap.project_ids || roadmap.project_ids.length === 0) {
     return NextResponse.json(
       { error: 'No projects configured for this roadmap' },
@@ -201,14 +185,37 @@ async function fetchRoadmapData(roadmap: Roadmap) {
     );
   }
 
-  const issuesResult = await fetchRoadmapIssues(decryptedToken, roadmap.project_ids);
+  // Try synced data first, fall back to Linear API
+  let issues: RoadmapIssue[];
+  const hasSyncData = await userHasSync(roadmap.user_id);
 
-  if (!issuesResult.success) {
-    throw new Error(`Failed to fetch issues from Linear: ${issuesResult.error}`);
+  if (hasSyncData) {
+    issues = await fetchSyncedRoadmapIssues(roadmap.user_id, roadmap.project_ids);
+  } else {
+    const { data: profileData } = await supabaseAdmin
+      .from('profiles')
+      .select('linear_api_token')
+      .eq('id', roadmap.user_id)
+      .single();
+
+    if (!profileData?.linear_api_token) {
+      return NextResponse.json(
+        { error: 'Unable to load data - Linear API token not found' },
+        { status: 500 }
+      );
+    }
+
+    const decryptedToken = decryptToken(profileData.linear_api_token);
+    const issuesResult = await fetchRoadmapIssues(decryptedToken, roadmap.project_ids);
+
+    if (!issuesResult.success) {
+      throw new Error(`Failed to fetch issues from Linear: ${issuesResult.error}`);
+    }
+    issues = issuesResult.issues;
   }
 
   // Fetch vote counts for all issues
-  const issueIds = issuesResult.issues.map((issue) => issue.id);
+  const issueIds = issues.map((issue) => issue.id);
   const voteCounts: Record<string, number> = {};
   const commentCounts: Record<string, number> = {};
 
@@ -248,7 +255,7 @@ async function fetchRoadmapData(roadmap: Roadmap) {
 
   // Extract unique projects from issues
   const projectMap = new Map<string, { id: string; name: string; color?: string }>();
-  issuesResult.issues.forEach((issue) => {
+  issues.forEach((issue) => {
     if (issue.project && !projectMap.has(issue.project.id)) {
       projectMap.set(issue.project.id, issue.project);
     }
@@ -275,7 +282,7 @@ async function fetchRoadmapData(roadmap: Roadmap) {
       require_email_for_comments: roadmap.require_email_for_comments,
       password_protected: roadmap.password_protected,
     },
-    issues: issuesResult.issues,
+    issues,
     voteCounts,
     commentCounts,
     projects: Array.from(projectMap.values()),

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { userHasSync, fetchSyncedIssues } from "@/lib/sync-read";
 
 export type LinearIssue = {
   id: string;
@@ -35,6 +36,7 @@ export type LinearTeam = {
 
 export type RequestBody = {
   apiToken: string;
+  userId?: string;
   projectId?: string;
   teamId?: string;
   statuses?: string[];
@@ -42,19 +44,32 @@ export type RequestBody = {
 
 export async function POST(request: NextRequest) {
   try {
-    const { apiToken, projectId, teamId, statuses } =
+    const { apiToken, userId, projectId, teamId, statuses } =
       (await request.json()) as RequestBody;
-
-    if (!apiToken) {
-      return NextResponse.json(
-        { error: "Missing required field: apiToken" },
-        { status: 400 },
-      );
-    }
 
     if (!projectId && !teamId) {
       return NextResponse.json(
         { error: "Either projectId or teamId must be provided" },
+        { status: 400 },
+      );
+    }
+
+    // Try synced data if userId is provided
+    if (userId) {
+      const hasSyncData = await userHasSync(userId);
+      if (hasSyncData) {
+        const issues = await fetchSyncedIssues(userId, {
+          projectId: projectId || undefined,
+          teamId: teamId || undefined,
+          statuses: statuses && statuses.length > 0 ? statuses : undefined,
+        });
+        return NextResponse.json({ success: true, issues });
+      }
+    }
+
+    if (!apiToken) {
+      return NextResponse.json(
+        { error: "Missing required field: apiToken" },
         { status: 400 },
       );
     }

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
 import { supabase } from '@/lib/supabase'
 import { encryptTokenClient, decryptTokenClient } from '@/lib/client-encryption'
 import { useRouter } from 'next/navigation'
@@ -16,6 +17,14 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [syncStatus, setSyncStatus] = useState<{
+    connected: boolean
+    issueCount: number
+    lastSyncedAt: string | null
+    subscription: { id: string; teamId: string; createdAt: string } | null
+  } | null>(null)
+  const [syncLoading, setSyncLoading] = useState(false)
+  const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const router = useRouter()
 
   const loadProfile = useCallback(async () => {
@@ -47,6 +56,49 @@ export default function ProfilePage() {
     }
   }, [user])
 
+  const loadSyncStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/sync/subscribe')
+      if (res.ok) {
+        const data = await res.json() as typeof syncStatus
+        setSyncStatus(data)
+      }
+    } catch (error) {
+      console.error('Error loading sync status:', error)
+    }
+  }, [])
+
+  const toggleSync = async () => {
+    setSyncLoading(true)
+    setSyncMessage(null)
+    try {
+      if (syncStatus?.connected) {
+        const res = await fetch('/api/sync/subscribe', { method: 'DELETE' })
+        if (res.ok) {
+          setSyncMessage({ type: 'success', text: 'Sync disconnected.' })
+          await loadSyncStatus()
+        } else {
+          const data = await res.json() as { error?: string }
+          setSyncMessage({ type: 'error', text: data.error || 'Failed to disconnect.' })
+        }
+      } else {
+        const res = await fetch('/api/sync/subscribe', { method: 'POST' })
+        if (res.ok) {
+          setSyncMessage({ type: 'success', text: 'Sync enabled! Your Linear data will start syncing shortly.' })
+          await loadSyncStatus()
+        } else {
+          const data = await res.json() as { error?: string }
+          setSyncMessage({ type: 'error', text: data.error || 'Failed to enable sync.' })
+        }
+      }
+    } catch (error) {
+      setSyncMessage({ type: 'error', text: 'Something went wrong.' })
+      console.error('Error toggling sync:', error)
+    } finally {
+      setSyncLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (authLoading) return // Wait for auth to finish loading
 
@@ -55,9 +107,10 @@ export default function ProfilePage() {
       return
     }
 
-    // Load existing token
+    // Load existing token and sync status
     loadProfile()
-  }, [user, authLoading, router, loadProfile])
+    loadSyncStatus()
+  }, [user, authLoading, router, loadProfile, loadSyncStatus])
 
   const saveProfile = async () => {
     if (!user) return
@@ -233,6 +286,71 @@ export default function ProfilePage() {
                 </form>
               </>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Data sync</CardTitle>
+                <CardDescription>
+                  Sync your Linear issues and comments to enable faster loading and offline access.
+                </CardDescription>
+              </div>
+              {syncStatus && (
+                <Badge variant={syncStatus.connected ? 'default' : 'secondary'}>
+                  {syncStatus.connected ? 'Connected' : 'Disconnected'}
+                </Badge>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {syncStatus?.connected && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-muted/50 rounded-lg p-3 border border-border/50">
+                  <p className="text-sm text-muted-foreground">Synced issues</p>
+                  <p className="text-2xl font-semibold">{syncStatus.issueCount}</p>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-3 border border-border/50">
+                  <p className="text-sm text-muted-foreground">Last synced</p>
+                  <p className="text-sm font-medium mt-1">
+                    {syncStatus.lastSyncedAt
+                      ? new Date(syncStatus.lastSyncedAt).toLocaleString()
+                      : 'Not yet synced'}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {!syncStatus?.connected && !linearToken && (
+              <div className="p-3 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800/30 rounded text-sm text-yellow-800 dark:text-yellow-400">
+                Save your Linear API token above before enabling sync.
+              </div>
+            )}
+
+            {syncMessage && (
+              <div className={`p-3 rounded-lg text-sm ${
+                syncMessage.type === 'success'
+                  ? 'bg-green-50 border border-green-200 text-green-800 dark:bg-green-950/20 dark:border-green-800/30 dark:text-green-400'
+                  : 'bg-red-50 border border-red-200 text-red-800 dark:bg-red-950/20 dark:border-red-800/30 dark:text-red-400'
+              }`}>
+                {syncMessage.text}
+              </div>
+            )}
+
+            <Button
+              onClick={toggleSync}
+              disabled={syncLoading || (!syncStatus?.connected && !linearToken)}
+              variant={syncStatus?.connected ? 'outline' : 'default'}
+              className="w-full"
+            >
+              {syncLoading
+                ? 'Processing...'
+                : syncStatus?.connected
+                  ? 'Disconnect sync'
+                  : 'Enable sync'}
+            </Button>
           </CardContent>
         </Card>
 

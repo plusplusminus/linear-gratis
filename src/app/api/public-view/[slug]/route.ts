@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { decryptToken } from '@/lib/encryption';
-import { fetchLinearIssues } from '@/lib/linear';
+import { fetchLinearIssues, type LinearIssue } from '@/lib/linear';
+import { userHasSync, fetchSyncedIssues } from '@/lib/sync-read';
 import bcrypt from 'bcryptjs';
 
 export async function GET(
@@ -49,31 +50,40 @@ export async function GET(
       );
     }
 
-    // Get the user's Linear token
-    const { data: profileData, error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .select('linear_api_token')
-      .eq('id', viewData.user_id)
-      .single();
-
-    if (profileError || !profileData?.linear_api_token) {
-      return NextResponse.json(
-        { error: 'Unable to load data - Linear API token not found' },
-        { status: 500 }
-      );
-    }
-
-    // Decrypt the token and fetch issues directly from Linear API
-    const decryptedToken = decryptToken(profileData.linear_api_token);
-
-    const issuesResult = await fetchLinearIssues(decryptedToken, {
+    // Try reading from synced data first, fall back to Linear API
+    const filterOpts = {
       projectId: viewData.project_id || undefined,
       teamId: viewData.team_id || undefined,
       statuses: viewData.allowed_statuses?.length > 0 ? viewData.allowed_statuses : undefined,
-    });
+    };
 
-    if (!issuesResult.success) {
-      throw new Error(`Failed to fetch issues from Linear: ${issuesResult.error}`);
+    let issues: LinearIssue[];
+    const hasSyncData = await userHasSync(viewData.user_id);
+
+    if (hasSyncData) {
+      issues = await fetchSyncedIssues(viewData.user_id, filterOpts);
+    } else {
+      // Fallback to Linear API
+      const { data: profileData } = await supabaseAdmin
+        .from('profiles')
+        .select('linear_api_token')
+        .eq('id', viewData.user_id)
+        .single();
+
+      if (!profileData?.linear_api_token) {
+        return NextResponse.json(
+          { error: 'Unable to load data - Linear API token not found' },
+          { status: 500 }
+        );
+      }
+
+      const decryptedToken = decryptToken(profileData.linear_api_token);
+      const issuesResult = await fetchLinearIssues(decryptedToken, filterOpts);
+
+      if (!issuesResult.success) {
+        throw new Error(`Failed to fetch issues from Linear: ${issuesResult.error}`);
+      }
+      issues = issuesResult.issues;
     }
 
     return NextResponse.json({
@@ -96,7 +106,7 @@ export async function GET(
         allow_issue_creation: viewData.allow_issue_creation,
         created_at: viewData.created_at
       },
-      issues: issuesResult.issues
+      issues,
     });
 
   } catch (error) {
@@ -169,31 +179,39 @@ export async function POST(
       );
     }
 
-    // Get the user's Linear token
-    const { data: profileData, error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .select('linear_api_token')
-      .eq('id', viewData.user_id)
-      .single();
-
-    if (profileError || !profileData?.linear_api_token) {
-      return NextResponse.json(
-        { error: 'Unable to load data - Linear API token not found' },
-        { status: 500 }
-      );
-    }
-
-    // Decrypt the token and fetch issues directly from Linear API
-    const decryptedToken = decryptToken(profileData.linear_api_token);
-
-    const issuesResult = await fetchLinearIssues(decryptedToken, {
+    // Try reading from synced data first, fall back to Linear API
+    const postFilterOpts = {
       projectId: viewData.project_id || undefined,
       teamId: viewData.team_id || undefined,
       statuses: viewData.allowed_statuses?.length > 0 ? viewData.allowed_statuses : undefined,
-    });
+    };
 
-    if (!issuesResult.success) {
-      throw new Error(`Failed to fetch issues from Linear: ${issuesResult.error}`);
+    let postIssues: LinearIssue[];
+    const postHasSyncData = await userHasSync(viewData.user_id);
+
+    if (postHasSyncData) {
+      postIssues = await fetchSyncedIssues(viewData.user_id, postFilterOpts);
+    } else {
+      const { data: profileData } = await supabaseAdmin
+        .from('profiles')
+        .select('linear_api_token')
+        .eq('id', viewData.user_id)
+        .single();
+
+      if (!profileData?.linear_api_token) {
+        return NextResponse.json(
+          { error: 'Unable to load data - Linear API token not found' },
+          { status: 500 }
+        );
+      }
+
+      const decryptedToken = decryptToken(profileData.linear_api_token);
+      const issuesResult = await fetchLinearIssues(decryptedToken, postFilterOpts);
+
+      if (!issuesResult.success) {
+        throw new Error(`Failed to fetch issues from Linear: ${issuesResult.error}`);
+      }
+      postIssues = issuesResult.issues;
     }
 
     return NextResponse.json({
@@ -217,7 +235,7 @@ export async function POST(
         allow_issue_creation: viewData.allow_issue_creation,
         created_at: viewData.created_at
       },
-      issues: issuesResult.issues
+      issues: postIssues,
     });
 
   } catch (error) {

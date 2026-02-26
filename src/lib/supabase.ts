@@ -184,3 +184,57 @@ export type RoadmapComment = {
   updated_at: string
 }
 
+export type SyncedIssue = {
+  id: string
+  linear_id: string
+  user_id: string
+  project_id?: string
+  team_id?: string
+  identifier: string
+  title: string
+  description?: string
+  state?: string
+  priority?: number
+  assignee?: string
+  labels: { id: string; name: string; color: string }[]
+  due_date?: string
+  url?: string
+  created_at: string
+  updated_at: string
+  synced_at: string
+}
+
+export type SyncedComment = {
+  id: string
+  linear_id: string
+  issue_linear_id: string
+  user_id: string
+  body?: string
+  author_name?: string
+  created_at: string
+  updated_at: string
+  synced_at: string
+}
+
+export type SyncSubscription = {
+  id: string
+  user_id: string
+  linear_team_id: string
+  webhook_id?: string
+  webhook_secret?: string
+  events: string[]
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type NotificationQueueItem = {
+  id: string
+  user_id: string
+  event_type: string
+  issue_linear_id?: string
+  payload: Record<string, unknown>
+  sent_at?: string
+  created_at: string
+}
+
