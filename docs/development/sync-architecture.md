@@ -180,21 +180,18 @@ Local cache of Linear issues. One row per issue per user.
 | identifier | text | Human-readable ID (e.g., "ENG-123") |
 | title | text | Issue title |
 | description | text | Issue description (markdown) |
-| state_name | text | Status name (e.g., "In Progress") |
-| state_color | text | Status hex color |
-| state_type | text | Status type (e.g., "started", "completed", "unstarted") |
+| state | text | Status name (e.g., "In Progress") |
 | priority | integer | Priority value (0-4) |
-| priority_label | text | Priority name (e.g., "High") |
-| assignee_name | text | Assignee display name |
+| assignee | text | Assignee display name |
 | labels | jsonb | Array of {id, name, color} |
 | due_date | date | Due date |
 | url | text | Linear issue URL |
-| linear_created_at | timestamptz | When created in Linear |
-| linear_updated_at | timestamptz | When last updated in Linear |
+| created_at | timestamptz | Row creation / Linear created timestamp |
+| updated_at | timestamptz | Row update / Linear updated timestamp |
 | synced_at | timestamptz | When last synced to this table |
 
 **Unique constraint:** `(user_id, linear_id)`
-**Indexes:** `linear_id`, `user_id`, `project_id`, `team_id`, `state_type`
+**Indexes:** `linear_id`, `user_id`, `project_id`, `team_id`
 
 ### synced_comments
 
@@ -208,11 +205,12 @@ Local cache of Linear issue comments.
 | user_id | text | WorkOS user ID |
 | body | text | Comment body (markdown) |
 | author_name | text | Comment author display name |
-| linear_created_at | timestamptz | When created in Linear |
-| linear_updated_at | timestamptz | When last updated in Linear |
+| created_at | timestamptz | Row creation / Linear created timestamp |
+| updated_at | timestamptz | Row update / Linear updated timestamp |
 | synced_at | timestamptz | When last synced |
 
 **Unique constraint:** `(user_id, linear_id)`
+**Indexes:** `linear_id`, `user_id`, `issue_linear_id`
 
 ### sync_subscriptions
 
@@ -266,7 +264,7 @@ If a user hasn't enabled sync (no sync_subscription), the app falls back to the 
 
 - **Webhook signatures**: Every incoming webhook is verified via HMAC-SHA256 with a per-user secret. Unverified payloads are rejected with 401.
 - **Token encryption**: Linear API tokens are encrypted at rest in Supabase using AES (existing mechanism in `src/lib/encryption.ts`).
-- **Webhook secrets**: Also encrypted at rest in sync_subscriptions.
+- **Webhook secrets**: Stored in sync_subscriptions. Generated server-side as 32-byte random hex. Only used for HMAC verification.
 - **No RLS**: All queries go through `supabaseAdmin` (service role), scoped by `user_id` in application code. This is intentional — auth is handled by WorkOS, not Supabase.
 
 ## Future Features This Enables
@@ -280,30 +278,33 @@ This sync architecture is the foundation for:
 5. **Activity feeds** — Webhook events can be logged as an activity stream
 6. **Digest emails** — notification_queue can be batched into daily/weekly summaries
 
-## Implementation Order
+## Implementation Status
 
-```
-PPMLG-32  Sync architecture documentation     (4h)  ← no deps, start here
-PPMLG-33  Supabase sync tables migration       (4h)  ← no deps, start here
-PPMLG-34  Webhook endpoint + verification      (8h)  ← depends on PPMLG-33
-PPMLG-35  Subscription management UI/API       (8h)  ← depends on PPMLG-33, PPMLG-34
-PPMLG-36  Initial sync job                     (8h)  ← depends on PPMLG-33, PPMLG-35
-PPMLG-37  Migrate public view API              (8h)  ← depends on PPMLG-34, PPMLG-36
-PPMLG-38  Migrate roadmap API                  (8h)  ← depends on PPMLG-34, PPMLG-36
-PPMLG-39  Reconciliation job                   (4h)  ← depends on PPMLG-34, PPMLG-36
-PPMLG-40  Admin API migration                  (4h)  ← depends on PPMLG-33, PPMLG-36
+All specs completed on 2026-02-26:
 
-Total: 56h (~1.5 weeks)
-```
+| Spec | Title | Est | Status |
+|------|-------|-----|--------|
+| PPMLG-32 | Sync architecture documentation | 4h | Done |
+| PPMLG-33 | Supabase sync tables migration | 4h | Done |
+| PPMLG-34 | Webhook endpoint + verification | 8h | Done |
+| PPMLG-35 | Subscription management UI/API | 8h | Done |
+| PPMLG-36 | Initial sync job | 8h | Done |
+| PPMLG-37 | Migrate public view API | 8h | Done |
+| PPMLG-38 | Migrate roadmap API | 8h | Done |
+| PPMLG-39 | Reconciliation job | 4h | Done |
+| PPMLG-40 | Admin API migration | 4h | Done |
 
-Dependency graph:
+## Key Files
 
-```
-PPMLG-32 (docs)
-PPMLG-33 (tables) ──┬──→ PPMLG-34 (webhook) ──┬──→ PPMLG-35 (subscribe) ──→ PPMLG-36 (initial sync)
-                    │                          │                                    │
-                    │                          ├──→ PPMLG-37 (public view) ←────────┤
-                    │                          ├──→ PPMLG-38 (roadmap) ←────────────┤
-                    │                          └──→ PPMLG-39 (reconcile) ←──────────┤
-                    └──→ PPMLG-40 (admin API) ←─────────────────────────────────────┘
-```
+| File | Purpose |
+|------|---------|
+| `supabase/migrations/20260226_sync_tables.sql` | Database migration for all 4 sync tables |
+| `src/lib/webhook-handlers.ts` | Signature verification, issue/comment upsert handlers |
+| `src/lib/initial-sync.ts` | Paginated backfill from Linear GraphQL |
+| `src/lib/sync-read.ts` | Shared Supabase read helpers (issues, comments, metadata, roadmap) |
+| `src/lib/supabase.ts` | TypeScript types for sync tables |
+| `src/app/api/webhooks/linear/route.ts` | Webhook receiver endpoint |
+| `src/app/api/sync/subscribe/route.ts` | POST/DELETE/GET subscription management |
+| `src/app/api/sync/initial/route.ts` | Manual re-sync trigger |
+| `src/app/api/sync/reconcile/route.ts` | Cron + manual reconciliation |
+| `vercel.json` | Cron config (reconcile every 5 min) |
