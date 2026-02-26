@@ -188,20 +188,16 @@ export type SyncedIssue = {
   id: string
   linear_id: string
   user_id: string
-  project_id?: string
-  team_id?: string
   identifier: string
-  title: string
-  description?: string
-  state?: string
-  priority?: number
-  assignee?: string
-  labels: { id: string; name: string; color: string }[]
-  due_date?: string
-  url?: string
-  created_at: string
+  team_id?: string
+  project_id?: string
+  state_name?: string
+  priority: number
+  assignee_name?: string
   updated_at: string
+  created_at: string
   synced_at: string
+  data: Record<string, unknown>
 }
 
 export type SyncedComment = {
@@ -209,11 +205,10 @@ export type SyncedComment = {
   linear_id: string
   issue_linear_id: string
   user_id: string
-  body?: string
-  author_name?: string
-  created_at: string
   updated_at: string
+  created_at: string
   synced_at: string
+  data: Record<string, unknown>
 }
 
 export type SyncSubscription = {

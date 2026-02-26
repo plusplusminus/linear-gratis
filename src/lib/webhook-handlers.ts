@@ -77,6 +77,69 @@ type LinearCommentData = {
   updatedAt?: string;
 };
 
+// -- Issue mapping (pure, exported for testing) ------------------------------
+
+export function mapIssueWebhookToRow(
+  action: string,
+  data: Record<string, unknown>,
+  userId: string
+): Record<string, unknown> {
+  const issue = data as unknown as LinearIssueData;
+
+  const row: Record<string, unknown> = {
+    linear_id: issue.id,
+    user_id: userId,
+    synced_at: new Date().toISOString(),
+    data, // Store full webhook payload as-is
+  };
+
+  // Extract indexed columns for filtering/sorting
+  if (issue.identifier !== undefined) row.identifier = issue.identifier;
+  if (issue.state?.name !== undefined) row.state_name = issue.state.name;
+  if (issue.priority !== undefined) row.priority = issue.priority;
+  if (issue.assignee?.name !== undefined) row.assignee_name = issue.assignee.name;
+  if (issue.team?.id !== undefined) row.team_id = issue.team.id;
+  if (issue.project?.id !== undefined) row.project_id = issue.project.id;
+
+  if (action === "create") {
+    row.created_at = issue.createdAt || new Date().toISOString();
+    row.updated_at = issue.updatedAt || new Date().toISOString();
+  } else {
+    row.updated_at = issue.updatedAt || new Date().toISOString();
+  }
+
+  return row;
+}
+
+// -- Comment mapping (pure, exported for testing) ----------------------------
+
+export function mapCommentWebhookToRow(
+  action: string,
+  data: Record<string, unknown>,
+  userId: string
+): Record<string, unknown> {
+  const comment = data as unknown as LinearCommentData;
+
+  const row: Record<string, unknown> = {
+    linear_id: comment.id,
+    user_id: userId,
+    synced_at: new Date().toISOString(),
+    data, // Store full webhook payload as-is
+  };
+
+  // Extract indexed column for filtering
+  if (comment.issue?.id !== undefined) row.issue_linear_id = comment.issue.id;
+
+  if (action === "create") {
+    row.created_at = comment.createdAt || new Date().toISOString();
+    row.updated_at = comment.updatedAt || new Date().toISOString();
+  } else {
+    row.updated_at = comment.updatedAt || new Date().toISOString();
+  }
+
+  return row;
+}
+
 // -- Issue event handler -----------------------------------------------------
 
 export async function handleIssueEvent(
@@ -95,31 +158,7 @@ export async function handleIssueEvent(
     return;
   }
 
-  // Build the upsert row — only include fields that are present
-  const row: Record<string, unknown> = {
-    linear_id: issue.id,
-    user_id: userId,
-    synced_at: new Date().toISOString(),
-  };
-
-  if (issue.identifier !== undefined) row.identifier = issue.identifier;
-  if (issue.title !== undefined) row.title = issue.title;
-  if (issue.description !== undefined) row.description = issue.description;
-  if (issue.state?.name !== undefined) row.state = issue.state.name;
-  if (issue.priority !== undefined) row.priority = issue.priority;
-  if (issue.assignee?.name !== undefined) row.assignee = issue.assignee.name;
-  if (issue.labels !== undefined) row.labels = issue.labels;
-  if (issue.dueDate !== undefined) row.due_date = issue.dueDate;
-  if (issue.url !== undefined) row.url = issue.url;
-  if (issue.team?.id !== undefined) row.team_id = issue.team.id;
-  if (issue.project?.id !== undefined) row.project_id = issue.project.id;
-
-  if (action === "create") {
-    row.created_at = issue.createdAt || new Date().toISOString();
-    row.updated_at = issue.updatedAt || new Date().toISOString();
-  } else {
-    row.updated_at = issue.updatedAt || new Date().toISOString();
-  }
+  const row = mapIssueWebhookToRow(action, data, userId);
 
   const { error } = await supabaseAdmin.from("synced_issues").upsert(row, {
     onConflict: "user_id,linear_id",
@@ -149,22 +188,7 @@ export async function handleCommentEvent(
     return;
   }
 
-  const row: Record<string, unknown> = {
-    linear_id: comment.id,
-    user_id: userId,
-    synced_at: new Date().toISOString(),
-  };
-
-  if (comment.body !== undefined) row.body = comment.body;
-  if (comment.issue?.id !== undefined) row.issue_linear_id = comment.issue.id;
-  if (comment.user?.name !== undefined) row.author_name = comment.user.name;
-
-  if (action === "create") {
-    row.created_at = comment.createdAt || new Date().toISOString();
-    row.updated_at = comment.updatedAt || new Date().toISOString();
-  } else {
-    row.updated_at = comment.updatedAt || new Date().toISOString();
-  }
+  const row = mapCommentWebhookToRow(action, data, userId);
 
   const { error } = await supabaseAdmin.from("synced_comments").upsert(row, {
     onConflict: "user_id,linear_id",

@@ -16,6 +16,103 @@ export async function userHasSync(userId: string): Promise<boolean> {
   return !!data;
 }
 
+// -- Shared helpers for reading from JSONB `data` column ────────────────────
+
+type IssueData = {
+  id?: string;
+  identifier?: string;
+  title?: string;
+  description?: string;
+  priority?: number;
+  priorityLabel?: string;
+  url?: string;
+  dueDate?: string;
+  state?: { id?: string; name?: string; color?: string; type?: string };
+  assignee?: { id?: string; name?: string };
+  labels?: Array<{ id: string; name: string; color: string }>;
+  project?: { id?: string; name?: string; color?: string };
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+type CommentData = {
+  id?: string;
+  body?: string;
+  user?: { id?: string; name?: string };
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+/** Map a synced_issues row (with JSONB `data`) to the LinearIssue shape. */
+export function mapRowToLinearIssue(row: {
+  linear_id: string;
+  data: IssueData;
+  created_at: string;
+  updated_at: string;
+}): LinearIssue {
+  const d = row.data;
+  return {
+    id: d.id ?? row.linear_id,
+    identifier: d.identifier ?? "",
+    title: d.title ?? "",
+    description: d.description ?? undefined,
+    priority: d.priority ?? 0,
+    priorityLabel: d.priorityLabel ?? priorityToLabel(d.priority ?? 0),
+    url: d.url ?? "",
+    state: {
+      id: d.state?.id ?? "",
+      name: d.state?.name ?? "Unknown",
+      color: d.state?.color ?? "",
+      type: d.state?.type ?? "",
+    },
+    assignee: d.assignee
+      ? { id: d.assignee.id ?? "", name: d.assignee.name ?? "" }
+      : undefined,
+    labels: Array.isArray(d.labels) ? d.labels : [],
+    createdAt: d.createdAt ?? row.created_at,
+    updatedAt: d.updatedAt ?? row.updated_at,
+  };
+}
+
+/** Map a synced_issues row to RoadmapIssue shape (LinearIssue + dueDate + project). */
+function mapRowToRoadmapIssue(row: {
+  linear_id: string;
+  data: IssueData;
+  created_at: string;
+  updated_at: string;
+}): RoadmapIssue {
+  const d = row.data;
+  return {
+    ...mapRowToLinearIssue(row),
+    dueDate: d.dueDate ?? undefined,
+    project: d.project
+      ? { id: d.project.id ?? "", name: d.project.name ?? "", color: d.project.color }
+      : undefined,
+  };
+}
+
+/** Map a synced_comments row to the comment shape. */
+export function mapRowToComment(row: {
+  linear_id: string;
+  data: CommentData;
+  created_at: string;
+  updated_at: string;
+}) {
+  const d = row.data;
+  return {
+    id: d.id ?? row.linear_id,
+    body: d.body ?? "",
+    createdAt: d.createdAt ?? row.created_at,
+    updatedAt: d.updatedAt ?? row.updated_at,
+    user: {
+      id: d.user?.id ?? "",
+      name: d.user?.name ?? "Unknown",
+    },
+  };
+}
+
+// -- Query functions ────────────────────────────────────────────────────────
+
 /**
  * Fetch issues from synced_issues table, returning them in the same shape
  * as fetchLinearIssues so the response is identical to the frontend.
@@ -30,7 +127,7 @@ export async function fetchSyncedIssues(
 ): Promise<LinearIssue[]> {
   let query = supabaseAdmin
     .from("synced_issues")
-    .select("*")
+    .select("linear_id, data, created_at, updated_at")
     .eq("user_id", userId)
     .order("updated_at", { ascending: false });
 
@@ -41,7 +138,7 @@ export async function fetchSyncedIssues(
     query = query.eq("team_id", options.teamId);
   }
   if (options.statuses && options.statuses.length > 0) {
-    query = query.in("state", options.statuses);
+    query = query.in("state_name", options.statuses);
   }
 
   const { data, error } = await query;
@@ -51,28 +148,9 @@ export async function fetchSyncedIssues(
     throw error;
   }
 
-  // Map to the LinearIssue shape expected by the frontend
-  return (data || []).map((row) => ({
-    id: row.linear_id,
-    identifier: row.identifier,
-    title: row.title,
-    description: row.description ?? undefined,
-    priority: row.priority ?? 0,
-    priorityLabel: priorityToLabel(row.priority ?? 0),
-    url: row.url ?? "",
-    state: {
-      id: "",
-      name: row.state ?? "Unknown",
-      color: "",
-      type: "",
-    },
-    assignee: row.assignee
-      ? { id: "", name: row.assignee }
-      : undefined,
-    labels: Array.isArray(row.labels) ? row.labels as Array<{ id: string; name: string; color: string }> : [],
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }));
+  return (data || []).map((row) =>
+    mapRowToLinearIssue(row as { linear_id: string; data: IssueData; created_at: string; updated_at: string })
+  );
 }
 
 /**
@@ -84,7 +162,7 @@ export async function fetchSyncedComments(
 ) {
   const { data, error } = await supabaseAdmin
     .from("synced_comments")
-    .select("*")
+    .select("linear_id, data, created_at, updated_at")
     .eq("user_id", userId)
     .eq("issue_linear_id", issueLinearId)
     .order("created_at", { ascending: true });
@@ -94,16 +172,9 @@ export async function fetchSyncedComments(
     throw error;
   }
 
-  return (data || []).map((row) => ({
-    id: row.linear_id,
-    body: row.body ?? "",
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    user: {
-      id: "",
-      name: row.author_name ?? "Unknown",
-    },
-  }));
+  return (data || []).map((row) =>
+    mapRowToComment(row as { linear_id: string; data: CommentData; created_at: string; updated_at: string })
+  );
 }
 
 /**
@@ -115,7 +186,7 @@ export async function fetchSyncedMetadata(
 ) {
   let query = supabaseAdmin
     .from("synced_issues")
-    .select("state, labels, assignee")
+    .select("data")
     .eq("user_id", userId);
 
   if (options.projectId) query = query.eq("project_id", options.projectId);
@@ -125,24 +196,37 @@ export async function fetchSyncedMetadata(
 
   if (error || !data) return null;
 
-  const states = new Set<string>();
+  const statesMap = new Map<string, { id: string; name: string; color: string; type: string }>();
   const labelsMap = new Map<string, { id: string; name: string; color: string }>();
-  const members = new Set<string>();
+  const membersMap = new Map<string, { id: string; name: string }>();
 
   for (const row of data) {
-    if (row.state) states.add(row.state);
-    if (row.assignee) members.add(row.assignee);
-    if (Array.isArray(row.labels)) {
-      for (const label of row.labels as Array<{ id: string; name: string; color: string }>) {
+    const d = row.data as IssueData;
+    if (d.state?.name) {
+      statesMap.set(d.state.name, {
+        id: d.state.id ?? "",
+        name: d.state.name,
+        color: d.state.color ?? "",
+        type: d.state.type ?? "",
+      });
+    }
+    if (d.assignee?.name) {
+      membersMap.set(d.assignee.name, {
+        id: d.assignee.id ?? "",
+        name: d.assignee.name,
+      });
+    }
+    if (Array.isArray(d.labels)) {
+      for (const label of d.labels) {
         labelsMap.set(label.id, label);
       }
     }
   }
 
   return {
-    states: Array.from(states).map((name) => ({ id: "", name, color: "", type: "" })),
+    states: Array.from(statesMap.values()),
     labels: Array.from(labelsMap.values()),
-    members: Array.from(members).map((name) => ({ id: "", name })),
+    members: Array.from(membersMap.values()),
   };
 }
 
@@ -156,7 +240,7 @@ export async function fetchSyncedRoadmapIssues(
 ): Promise<RoadmapIssue[]> {
   const { data, error } = await supabaseAdmin
     .from("synced_issues")
-    .select("*")
+    .select("linear_id, data, created_at, updated_at")
     .eq("user_id", userId)
     .in("project_id", projectIds)
     .order("updated_at", { ascending: false });
@@ -166,34 +250,12 @@ export async function fetchSyncedRoadmapIssues(
     throw error;
   }
 
-  return (data || []).map((row) => ({
-    id: row.linear_id,
-    identifier: row.identifier,
-    title: row.title,
-    description: row.description ?? undefined,
-    priority: row.priority ?? 0,
-    priorityLabel: priorityToLabel(row.priority ?? 0),
-    url: row.url ?? "",
-    dueDate: row.due_date ?? undefined,
-    state: {
-      id: "",
-      name: row.state ?? "Unknown",
-      color: "",
-      type: "",
-    },
-    assignee: row.assignee ? { id: "", name: row.assignee } : undefined,
-    labels: Array.isArray(row.labels)
-      ? (row.labels as Array<{ id: string; name: string; color: string }>)
-      : [],
-    project: row.project_id
-      ? { id: row.project_id, name: "", color: undefined }
-      : undefined,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }));
+  return (data || []).map((row) =>
+    mapRowToRoadmapIssue(row as { linear_id: string; data: IssueData; created_at: string; updated_at: string })
+  );
 }
 
-function priorityToLabel(priority: number): string {
+export function priorityToLabel(priority: number): string {
   switch (priority) {
     case 0: return "No priority";
     case 1: return "Urgent";

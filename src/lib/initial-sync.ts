@@ -23,13 +23,14 @@ const ISSUES_QUERY = `
         title
         description
         priority
+        priorityLabel
         url
         dueDate
-        state { name }
-        assignee { name }
+        state { id name color type }
+        assignee { id name }
         labels { nodes { id name color } }
-        team { id }
-        project { id }
+        team { id name key }
+        project { id name }
         createdAt
         updatedAt
       }
@@ -51,7 +52,8 @@ const COMMENTS_QUERY = `
       nodes {
         id
         body
-        user { name }
+        user { id name }
+        issue { id }
         createdAt
         updatedAt
       }
@@ -67,13 +69,14 @@ type LinearGqlIssue = {
   title: string;
   description?: string;
   priority: number;
+  priorityLabel?: string;
   url: string;
   dueDate?: string;
-  state?: { name: string };
-  assignee?: { name: string };
+  state?: { id: string; name: string; color: string; type: string };
+  assignee?: { id: string; name: string };
   labels: { nodes: Array<{ id: string; name: string; color: string }> };
-  team?: { id: string };
-  project?: { id: string };
+  team?: { id: string; name: string; key: string };
+  project?: { id: string; name: string };
   createdAt: string;
   updatedAt: string;
 };
@@ -81,7 +84,8 @@ type LinearGqlIssue = {
 type LinearGqlComment = {
   id: string;
   body?: string;
-  user?: { name: string };
+  user?: { id: string; name: string };
+  issue?: { id: string };
   createdAt: string;
   updatedAt: string;
 };
@@ -171,23 +175,26 @@ async function fetchCommentsForIssue(
 // -- Upsert batching ---------------------------------------------------------
 
 function mapIssueToRow(issue: LinearGqlIssue, userId: string) {
+  // Normalize labels from GraphQL { nodes: [...] } to flat array for the data blob
+  const data = {
+    ...issue,
+    labels: issue.labels.nodes,
+  };
+
   return {
     linear_id: issue.id,
     user_id: userId,
     identifier: issue.identifier,
-    title: issue.title,
-    description: issue.description ?? null,
-    state: issue.state?.name ?? null,
+    // Indexed columns for filtering/sorting
+    state_name: issue.state?.name ?? null,
     priority: issue.priority,
-    assignee: issue.assignee?.name ?? null,
-    labels: issue.labels.nodes,
-    due_date: issue.dueDate ?? null,
-    url: issue.url,
+    assignee_name: issue.assignee?.name ?? null,
     team_id: issue.team?.id ?? null,
     project_id: issue.project?.id ?? null,
     created_at: issue.createdAt,
     updated_at: issue.updatedAt,
     synced_at: new Date().toISOString(),
+    data, // Full payload for reads
   };
 }
 
@@ -198,13 +205,12 @@ function mapCommentToRow(
 ) {
   return {
     linear_id: comment.id,
-    issue_linear_id: issueLinearId,
     user_id: userId,
-    body: comment.body ?? null,
-    author_name: comment.user?.name ?? null,
+    issue_linear_id: issueLinearId,
     created_at: comment.createdAt,
     updated_at: comment.updatedAt,
     synced_at: new Date().toISOString(),
+    data: comment, // Full payload for reads
   };
 }
 

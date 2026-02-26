@@ -58,6 +58,7 @@
 		"tw-animate-css": "^1.3.8",
 		"typescript": "5.9.3",
 		"vercel": "47.0.4",
+		"vitest": "^4.0.18",
 		"wrangler": "^4.37.1"
 	}
 }
