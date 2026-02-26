@@ -81,7 +81,7 @@ const TEAMS_QUERY = `
         color
         private
         parent { id name key }
-        children { nodes { id } }
+        children { id }
         members { nodes { id name } }
         createdAt
         updatedAt
@@ -197,7 +197,7 @@ type LinearGqlTeam = {
   color?: string;
   private?: boolean;
   parent?: { id: string; name: string; key: string };
-  children: { nodes: Array<{ id: string }> };
+  children: Array<{ id: string }>;
   members: { nodes: Array<{ id: string; name: string }> };
   createdAt: string;
   updatedAt: string;
@@ -432,7 +432,7 @@ function mapCommentToRow(
 export function mapTeamToRow(team: LinearGqlTeam, userId: string) {
   const data = {
     ...team,
-    children: team.children.nodes,
+    children: team.children,
     members: team.members.nodes,
   };
 
