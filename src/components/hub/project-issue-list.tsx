@@ -40,13 +40,17 @@ type Issue = {
   dueDate?: string;
   createdAt: string;
   updatedAt: string;
+  project?: { id: string; name: string; color?: string };
 };
+
+type ProjectInfo = { id: string; name: string; color?: string };
 
 type FilterState = {
   search: string;
   statuses: string[];
   priorities: number[];
   labelIds: string[];
+  projectIds: string[];
 };
 
 type ViewMode = "list" | "kanban";
@@ -70,6 +74,7 @@ export function ProjectIssueList({
   hubId,
   teamId,
   projectId,
+  projects,
 }: {
   issues: Issue[];
   states: Array<{ id: string; name: string; color: string; type: string }>;
@@ -77,8 +82,9 @@ export function ProjectIssueList({
   hubSlug: string;
   teamKey: string;
   teamId: string;
-  projectId: string;
+  projectId?: string;
   hubId: string;
+  projects?: ProjectInfo[];
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -94,6 +100,7 @@ export function ProjectIssueList({
     statuses: searchParams.getAll("status"),
     priorities: searchParams.getAll("priority").map(Number).filter((n) => !isNaN(n)),
     labelIds: searchParams.getAll("label"),
+    projectIds: searchParams.getAll("project"),
   }));
 
   const [viewMode, setViewMode] = useState<ViewMode>(
@@ -109,19 +116,25 @@ export function ProjectIssueList({
   const [showFilters, setShowFilters] = useState(
     filters.statuses.length > 0 ||
       filters.priorities.length > 0 ||
-      filters.labelIds.length > 0
+      filters.labelIds.length > 0 ||
+      filters.projectIds.length > 0
   );
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
 
   // Update URL params when filters/view change
   function updateUrl(next: FilterState, view: ViewMode) {
-    const params = new URLSearchParams();
-    if (next.search) params.set("q", next.search);
-    next.statuses.forEach((s) => params.append("status", s));
-    next.priorities.forEach((p) => params.append("priority", String(p)));
-    next.labelIds.forEach((l) => params.append("label", l));
-    if (view !== "list") params.set("view", view);
-    const qs = params.toString();
+    const params = new URLSearchParams(window.location.search);
+    // Preserve tab param
+    const tab = params.get("tab");
+    const newParams = new URLSearchParams();
+    if (tab) newParams.set("tab", tab);
+    if (next.search) newParams.set("q", next.search);
+    next.statuses.forEach((s) => newParams.append("status", s));
+    next.priorities.forEach((p) => newParams.append("priority", String(p)));
+    next.labelIds.forEach((l) => newParams.append("label", l));
+    next.projectIds.forEach((id) => newParams.append("project", id));
+    if (view !== "list") newParams.set("view", view);
+    const qs = newParams.toString();
     router.replace(qs ? `?${qs}` : "?", { scroll: false });
   }
 
@@ -161,6 +174,11 @@ export function ProjectIssueList({
       if (
         filters.labelIds.length > 0 &&
         !issue.labels.some((l) => filters.labelIds.includes(l.id))
+      )
+        return false;
+      if (
+        filters.projectIds.length > 0 &&
+        (!issue.project || !filters.projectIds.includes(issue.project.id))
       )
         return false;
       return true;
@@ -217,10 +235,11 @@ export function ProjectIssueList({
     filters.search.length > 0 ||
     filters.statuses.length > 0 ||
     filters.priorities.length > 0 ||
-    filters.labelIds.length > 0;
+    filters.labelIds.length > 0 ||
+    filters.projectIds.length > 0;
 
   const activeFilterCount =
-    filters.statuses.length + filters.priorities.length + filters.labelIds.length;
+    filters.statuses.length + filters.priorities.length + filters.labelIds.length + filters.projectIds.length;
 
   function toggleGroup(name: string) {
     setCollapsedGroups((prev) => {
@@ -292,7 +311,7 @@ export function ProjectIssueList({
         {hasActiveFilters && (
           <button
             onClick={() =>
-              updateFilters({ search: "", statuses: [], priorities: [], labelIds: [] })
+              updateFilters({ search: "", statuses: [], priorities: [], labelIds: [], projectIds: [] })
             }
             className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
           >
@@ -301,7 +320,7 @@ export function ProjectIssueList({
           </button>
         )}
 
-        {canInteract && (
+        {canInteract && projectId && (
           <button
             onClick={() => setShowCreateModal(true)}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
@@ -406,6 +425,26 @@ export function ProjectIssueList({
             ))}
           </FilterGroup>
 
+          {/* Project filter (team-level view only) */}
+          {projects && projects.length > 0 && (
+            <FilterGroup label="Project">
+              {projects.map((p) => (
+                <FilterChip
+                  key={p.id}
+                  label={p.name}
+                  color={p.color}
+                  active={filters.projectIds.includes(p.id)}
+                  onClick={() => {
+                    const next = filters.projectIds.includes(p.id)
+                      ? filters.projectIds.filter((x) => x !== p.id)
+                      : [...filters.projectIds, p.id];
+                    updateFilters({ ...filters, projectIds: next });
+                  }}
+                />
+              ))}
+            </FilterGroup>
+          )}
+
           {/* Label filter */}
           {labels.length > 0 && (
             <FilterGroup label="Label">
@@ -440,7 +479,9 @@ export function ProjectIssueList({
               <p className="text-sm text-muted-foreground">
                 {hasActiveFilters
                   ? "No issues match the current filters"
-                  : "No issues in this project"}
+                  : projectId
+                    ? "No issues in this project"
+                    : "No issues in this team"}
               </p>
             </div>
           ) : (
@@ -491,14 +532,16 @@ export function ProjectIssueList({
       />
 
       {/* Issue creation modal */}
-      <HubIssueCreationModal
-        isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onCreated={handleIssueCreated}
-        teamId={teamId}
-        projectId={projectId}
-        labels={labels}
-      />
+      {projectId && (
+        <HubIssueCreationModal
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          onCreated={handleIssueCreated}
+          teamId={teamId}
+          projectId={projectId}
+          labels={labels}
+        />
+      )}
     </div>
   );
 }
@@ -534,6 +577,15 @@ function IssueRow({
         {issue.identifier}
       </span>
       <span className="text-sm truncate flex-1 min-w-0">{issue.title}</span>
+      {issue.project && (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-muted-foreground bg-muted/50 shrink-0">
+          <span
+            className="w-2 h-2 rounded-full shrink-0"
+            style={{ backgroundColor: issue.project.color || "var(--muted-foreground)" }}
+          />
+          {issue.project.name}
+        </span>
+      )}
       {issue.labels.length > 0 && (
         <div className="flex items-center gap-1 shrink-0">
           {issue.labels.slice(0, 3).map((label) => (

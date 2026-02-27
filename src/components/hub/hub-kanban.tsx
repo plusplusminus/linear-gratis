@@ -26,6 +26,7 @@ type Issue = {
   dueDate?: string;
   createdAt: string;
   updatedAt: string;
+  project?: { id: string; name: string; color?: string };
 };
 
 const STATUS_ORDER: Record<string, number> = {
@@ -134,6 +135,19 @@ function IssueCard({
         <h4 className="text-sm font-medium text-foreground leading-tight tracking-tight line-clamp-2 mb-3">
           {issue.title}
         </h4>
+
+        {/* Project badge */}
+        {issue.project && (
+          <div className="flex items-center gap-1 mb-2">
+            <span
+              className="w-2 h-2 rounded-full shrink-0"
+              style={{ backgroundColor: issue.project.color || "var(--muted-foreground)" }}
+            />
+            <span className="text-[10px] text-muted-foreground truncate">
+              {issue.project.name}
+            </span>
+          </div>
+        )}
 
         {/* Bottom badges */}
         <div className="flex items-center gap-1.5 flex-wrap">
