@@ -1,0 +1,143 @@
+import { NextResponse } from "next/server";
+import { withHubAuth, withHubAuthWrite, type HubAuthError } from "@/lib/hub-auth";
+import {
+  fetchHubIssueDetail,
+  fetchHubComments,
+  fetchHubMetadata,
+  getHubVisibleLabelIds,
+} from "@/lib/hub-read";
+import { supabaseAdmin } from "@/lib/supabase";
+import { updateIssueLabels } from "@/lib/linear-push";
+
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ hubId: string; linearId: string }> }
+) {
+  try {
+    const { hubId, linearId } = await params;
+
+    const auth = await withHubAuth(hubId);
+    if ("error" in auth) {
+      return NextResponse.json(
+        { error: (auth as HubAuthError).error },
+        { status: (auth as HubAuthError).status }
+      );
+    }
+
+    const [issue, comments, metadata] = await Promise.all([
+      fetchHubIssueDetail(hubId, linearId),
+      fetchHubComments(hubId, linearId),
+      fetchHubMetadata(hubId),
+    ]);
+
+    if (!issue) {
+      return NextResponse.json({ error: "Issue not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      issue,
+      comments,
+      hubLabels: metadata.labels,
+    });
+  } catch (error) {
+    console.error("GET /api/hub/[hubId]/issues/[linearId] error:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+// POST: Add or remove a label on the issue
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ hubId: string; linearId: string }> }
+) {
+  try {
+    const { hubId, linearId } = await params;
+
+    const auth = await withHubAuthWrite(hubId);
+    if ("error" in auth) {
+      return NextResponse.json(
+        { error: (auth as HubAuthError).error },
+        { status: (auth as HubAuthError).status }
+      );
+    }
+
+    const { action, labelId } = (await request.json()) as {
+      action?: "add" | "remove";
+      labelId?: string;
+    };
+
+    if (!action || !labelId) {
+      return NextResponse.json(
+        { error: "action and labelId are required" },
+        { status: 400 }
+      );
+    }
+
+    // Verify the label is hub-visible
+    const allowedLabelIds = await getHubVisibleLabelIds(hubId);
+    if (allowedLabelIds && !allowedLabelIds.includes(labelId)) {
+      return NextResponse.json(
+        { error: "Label not visible in this hub" },
+        { status: 403 }
+      );
+    }
+
+    // Get current issue labels from synced data
+    const { data: issueRow } = await supabaseAdmin
+      .from("synced_issues")
+      .select("data")
+      .eq("user_id", "workspace")
+      .eq("linear_id", linearId)
+      .single();
+
+    if (!issueRow) {
+      return NextResponse.json({ error: "Issue not found" }, { status: 404 });
+    }
+
+    const issueData = issueRow.data as Record<string, unknown>;
+    const currentLabels = (issueData.labels as Array<{ id: string }>) ?? [];
+    const currentLabelIds = currentLabels.map((l) => l.id);
+
+    let newLabelIds: string[];
+    if (action === "add") {
+      if (currentLabelIds.includes(labelId)) {
+        return NextResponse.json({ error: "Label already applied" }, { status: 400 });
+      }
+      newLabelIds = [...currentLabelIds, labelId];
+    } else {
+      if (!currentLabelIds.includes(labelId)) {
+        return NextResponse.json({ error: "Label not on issue" }, { status: 400 });
+      }
+      newLabelIds = currentLabelIds.filter((id) => id !== labelId);
+    }
+
+    // Push to Linear
+    const updatedLabels = await updateIssueLabels(linearId, newLabelIds);
+
+    // Update local synced data
+    await supabaseAdmin
+      .from("synced_issues")
+      .update({
+        data: { ...issueData, labels: updatedLabels },
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", "workspace")
+      .eq("linear_id", linearId);
+
+    // Filter to hub-visible labels for response
+    const visibleLabels = allowedLabelIds
+      ? updatedLabels.filter((l) => allowedLabelIds.includes(l.id))
+      : updatedLabels;
+
+    return NextResponse.json({ labels: visibleLabels });
+  } catch (error) {
+    console.error("POST /api/hub/[hubId]/issues/[linearId] labels error:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to update labels" },
+      { status: 500 }
+    );
+  }
+}

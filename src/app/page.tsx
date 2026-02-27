@@ -12,7 +12,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { supabase } from "@/lib/supabase";
 import {
   ArrowRight,
   Github,
@@ -45,7 +44,7 @@ export default function Home() {
       "Our team would love to see dark mode support in the dashboard. This would help reduce eye strain during late-night work sessions and align with our design system.",
   });
 
-  // Check if user has Linear API token set up
+  // Check if workspace has Linear API token configured
   const [hasLinearToken, setHasLinearToken] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -53,20 +52,14 @@ export default function Home() {
 
     const checkLinearToken = async () => {
       try {
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("linear_api_token")
-          .eq("id", user.id)
-          .single();
-
-        if (error && error.code !== "PGRST116") {
-          console.error("Error loading profile:", error);
-          setHasLinearToken(false);
+        const res = await fetch("/api/workspace/token");
+        if (res.ok) {
+          const data = (await res.json()) as { configured: boolean };
+          setHasLinearToken(data.configured);
         } else {
-          setHasLinearToken(!!data?.linear_api_token);
+          setHasLinearToken(false);
         }
-      } catch (error) {
-        console.error("Error checking Linear token:", error);
+      } catch {
         setHasLinearToken(false);
       }
     };
@@ -996,9 +989,9 @@ export default function Home() {
 
             <Card className="border-border/50 bg-card/80 backdrop-blur-sm shadow-lg hover:shadow-xl transition-all duration-300 hover:border-primary/20">
               <CardHeader className="space-y-3">
-                <CardTitle className="text-xl">Manage custom forms</CardTitle>
+                <CardTitle className="text-xl">Admin dashboard</CardTitle>
                 <CardDescription className="text-muted-foreground">
-                  Create shareable forms with pre-defined projects and titles
+                  Manage client hubs, team mappings, and sync settings
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -1007,7 +1000,7 @@ export default function Home() {
                   variant="outline"
                   className="w-full h-11 font-medium"
                 >
-                  <Link href="/forms">Manage forms</Link>
+                  <Link href="/admin">Go to admin</Link>
                 </Button>
               </CardContent>
             </Card>

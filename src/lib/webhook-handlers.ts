@@ -1,0 +1,348 @@
+import crypto from "crypto";
+import { supabaseAdmin } from "./supabase";
+
+// -- Signature verification --------------------------------------------------
+
+export function verifyWebhookSignature(
+  rawBody: string,
+  signature: string,
+  secret: string
+): boolean {
+  const hmac = crypto.createHmac("sha256", secret);
+  hmac.update(rawBody);
+  const expected = hmac.digest("hex");
+  return crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expected)
+  );
+}
+
+// -- Linear webhook payload types --------------------------------------------
+
+type LinearWebhookPayload = {
+  action: "create" | "update" | "remove";
+  type: string;
+  data: Record<string, unknown>;
+  url?: string;
+  createdAt: string;
+  webhookId?: string;
+  webhookTimestamp?: number;
+};
+
+type LinearIssueData = {
+  id: string;
+  identifier?: string;
+  title?: string;
+  description?: string;
+  state?: { name?: string };
+  priority?: number;
+  assignee?: { name?: string };
+  labels?: Array<{ id: string; name: string; color: string }>;
+  dueDate?: string;
+  url?: string;
+  team?: { id: string };
+  project?: { id: string };
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+type LinearCommentData = {
+  id: string;
+  body?: string;
+  issue?: { id: string };
+  user?: { name?: string };
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+type LinearProjectData = {
+  id: string;
+  name?: string;
+  status?: { name?: string };
+  lead?: { name?: string };
+  priority?: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+type LinearInitiativeData = {
+  id: string;
+  name?: string;
+  status?: string;
+  owner?: { name?: string };
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+// -- Issue mapping (pure, exported for testing) ------------------------------
+
+export function mapIssueWebhookToRow(
+  action: string,
+  data: Record<string, unknown>,
+  userId: string
+): Record<string, unknown> {
+  const issue = data as unknown as LinearIssueData;
+
+  const row: Record<string, unknown> = {
+    linear_id: issue.id,
+    user_id: userId,
+    synced_at: new Date().toISOString(),
+    data, // Store full webhook payload as-is
+  };
+
+  // Extract indexed columns for filtering/sorting
+  if (issue.identifier !== undefined) row.identifier = issue.identifier;
+  if (issue.state?.name !== undefined) row.state_name = issue.state.name;
+  if (issue.priority !== undefined) row.priority = issue.priority;
+  if (issue.assignee?.name !== undefined) row.assignee_name = issue.assignee.name;
+  // Linear webhooks send teamId/projectId as top-level strings OR nested objects
+  const teamId = issue.team?.id ?? (data.teamId as string | undefined);
+  const projectId = issue.project?.id ?? (data.projectId as string | undefined);
+  if (teamId) row.team_id = teamId;
+  if (projectId) row.project_id = projectId;
+
+  if (action === "create") {
+    row.created_at = issue.createdAt || new Date().toISOString();
+    row.updated_at = issue.updatedAt || new Date().toISOString();
+  } else {
+    row.updated_at = issue.updatedAt || new Date().toISOString();
+  }
+
+  return row;
+}
+
+// -- Comment mapping (pure, exported for testing) ----------------------------
+
+export function mapCommentWebhookToRow(
+  action: string,
+  data: Record<string, unknown>,
+  userId: string
+): Record<string, unknown> {
+  const comment = data as unknown as LinearCommentData;
+
+  const row: Record<string, unknown> = {
+    linear_id: comment.id,
+    user_id: userId,
+    synced_at: new Date().toISOString(),
+    data, // Store full webhook payload as-is
+  };
+
+  // Extract indexed column for filtering
+  if (comment.issue?.id !== undefined) row.issue_linear_id = comment.issue.id;
+
+  if (action === "create") {
+    row.created_at = comment.createdAt || new Date().toISOString();
+    row.updated_at = comment.updatedAt || new Date().toISOString();
+  } else {
+    row.updated_at = comment.updatedAt || new Date().toISOString();
+  }
+
+  return row;
+}
+
+// -- Issue event handler -----------------------------------------------------
+
+export async function handleIssueEvent(
+  action: string,
+  data: Record<string, unknown>,
+  userId: string
+): Promise<void> {
+  const issue = data as unknown as LinearIssueData;
+
+  if (action === "remove") {
+    await supabaseAdmin
+      .from("synced_issues")
+      .delete()
+      .eq("user_id", userId)
+      .eq("linear_id", issue.id);
+    return;
+  }
+
+  const row = mapIssueWebhookToRow(action, data, userId);
+
+  const { error } = await supabaseAdmin.from("synced_issues").upsert(row, {
+    onConflict: "user_id,linear_id",
+  });
+
+  if (error) {
+    console.error("Failed to upsert synced_issue:", error);
+    throw error;
+  }
+}
+
+// -- Comment event handler ---------------------------------------------------
+
+export async function handleCommentEvent(
+  action: string,
+  data: Record<string, unknown>,
+  userId: string
+): Promise<void> {
+  const comment = data as unknown as LinearCommentData;
+
+  if (action === "remove") {
+    await supabaseAdmin
+      .from("synced_comments")
+      .delete()
+      .eq("user_id", userId)
+      .eq("linear_id", comment.id);
+    return;
+  }
+
+  const row = mapCommentWebhookToRow(action, data, userId);
+
+  const { error } = await supabaseAdmin.from("synced_comments").upsert(row, {
+    onConflict: "user_id,linear_id",
+  });
+
+  if (error) {
+    console.error("Failed to upsert synced_comment:", error);
+    throw error;
+  }
+}
+
+// -- Project mapping (pure, exported for testing) ----------------------------
+
+export function mapProjectWebhookToRow(
+  action: string,
+  data: Record<string, unknown>,
+  userId: string
+): Record<string, unknown> {
+  const project = data as unknown as LinearProjectData;
+
+  const row: Record<string, unknown> = {
+    linear_id: project.id,
+    user_id: userId,
+    synced_at: new Date().toISOString(),
+    data,
+  };
+
+  if (project.name !== undefined) row.name = project.name;
+  if (project.status?.name !== undefined) row.status_name = project.status.name;
+  if (project.lead?.name !== undefined) row.lead_name = project.lead.name;
+  if (project.priority !== undefined) row.priority = project.priority;
+
+  if (action === "create") {
+    row.created_at = project.createdAt || new Date().toISOString();
+    row.updated_at = project.updatedAt || new Date().toISOString();
+  } else {
+    row.updated_at = project.updatedAt || new Date().toISOString();
+  }
+
+  return row;
+}
+
+// -- Initiative mapping (pure, exported for testing) -------------------------
+
+export function mapInitiativeWebhookToRow(
+  action: string,
+  data: Record<string, unknown>,
+  userId: string
+): Record<string, unknown> {
+  const initiative = data as unknown as LinearInitiativeData;
+
+  const row: Record<string, unknown> = {
+    linear_id: initiative.id,
+    user_id: userId,
+    synced_at: new Date().toISOString(),
+    data,
+  };
+
+  if (initiative.name !== undefined) row.name = initiative.name;
+  if (initiative.status !== undefined) row.status = initiative.status;
+  if (initiative.owner?.name !== undefined) row.owner_name = initiative.owner.name;
+
+  if (action === "create") {
+    row.created_at = initiative.createdAt || new Date().toISOString();
+    row.updated_at = initiative.updatedAt || new Date().toISOString();
+  } else {
+    row.updated_at = initiative.updatedAt || new Date().toISOString();
+  }
+
+  return row;
+}
+
+// -- Project event handler ---------------------------------------------------
+
+export async function handleProjectEvent(
+  action: string,
+  data: Record<string, unknown>,
+  userId: string
+): Promise<void> {
+  const project = data as unknown as LinearProjectData;
+
+  if (action === "remove") {
+    await supabaseAdmin
+      .from("synced_projects")
+      .delete()
+      .eq("user_id", userId)
+      .eq("linear_id", project.id);
+    return;
+  }
+
+  const row = mapProjectWebhookToRow(action, data, userId);
+
+  const { error } = await supabaseAdmin.from("synced_projects").upsert(row, {
+    onConflict: "user_id,linear_id",
+  });
+
+  if (error) {
+    console.error("Failed to upsert synced_project:", error);
+    throw error;
+  }
+}
+
+// -- Initiative event handler ------------------------------------------------
+
+export async function handleInitiativeEvent(
+  action: string,
+  data: Record<string, unknown>,
+  userId: string
+): Promise<void> {
+  const initiative = data as unknown as LinearInitiativeData;
+
+  if (action === "remove") {
+    await supabaseAdmin
+      .from("synced_initiatives")
+      .delete()
+      .eq("user_id", userId)
+      .eq("linear_id", initiative.id);
+    return;
+  }
+
+  const row = mapInitiativeWebhookToRow(action, data, userId);
+
+  const { error } = await supabaseAdmin.from("synced_initiatives").upsert(row, {
+    onConflict: "user_id,linear_id",
+  });
+
+  if (error) {
+    console.error("Failed to upsert synced_initiative:", error);
+    throw error;
+  }
+}
+
+// -- Main event router -------------------------------------------------------
+
+export async function routeWebhookEvent(
+  payload: LinearWebhookPayload,
+  userId: string
+): Promise<void> {
+  const { action, type, data } = payload;
+
+  switch (type) {
+    case "Issue":
+      await handleIssueEvent(action, data, userId);
+      break;
+    case "Comment":
+      await handleCommentEvent(action, data, userId);
+      break;
+    case "Project":
+      await handleProjectEvent(action, data, userId);
+      break;
+    case "Initiative":
+      await handleInitiativeEvent(action, data, userId);
+      break;
+    default:
+      console.log(`Ignoring unhandled webhook event type: ${type}`);
+  }
+}

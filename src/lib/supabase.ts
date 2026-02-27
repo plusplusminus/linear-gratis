@@ -114,7 +114,7 @@ export type CustomDomain = {
   ssl_issued_at?: string
   redirect_to_https?: boolean
   is_active: boolean
-  target_type?: 'form' | 'view' | 'roadmap'
+  target_type?: 'hub'
   target_slug?: string
   last_checked_at?: string
   error_message?: string
@@ -180,6 +180,164 @@ export type RoadmapComment = {
   parent_id?: string
   visitor_fingerprint?: string
   ip_hash?: string
+  created_at: string
+  updated_at: string
+}
+
+export type SyncedIssue = {
+  id: string
+  linear_id: string
+  user_id: string
+  identifier: string
+  team_id?: string
+  project_id?: string
+  state_name?: string
+  priority: number
+  assignee_name?: string
+  updated_at: string
+  created_at: string
+  synced_at: string
+  data: Record<string, unknown>
+}
+
+export type SyncedComment = {
+  id: string
+  linear_id: string
+  issue_linear_id: string
+  user_id: string
+  updated_at: string
+  created_at: string
+  synced_at: string
+  data: Record<string, unknown>
+}
+
+export type SyncSubscription = {
+  id: string
+  user_id: string
+  linear_team_id: string
+  webhook_id?: string
+  webhook_secret?: string
+  events: string[]
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type SyncedTeam = {
+  id: string
+  linear_id: string
+  user_id: string
+  name: string
+  key?: string
+  parent_team_id?: string
+  updated_at: string
+  created_at: string
+  synced_at: string
+  data: Record<string, unknown>
+}
+
+export type SyncedProject = {
+  id: string
+  linear_id: string
+  user_id: string
+  name: string
+  status_name?: string
+  lead_name?: string
+  priority: number
+  updated_at: string
+  created_at: string
+  synced_at: string
+  data: Record<string, unknown>
+}
+
+export type SyncedInitiative = {
+  id: string
+  linear_id: string
+  user_id: string
+  name: string
+  status?: string
+  owner_name?: string
+  updated_at: string
+  created_at: string
+  synced_at: string
+  data: Record<string, unknown>
+}
+
+export type NotificationQueueItem = {
+  id: string
+  user_id: string
+  event_type: string
+  issue_linear_id?: string
+  payload: Record<string, unknown>
+  sent_at?: string
+  created_at: string
+}
+
+// ============================================================
+// Client Hub types (multi-tenant client portal)
+// ============================================================
+
+export type ClientHub = {
+  id: string
+  name: string
+  slug: string
+  is_active: boolean
+  created_by: string
+  workos_org_id: string | null
+  logo_url: string | null
+  primary_color: string | null
+  accent_color: string | null
+  footer_text: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type HubTeamMapping = {
+  id: string
+  hub_id: string
+  linear_team_id: string
+  linear_team_name: string | null
+  visible_project_ids: string[]
+  visible_initiative_ids: string[]
+  visible_label_ids: string[]
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+/** Client roles: 'default' | 'view_only'. 'admin' is synthetic (PPM admins only, never stored). */
+export type HubMemberRole = 'default' | 'view_only' | 'admin'
+
+export type HubMember = {
+  id: string
+  hub_id: string
+  user_id: string | null
+  email: string | null
+  role: HubMemberRole
+  invited_by: string | null
+  workos_invitation_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type WorkspaceSetting = {
+  id: string
+  key: string
+  value: string
+  updated_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type HubComment = {
+  id: string
+  hub_id: string
+  issue_linear_id: string
+  linear_comment_id: string | null
+  author_user_id: string
+  author_name: string
+  author_email: string | null
+  body: string
   created_at: string
   updated_at: string
 }

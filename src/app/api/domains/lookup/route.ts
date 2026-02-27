@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase';
 
 // GET - Look up a custom domain by domain name (for middleware/routing)
 export async function GET(request: NextRequest) {
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Look up the domain
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('custom_domains')
       .select('*')
       .eq('domain', domain)

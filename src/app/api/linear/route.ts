@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getWorkspaceToken } from "@/lib/workspace";
 
 type RequestBody = {
-  apiToken: string;
+  apiToken?: string;
   customerData: {
     name: string;
     email: string;
@@ -20,14 +21,17 @@ type RequestBody = {
 
 export async function POST(request: NextRequest) {
   try {
-    const { apiToken, customerData, requestData, projectId } =
+    const { apiToken: providedToken, customerData, requestData, projectId } =
       (await request.json()) as RequestBody;
+
+    // Use provided token or fall back to workspace token
+    const apiToken = providedToken || (await getWorkspaceToken());
 
     if (!apiToken || !customerData || !requestData || !projectId) {
       return NextResponse.json(
         {
           error:
-            "Missing required fields: apiToken, customerData, requestData, projectId",
+            "Missing required fields: customerData, requestData, projectId",
         },
         { status: 400 },
       );
