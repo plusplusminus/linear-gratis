@@ -95,8 +95,11 @@ export function mapIssueWebhookToRow(
   if (issue.state?.name !== undefined) row.state_name = issue.state.name;
   if (issue.priority !== undefined) row.priority = issue.priority;
   if (issue.assignee?.name !== undefined) row.assignee_name = issue.assignee.name;
-  if (issue.team?.id !== undefined) row.team_id = issue.team.id;
-  if (issue.project?.id !== undefined) row.project_id = issue.project.id;
+  // Linear webhooks send teamId/projectId as top-level strings OR nested objects
+  const teamId = issue.team?.id ?? (data.teamId as string | undefined);
+  const projectId = issue.project?.id ?? (data.projectId as string | undefined);
+  if (teamId) row.team_id = teamId;
+  if (projectId) row.project_id = projectId;
 
   if (action === "create") {
     row.created_at = issue.createdAt || new Date().toISOString();
