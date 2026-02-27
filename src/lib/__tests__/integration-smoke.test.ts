@@ -5,6 +5,9 @@
  * fetchSyncedComments, fetchSyncedMetadata, fetchSyncedRoadmapIssues,
  * userHasSync), and verifies the returned shapes match what the frontend expects.
  *
+ * All data is seeded with user_id = "workspace" (matching the production read path)
+ * and cleaned up by unique linear_id prefixes so we don't touch real data.
+ *
  * Cleanup runs in afterAll so even failing tests don't leave garbage.
  *
  * Run with:   npx vitest run integration-smoke
@@ -33,15 +36,17 @@ import {
   mapTeamToRow,
 } from "../initial-sync";
 
-// Unique test user ID to isolate this run from real data
-const TEST_USER_ID = `__smoke_test_${Date.now()}`;
+// All synced data uses "workspace" as user_id (single-org model)
+const WORKSPACE_USER_ID = "workspace";
 const TEST_TEAM_ID = "smoke-team-1";
 const TEST_PROJECT_ID = "smoke-project-1";
 
-// Track what we insert for cleanup
+// Track what we insert for cleanup (by linear_id, not user_id)
 const insertedIssueIds: string[] = [];
 const insertedCommentIds: string[] = [];
-let insertedSubscriptionId: string | undefined;
+const insertedTeamIds: string[] = [];
+const insertedProjectIds: string[] = [];
+const insertedInitiativeIds: string[] = [];
 
 // ── Seed data (matches real Linear webhook shapes) ─────────────────────────
 
@@ -202,7 +207,7 @@ beforeAll(async () => {
     const row = mapIssueWebhookToRow(
       "create",
       payload as unknown as Record<string, unknown>,
-      TEST_USER_ID
+      WORKSPACE_USER_ID
     );
     const { error } = await supabaseAdmin.from("synced_issues").upsert(row, {
       onConflict: "user_id,linear_id",
@@ -216,7 +221,7 @@ beforeAll(async () => {
     const row = mapCommentWebhookToRow(
       "create",
       payload as unknown as Record<string, unknown>,
-      TEST_USER_ID
+      WORKSPACE_USER_ID
     );
     const { error } = await supabaseAdmin.from("synced_comments").upsert(row, {
       onConflict: "user_id,linear_id",
@@ -227,11 +232,12 @@ beforeAll(async () => {
 
   // Seed teams (uses initial-sync mapping since teams have no webhooks)
   for (const payload of teamPayloads) {
-    const row = mapTeamToRow(payload as never, TEST_USER_ID);
+    const row = mapTeamToRow(payload as never, WORKSPACE_USER_ID);
     const { error } = await supabaseAdmin.from("synced_teams").upsert(row, {
       onConflict: "user_id,linear_id",
     });
     if (error) throw new Error(`Failed to seed team ${payload.id}: ${error.message}`);
+    insertedTeamIds.push(payload.id);
   }
 
   // Seed projects via webhook mapping
@@ -239,12 +245,13 @@ beforeAll(async () => {
     const row = mapProjectWebhookToRow(
       "create",
       payload as unknown as Record<string, unknown>,
-      TEST_USER_ID
+      WORKSPACE_USER_ID
     );
     const { error } = await supabaseAdmin.from("synced_projects").upsert(row, {
       onConflict: "user_id,linear_id",
     });
     if (error) throw new Error(`Failed to seed project ${payload.id}: ${error.message}`);
+    insertedProjectIds.push(payload.id);
   }
 
   // Seed initiatives via webhook mapping
@@ -252,88 +259,63 @@ beforeAll(async () => {
     const row = mapInitiativeWebhookToRow(
       "create",
       payload as unknown as Record<string, unknown>,
-      TEST_USER_ID
+      WORKSPACE_USER_ID
     );
     const { error } = await supabaseAdmin.from("synced_initiatives").upsert(row, {
       onConflict: "user_id,linear_id",
     });
     if (error) throw new Error(`Failed to seed initiative ${payload.id}: ${error.message}`);
+    insertedInitiativeIds.push(payload.id);
   }
-
-  // Seed a sync subscription so userHasSync returns true
-  const { data: sub, error: subErr } = await supabaseAdmin
-    .from("sync_subscriptions")
-    .insert({
-      user_id: TEST_USER_ID,
-      linear_team_id: TEST_TEAM_ID,
-      is_active: true,
-      events: ["Issue", "Comment"],
-    })
-    .select("id")
-    .single();
-  if (subErr) throw new Error(`Failed to seed subscription: ${subErr.message}`);
-  insertedSubscriptionId = sub.id;
 });
 
 afterAll(async () => {
-  // Clean up all seeded data
+  // Clean up by linear_id (not user_id) to avoid touching real workspace data
   await Promise.all([
-    supabaseAdmin.from("synced_issues").delete().eq("user_id", TEST_USER_ID),
-    supabaseAdmin.from("synced_comments").delete().eq("user_id", TEST_USER_ID),
-    supabaseAdmin.from("synced_teams").delete().eq("user_id", TEST_USER_ID),
-    supabaseAdmin.from("synced_projects").delete().eq("user_id", TEST_USER_ID),
-    supabaseAdmin.from("synced_initiatives").delete().eq("user_id", TEST_USER_ID),
+    supabaseAdmin.from("synced_issues").delete().in("linear_id", insertedIssueIds),
+    supabaseAdmin.from("synced_comments").delete().in("linear_id", insertedCommentIds),
+    supabaseAdmin.from("synced_teams").delete().in("linear_id", insertedTeamIds),
+    supabaseAdmin.from("synced_projects").delete().in("linear_id", insertedProjectIds),
+    supabaseAdmin.from("synced_initiatives").delete().in("linear_id", insertedInitiativeIds),
   ]);
-  if (insertedSubscriptionId) {
-    await supabaseAdmin
-      .from("sync_subscriptions")
-      .delete()
-      .eq("id", insertedSubscriptionId);
-  }
 });
 
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 describe("integration: userHasSync", () => {
-  it("returns true for a user with an active subscription", async () => {
-    expect(await userHasSync(TEST_USER_ID)).toBe(true);
-  });
-
-  it("returns false for a user with no subscription", async () => {
-    expect(await userHasSync("nonexistent-user-xyz")).toBe(false);
+  it("returns true when workspace has synced data", async () => {
+    expect(await userHasSync()).toBe(true);
   });
 });
 
 describe("integration: fetchSyncedIssues", () => {
-  it("returns all seeded issues for the test user", async () => {
-    const issues = await fetchSyncedIssues(TEST_USER_ID, {});
-    expect(issues.length).toBe(3);
+  it("returns seeded issues", async () => {
+    const issues = await fetchSyncedIssues({});
+    // At least our 3 smoke issues (may include real data too)
+    const smokeIssues = issues.filter((i) => i.identifier.startsWith("SMOKE-"));
+    expect(smokeIssues.length).toBe(3);
   });
 
   it("filters by teamId", async () => {
-    const issues = await fetchSyncedIssues(TEST_USER_ID, { teamId: TEST_TEAM_ID });
+    const issues = await fetchSyncedIssues({ teamId: TEST_TEAM_ID });
     expect(issues.length).toBe(3);
   });
 
   it("filters by projectId", async () => {
-    const issues = await fetchSyncedIssues(TEST_USER_ID, { projectId: TEST_PROJECT_ID });
+    const issues = await fetchSyncedIssues({ projectId: TEST_PROJECT_ID });
     // Only issues 1 and 2 have project_id set
     expect(issues.length).toBe(2);
   });
 
   it("filters by statuses", async () => {
-    const issues = await fetchSyncedIssues(TEST_USER_ID, { statuses: ["In Progress"] });
-    expect(issues.length).toBe(1);
-    expect(issues[0].identifier).toBe("SMOKE-1");
-  });
-
-  it("returns empty for a non-existent user", async () => {
-    const issues = await fetchSyncedIssues("nonexistent-user-xyz", {});
-    expect(issues).toEqual([]);
+    const issues = await fetchSyncedIssues({ statuses: ["In Progress"] });
+    const smoke = issues.filter((i) => i.identifier.startsWith("SMOKE-"));
+    expect(smoke.length).toBe(1);
+    expect(smoke[0].identifier).toBe("SMOKE-1");
   });
 
   it("returns issues in the correct LinearIssue shape with full objects", async () => {
-    const issues = await fetchSyncedIssues(TEST_USER_ID, {});
+    const issues = await fetchSyncedIssues({});
     const issue = issues.find((i) => i.identifier === "SMOKE-1")!;
 
     // Required fields
@@ -370,7 +352,7 @@ describe("integration: fetchSyncedIssues", () => {
   });
 
   it("handles the minimal issue (nulls for optional fields)", async () => {
-    const issues = await fetchSyncedIssues(TEST_USER_ID, {});
+    const issues = await fetchSyncedIssues({});
     const minimal = issues.find((i) => i.identifier === "SMOKE-3")!;
 
     expect(minimal.id).toBe("smoke-issue-3");
@@ -385,7 +367,7 @@ describe("integration: fetchSyncedIssues", () => {
   });
 
   it("orders issues by updated_at descending", async () => {
-    const issues = await fetchSyncedIssues(TEST_USER_ID, {});
+    const issues = await fetchSyncedIssues({ teamId: TEST_TEAM_ID });
     // SMOKE-1 has the latest updated_at, SMOKE-3 the earliest
     expect(issues[0].identifier).toBe("SMOKE-1");
     expect(issues[issues.length - 1].identifier).toBe("SMOKE-3");
@@ -394,17 +376,17 @@ describe("integration: fetchSyncedIssues", () => {
 
 describe("integration: fetchSyncedComments", () => {
   it("returns comments for the correct issue", async () => {
-    const comments = await fetchSyncedComments(TEST_USER_ID, "smoke-issue-1");
+    const comments = await fetchSyncedComments("smoke-issue-1");
     expect(comments.length).toBe(2);
   });
 
   it("returns empty for an issue with no comments", async () => {
-    const comments = await fetchSyncedComments(TEST_USER_ID, "smoke-issue-2");
+    const comments = await fetchSyncedComments("smoke-issue-2");
     expect(comments).toEqual([]);
   });
 
   it("returns comments with full user objects", async () => {
-    const comments = await fetchSyncedComments(TEST_USER_ID, "smoke-issue-1");
+    const comments = await fetchSyncedComments("smoke-issue-1");
     const first = comments[0];
 
     expect(first.id).toBe("smoke-comment-1");
@@ -415,7 +397,7 @@ describe("integration: fetchSyncedComments", () => {
   });
 
   it("orders comments by created_at ascending", async () => {
-    const comments = await fetchSyncedComments(TEST_USER_ID, "smoke-issue-1");
+    const comments = await fetchSyncedComments("smoke-issue-1");
     expect(comments[0].id).toBe("smoke-comment-1");
     expect(comments[1].id).toBe("smoke-comment-2");
   });
@@ -423,7 +405,7 @@ describe("integration: fetchSyncedComments", () => {
 
 describe("integration: fetchSyncedMetadata", () => {
   it("derives unique states with full objects from data", async () => {
-    const meta = await fetchSyncedMetadata(TEST_USER_ID, {});
+    const meta = await fetchSyncedMetadata({});
     expect(meta).not.toBeNull();
 
     const stateNames = meta!.states.map((s) => s.name).sort();
@@ -437,22 +419,23 @@ describe("integration: fetchSyncedMetadata", () => {
   });
 
   it("derives unique labels", async () => {
-    const meta = await fetchSyncedMetadata(TEST_USER_ID, {});
+    const meta = await fetchSyncedMetadata({});
     const labelNames = meta!.labels.map((l) => l.name).sort();
-    expect(labelNames).toEqual(["Bug", "Feature", "P1"]);
+    expect(labelNames).toContain("Bug");
+    expect(labelNames).toContain("Feature");
+    expect(labelNames).toContain("P1");
   });
 
   it("derives unique members with ids", async () => {
-    const meta = await fetchSyncedMetadata(TEST_USER_ID, {});
+    const meta = await fetchSyncedMetadata({});
     const members = meta!.members.sort((a, b) => a.name.localeCompare(b.name));
-    expect(members).toEqual([
-      { id: "user-1", name: "Alice" },
-      { id: "user-2", name: "Bob" },
-    ]);
+    // At least our smoke test members
+    expect(members.find((m) => m.name === "Alice")).toEqual({ id: "user-1", name: "Alice" });
+    expect(members.find((m) => m.name === "Bob")).toEqual({ id: "user-2", name: "Bob" });
   });
 
   it("filters metadata by projectId", async () => {
-    const meta = await fetchSyncedMetadata(TEST_USER_ID, { projectId: TEST_PROJECT_ID });
+    const meta = await fetchSyncedMetadata({ projectId: TEST_PROJECT_ID });
     // SMOKE-3 has no project, so its null state/assignee shouldn't appear
     const memberNames = meta!.members.map((m) => m.name).sort();
     expect(memberNames).toEqual(["Alice", "Bob"]);
@@ -461,12 +444,12 @@ describe("integration: fetchSyncedMetadata", () => {
 
 describe("integration: fetchSyncedRoadmapIssues", () => {
   it("returns issues for the given project IDs", async () => {
-    const issues = await fetchSyncedRoadmapIssues(TEST_USER_ID, [TEST_PROJECT_ID]);
+    const issues = await fetchSyncedRoadmapIssues([TEST_PROJECT_ID]);
     expect(issues.length).toBe(2); // Only SMOKE-1 and SMOKE-2 have project_id
   });
 
   it("returns RoadmapIssue shape with dueDate and project", async () => {
-    const issues = await fetchSyncedRoadmapIssues(TEST_USER_ID, [TEST_PROJECT_ID]);
+    const issues = await fetchSyncedRoadmapIssues([TEST_PROJECT_ID]);
     const issue = issues.find((i) => i.identifier === "SMOKE-1")!;
 
     expect(issue.dueDate).toBe("2026-06-15");
@@ -478,14 +461,14 @@ describe("integration: fetchSyncedRoadmapIssues", () => {
   });
 
   it("returns empty for non-existent project", async () => {
-    const issues = await fetchSyncedRoadmapIssues(TEST_USER_ID, ["nonexistent"]);
+    const issues = await fetchSyncedRoadmapIssues(["nonexistent"]);
     expect(issues).toEqual([]);
   });
 });
 
 describe("integration: webhook → DB → read round-trip", () => {
   it("data written by mapIssueWebhookToRow is read back correctly by fetchSyncedIssues", async () => {
-    const issues = await fetchSyncedIssues(TEST_USER_ID, {});
+    const issues = await fetchSyncedIssues({});
     const issue = issues.find((i) => i.identifier === "SMOKE-1")!;
 
     // Compare against the original payload
@@ -503,7 +486,7 @@ describe("integration: webhook → DB → read round-trip", () => {
   });
 
   it("data written by mapCommentWebhookToRow is read back correctly by fetchSyncedComments", async () => {
-    const comments = await fetchSyncedComments(TEST_USER_ID, "smoke-issue-1");
+    const comments = await fetchSyncedComments("smoke-issue-1");
     const comment = comments.find((c) => c.id === "smoke-comment-1")!;
 
     const original = commentPayloads[0];
@@ -516,19 +499,21 @@ describe("integration: webhook → DB → read round-trip", () => {
 // ── Teams ──────────────────────────────────────────────────────────────────
 
 describe("integration: fetchSyncedTeams", () => {
-  it("returns all seeded teams for the test user", async () => {
-    const teams = await fetchSyncedTeams(TEST_USER_ID);
-    expect(teams.length).toBe(2);
+  it("returns seeded teams", async () => {
+    const teams = await fetchSyncedTeams();
+    const smokeTeams = teams.filter((t) => t.key === "PROD" || t.key === "ENG");
+    expect(smokeTeams.length).toBe(2);
   });
 
   it("returns teams ordered by name ascending", async () => {
-    const teams = await fetchSyncedTeams(TEST_USER_ID);
-    expect(teams[0].name).toBe("Engineering");
-    expect(teams[1].name).toBe("Product");
+    const teams = await fetchSyncedTeams();
+    const smokeTeams = teams.filter((t) => t.key === "PROD" || t.key === "ENG");
+    expect(smokeTeams[0].name).toBe("Engineering");
+    expect(smokeTeams[1].name).toBe("Product");
   });
 
   it("returns teams with correct shape", async () => {
-    const teams = await fetchSyncedTeams(TEST_USER_ID);
+    const teams = await fetchSyncedTeams();
     const eng = teams.find((t) => t.key === "ENG")!;
 
     expect(eng.id).toBe("smoke-team-child");
@@ -539,27 +524,23 @@ describe("integration: fetchSyncedTeams", () => {
     expect(eng.members).toHaveLength(2);
     expect(eng.members[0]).toEqual({ id: "user-1", name: "Alice" });
   });
-
-  it("returns empty for a non-existent user", async () => {
-    const teams = await fetchSyncedTeams("nonexistent-user-xyz");
-    expect(teams).toEqual([]);
-  });
 });
 
 describe("integration: fetchSyncedTeamHierarchy", () => {
   it("builds a tree with parent → children", async () => {
-    const roots = await fetchSyncedTeamHierarchy(TEST_USER_ID);
+    const roots = await fetchSyncedTeamHierarchy();
+    const product = roots.find((r) => r.name === "Product");
 
-    // Only the parent team should be at root level
-    expect(roots.length).toBe(1);
-    expect(roots[0].name).toBe("Product");
-    expect(roots[0].childTeams).toHaveLength(1);
-    expect(roots[0].childTeams[0].name).toBe("Engineering");
+    expect(product).toBeDefined();
+    expect(product!.childTeams.length).toBeGreaterThanOrEqual(1);
+    const eng = product!.childTeams.find((c) => c.name === "Engineering");
+    expect(eng).toBeDefined();
   });
 
   it("child teams have empty childTeams array", async () => {
-    const roots = await fetchSyncedTeamHierarchy(TEST_USER_ID);
-    const eng = roots[0].childTeams[0];
+    const roots = await fetchSyncedTeamHierarchy();
+    const product = roots.find((r) => r.name === "Product")!;
+    const eng = product.childTeams.find((c) => c.name === "Engineering")!;
     expect(eng.childTeams).toEqual([]);
   });
 });
@@ -567,19 +548,22 @@ describe("integration: fetchSyncedTeamHierarchy", () => {
 // ── Projects ───────────────────────────────────────────────────────────────
 
 describe("integration: fetchSyncedProjects", () => {
-  it("returns all seeded projects for the test user", async () => {
-    const projects = await fetchSyncedProjects(TEST_USER_ID);
-    expect(projects.length).toBe(2);
+  it("returns seeded projects", async () => {
+    const projects = await fetchSyncedProjects();
+    const smokeProjects = projects.filter((p) => p.name === "Q1 Sprint" || p.name === "Q2 Planning");
+    expect(smokeProjects.length).toBe(2);
   });
 
   it("returns projects ordered by updated_at descending", async () => {
-    const projects = await fetchSyncedProjects(TEST_USER_ID);
-    expect(projects[0].name).toBe("Q1 Sprint"); // Later updated_at
-    expect(projects[1].name).toBe("Q2 Planning");
+    const projects = await fetchSyncedProjects();
+    // Q1 Sprint has later updated_at
+    const q1Idx = projects.findIndex((p) => p.name === "Q1 Sprint");
+    const q2Idx = projects.findIndex((p) => p.name === "Q2 Planning");
+    expect(q1Idx).toBeLessThan(q2Idx);
   });
 
   it("returns project with correct full shape", async () => {
-    const projects = await fetchSyncedProjects(TEST_USER_ID);
+    const projects = await fetchSyncedProjects();
     const q1 = projects.find((p) => p.name === "Q1 Sprint")!;
 
     expect(q1.id).toBe("smoke-project-synced");
@@ -595,13 +579,13 @@ describe("integration: fetchSyncedProjects", () => {
   });
 
   it("filters by statusName", async () => {
-    const projects = await fetchSyncedProjects(TEST_USER_ID, { statusName: "Planned" });
-    expect(projects.length).toBe(1);
-    expect(projects[0].name).toBe("Q2 Planning");
+    const projects = await fetchSyncedProjects({ statusName: "Planned" });
+    const smoke = projects.filter((p) => p.name === "Q2 Planning");
+    expect(smoke.length).toBe(1);
   });
 
   it("handles minimal project (missing optional fields)", async () => {
-    const projects = await fetchSyncedProjects(TEST_USER_ID);
+    const projects = await fetchSyncedProjects();
     const q2 = projects.find((p) => p.name === "Q2 Planning")!;
 
     expect(q2.description).toBeUndefined();
@@ -609,29 +593,27 @@ describe("integration: fetchSyncedProjects", () => {
     expect(q2.health).toBeUndefined();
     expect(q2.teams).toEqual([]);
   });
-
-  it("returns empty for a non-existent user", async () => {
-    const projects = await fetchSyncedProjects("nonexistent-user-xyz");
-    expect(projects).toEqual([]);
-  });
 });
 
 // ── Initiatives ────────────────────────────────────────────────────────────
 
 describe("integration: fetchSyncedInitiatives", () => {
-  it("returns all seeded initiatives for the test user", async () => {
-    const initiatives = await fetchSyncedInitiatives(TEST_USER_ID);
-    expect(initiatives.length).toBe(2);
+  it("returns seeded initiatives", async () => {
+    const initiatives = await fetchSyncedInitiatives();
+    const smoke = initiatives.filter((i) => i.name === "Revenue Growth" || i.name === "Enterprise Sales");
+    expect(smoke.length).toBe(2);
   });
 
   it("returns initiatives ordered by updated_at descending", async () => {
-    const initiatives = await fetchSyncedInitiatives(TEST_USER_ID);
-    expect(initiatives[0].name).toBe("Revenue Growth"); // Later updated_at
-    expect(initiatives[1].name).toBe("Enterprise Sales");
+    const initiatives = await fetchSyncedInitiatives();
+    // Revenue Growth has later updated_at
+    const revIdx = initiatives.findIndex((i) => i.name === "Revenue Growth");
+    const entIdx = initiatives.findIndex((i) => i.name === "Enterprise Sales");
+    expect(revIdx).toBeLessThan(entIdx);
   });
 
   it("returns initiative with correct full shape", async () => {
-    const initiatives = await fetchSyncedInitiatives(TEST_USER_ID);
+    const initiatives = await fetchSyncedInitiatives();
     const rev = initiatives.find((i) => i.name === "Revenue Growth")!;
 
     expect(rev.id).toBe("smoke-init-1");
@@ -646,13 +628,13 @@ describe("integration: fetchSyncedInitiatives", () => {
   });
 
   it("filters by status", async () => {
-    const initiatives = await fetchSyncedInitiatives(TEST_USER_ID, { status: "Planned" });
-    expect(initiatives.length).toBe(1);
-    expect(initiatives[0].name).toBe("Enterprise Sales");
+    const initiatives = await fetchSyncedInitiatives({ status: "Planned" });
+    const smoke = initiatives.filter((i) => i.name === "Enterprise Sales");
+    expect(smoke.length).toBe(1);
   });
 
   it("handles minimal initiative (missing optional fields)", async () => {
-    const initiatives = await fetchSyncedInitiatives(TEST_USER_ID);
+    const initiatives = await fetchSyncedInitiatives();
     const ent = initiatives.find((i) => i.name === "Enterprise Sales")!;
 
     expect(ent.description).toBeUndefined();
@@ -661,10 +643,5 @@ describe("integration: fetchSyncedInitiatives", () => {
     expect(ent.projects).toEqual([]);
     expect(ent.subInitiatives).toEqual([]);
     expect(ent.parentInitiative).toEqual({ id: "smoke-init-1", name: "Revenue Growth" });
-  });
-
-  it("returns empty for a non-existent user", async () => {
-    const initiatives = await fetchSyncedInitiatives("nonexistent-user-xyz");
-    expect(initiatives).toEqual([]);
   });
 });

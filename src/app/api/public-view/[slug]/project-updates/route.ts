@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { decryptToken } from '@/lib/encryption'
+import { getWorkspaceToken } from '@/lib/workspace'
 
 interface RouteContext {
   params: Promise<{
@@ -38,22 +38,8 @@ export async function GET(
       )
     }
 
-    // Get the user's Linear API token
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .select('linear_api_token')
-      .eq('id', view.user_id)
-      .single()
-
-    if (profileError || !profile?.linear_api_token) {
-      return NextResponse.json(
-        { error: 'Linear API token not found' },
-        { status: 500 }
-      )
-    }
-
-    // Decrypt the Linear API token
-    const decryptedToken = decryptToken(profile.linear_api_token)
+    // Get workspace Linear token
+    const decryptedToken = await getWorkspaceToken()
 
     // Fetch project updates from Linear
     const query = `

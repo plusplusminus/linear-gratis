@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import { decryptToken } from '@/lib/encryption';
-import { userHasSync, fetchSyncedMetadata } from '@/lib/sync-read';
+import { fetchSyncedMetadata } from '@/lib/sync-read';
 
 export async function GET(
   request: NextRequest,
@@ -32,57 +31,24 @@ export async function GET(
       );
     }
 
-    // Try synced metadata first
-    const hasSyncData = await userHasSync(viewData.user_id);
+    const metadata = await fetchSyncedMetadata({
+      projectId: viewData.project_id || undefined,
+      teamId: viewData.team_id || undefined,
+    });
 
-    if (hasSyncData) {
-      const metadata = await fetchSyncedMetadata(viewData.user_id, {
-        projectId: viewData.project_id || undefined,
-        teamId: viewData.team_id || undefined,
-      });
-
-      if (metadata) {
-        return NextResponse.json({
-          success: true,
-          states: metadata.states,
-          labels: metadata.labels,
-          members: metadata.members,
-        });
-      }
-    }
-
-    // Fallback to Linear API
-    const { data: profileData } = await supabaseAdmin
-      .from('profiles')
-      .select('linear_api_token')
-      .eq('id', viewData.user_id)
-      .single();
-
-    if (!profileData?.linear_api_token) {
+    if (!metadata) {
       return NextResponse.json(
-        { error: 'Unable to load metadata - Linear API token not found' },
-        { status: 500 }
+        { error: 'No synced data available' },
+        { status: 503 }
       );
     }
 
-    const decryptedToken = decryptToken(profileData.linear_api_token);
-
-    const metadataResponse = await fetch(`${request.nextUrl.origin}/api/linear/metadata`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        apiToken: decryptedToken,
-        teamId: viewData.team_id,
-        projectId: viewData.project_id,
-      })
+    return NextResponse.json({
+      success: true,
+      states: metadata.states,
+      labels: metadata.labels,
+      members: metadata.members,
     });
-
-    if (!metadataResponse.ok) {
-      throw new Error('Failed to fetch metadata from Linear');
-    }
-
-    const result = await metadataResponse.json();
-    return NextResponse.json(result);
 
   } catch (error) {
     console.error('Error fetching metadata:', error);

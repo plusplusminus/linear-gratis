@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import type { Roadmap, KanbanColumn } from '@/lib/supabase';
-import { decryptToken } from '@/lib/encryption';
-import { fetchRoadmapIssues, type RoadmapIssue } from '@/lib/linear';
-import { userHasSync, fetchSyncedRoadmapIssues } from '@/lib/sync-read';
+import { type RoadmapIssue } from '@/lib/linear';
+import { fetchSyncedRoadmapIssues } from '@/lib/sync-read';
 import bcrypt from 'bcryptjs';
 
 type VoteCount = {
@@ -185,34 +184,7 @@ async function fetchRoadmapData(roadmap: Roadmap) {
     );
   }
 
-  // Try synced data first, fall back to Linear API
-  let issues: RoadmapIssue[];
-  const hasSyncData = await userHasSync(roadmap.user_id);
-
-  if (hasSyncData) {
-    issues = await fetchSyncedRoadmapIssues(roadmap.user_id, roadmap.project_ids);
-  } else {
-    const { data: profileData } = await supabaseAdmin
-      .from('profiles')
-      .select('linear_api_token')
-      .eq('id', roadmap.user_id)
-      .single();
-
-    if (!profileData?.linear_api_token) {
-      return NextResponse.json(
-        { error: 'Unable to load data - Linear API token not found' },
-        { status: 500 }
-      );
-    }
-
-    const decryptedToken = decryptToken(profileData.linear_api_token);
-    const issuesResult = await fetchRoadmapIssues(decryptedToken, roadmap.project_ids);
-
-    if (!issuesResult.success) {
-      throw new Error(`Failed to fetch issues from Linear: ${issuesResult.error}`);
-    }
-    issues = issuesResult.issues;
-  }
+  const issues: RoadmapIssue[] = await fetchSyncedRoadmapIssues(roadmap.project_ids);
 
   // Fetch vote counts for all issues
   const issueIds = issues.map((issue) => issue.id);

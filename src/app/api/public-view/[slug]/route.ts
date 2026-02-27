@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import { decryptToken } from '@/lib/encryption';
-import { fetchLinearIssues, type LinearIssue } from '@/lib/linear';
-import { userHasSync, fetchSyncedIssues } from '@/lib/sync-read';
+import { fetchSyncedIssues } from '@/lib/sync-read';
 import bcrypt from 'bcryptjs';
 
 export async function GET(
@@ -50,41 +48,11 @@ export async function GET(
       );
     }
 
-    // Try reading from synced data first, fall back to Linear API
-    const filterOpts = {
+    const issues = await fetchSyncedIssues({
       projectId: viewData.project_id || undefined,
       teamId: viewData.team_id || undefined,
       statuses: viewData.allowed_statuses?.length > 0 ? viewData.allowed_statuses : undefined,
-    };
-
-    let issues: LinearIssue[];
-    const hasSyncData = await userHasSync(viewData.user_id);
-
-    if (hasSyncData) {
-      issues = await fetchSyncedIssues(viewData.user_id, filterOpts);
-    } else {
-      // Fallback to Linear API
-      const { data: profileData } = await supabaseAdmin
-        .from('profiles')
-        .select('linear_api_token')
-        .eq('id', viewData.user_id)
-        .single();
-
-      if (!profileData?.linear_api_token) {
-        return NextResponse.json(
-          { error: 'Unable to load data - Linear API token not found' },
-          { status: 500 }
-        );
-      }
-
-      const decryptedToken = decryptToken(profileData.linear_api_token);
-      const issuesResult = await fetchLinearIssues(decryptedToken, filterOpts);
-
-      if (!issuesResult.success) {
-        throw new Error(`Failed to fetch issues from Linear: ${issuesResult.error}`);
-      }
-      issues = issuesResult.issues;
-    }
+    });
 
     return NextResponse.json({
       success: true,
@@ -126,8 +94,7 @@ export async function POST(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
-    const resolvedParams = await params;
-    const { slug } = resolvedParams;
+    const { slug } = await params;
     const { password } = await request.json() as { password?: string };
 
     if (!slug) {
@@ -179,40 +146,11 @@ export async function POST(
       );
     }
 
-    // Try reading from synced data first, fall back to Linear API
-    const postFilterOpts = {
+    const issues = await fetchSyncedIssues({
       projectId: viewData.project_id || undefined,
       teamId: viewData.team_id || undefined,
       statuses: viewData.allowed_statuses?.length > 0 ? viewData.allowed_statuses : undefined,
-    };
-
-    let postIssues: LinearIssue[];
-    const postHasSyncData = await userHasSync(viewData.user_id);
-
-    if (postHasSyncData) {
-      postIssues = await fetchSyncedIssues(viewData.user_id, postFilterOpts);
-    } else {
-      const { data: profileData } = await supabaseAdmin
-        .from('profiles')
-        .select('linear_api_token')
-        .eq('id', viewData.user_id)
-        .single();
-
-      if (!profileData?.linear_api_token) {
-        return NextResponse.json(
-          { error: 'Unable to load data - Linear API token not found' },
-          { status: 500 }
-        );
-      }
-
-      const decryptedToken = decryptToken(profileData.linear_api_token);
-      const issuesResult = await fetchLinearIssues(decryptedToken, postFilterOpts);
-
-      if (!issuesResult.success) {
-        throw new Error(`Failed to fetch issues from Linear: ${issuesResult.error}`);
-      }
-      postIssues = issuesResult.issues;
-    }
+    });
 
     return NextResponse.json({
       success: true,
@@ -235,7 +173,7 @@ export async function POST(
         allow_issue_creation: viewData.allow_issue_creation,
         created_at: viewData.created_at
       },
-      issues: postIssues,
+      issues,
     });
 
   } catch (error) {

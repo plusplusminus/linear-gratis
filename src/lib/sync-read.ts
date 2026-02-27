@@ -1,19 +1,19 @@
 import { supabaseAdmin } from "./supabase";
 import type { LinearIssue, RoadmapIssue } from "./linear";
 
-/**
- * Check if a user has an active sync subscription (i.e. synced data available).
- */
-export async function userHasSync(userId: string): Promise<boolean> {
-  const { data } = await supabaseAdmin
-    .from("sync_subscriptions")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("is_active", true)
-    .limit(1)
-    .single();
+const WORKSPACE_USER_ID = "workspace";
 
-  return !!data;
+/**
+ * Check if workspace-level synced data exists.
+ */
+export async function userHasSync(): Promise<boolean> {
+  const { count } = await supabaseAdmin
+    .from("synced_issues")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", WORKSPACE_USER_ID)
+    .limit(1);
+
+  return (count ?? 0) > 0;
 }
 
 // -- Shared helpers for reading from JSONB `data` column ────────────────────
@@ -175,7 +175,6 @@ export function mapRowToComment(row: {
  * as fetchLinearIssues so the response is identical to the frontend.
  */
 export async function fetchSyncedIssues(
-  userId: string,
   options: {
     projectId?: string;
     teamId?: string;
@@ -185,7 +184,7 @@ export async function fetchSyncedIssues(
   let query = supabaseAdmin
     .from("synced_issues")
     .select("linear_id, data, created_at, updated_at")
-    .eq("user_id", userId)
+    .eq("user_id", WORKSPACE_USER_ID)
     .order("updated_at", { ascending: false });
 
   if (options.projectId) {
@@ -214,13 +213,12 @@ export async function fetchSyncedIssues(
  * Fetch comments for an issue from synced_comments.
  */
 export async function fetchSyncedComments(
-  userId: string,
   issueLinearId: string
 ) {
   const { data, error } = await supabaseAdmin
     .from("synced_comments")
     .select("linear_id, data, created_at, updated_at")
-    .eq("user_id", userId)
+    .eq("user_id", WORKSPACE_USER_ID)
     .eq("issue_linear_id", issueLinearId)
     .order("created_at", { ascending: true });
 
@@ -238,13 +236,12 @@ export async function fetchSyncedComments(
  * Derive metadata (unique states, labels, assignees) from synced issues.
  */
 export async function fetchSyncedMetadata(
-  userId: string,
   options: { projectId?: string; teamId?: string }
 ) {
   let query = supabaseAdmin
     .from("synced_issues")
     .select("data")
-    .eq("user_id", userId);
+    .eq("user_id", WORKSPACE_USER_ID);
 
   if (options.projectId) query = query.eq("project_id", options.projectId);
   if (options.teamId) query = query.eq("team_id", options.teamId);
@@ -292,13 +289,12 @@ export async function fetchSyncedMetadata(
  * Returns RoadmapIssue shape (includes dueDate and project).
  */
 export async function fetchSyncedRoadmapIssues(
-  userId: string,
   projectIds: string[]
 ): Promise<RoadmapIssue[]> {
   const { data, error } = await supabaseAdmin
     .from("synced_issues")
     .select("linear_id, data, created_at, updated_at")
-    .eq("user_id", userId)
+    .eq("user_id", WORKSPACE_USER_ID)
     .in("project_id", projectIds)
     .order("updated_at", { ascending: false });
 
@@ -338,11 +334,11 @@ export function mapRowToTeam(row: {
   };
 }
 
-export async function fetchSyncedTeams(userId: string) {
+export async function fetchSyncedTeams() {
   const { data, error } = await supabaseAdmin
     .from("synced_teams")
     .select("linear_id, data, created_at, updated_at")
-    .eq("user_id", userId)
+    .eq("user_id", WORKSPACE_USER_ID)
     .order("name", { ascending: true });
 
   if (error) {
@@ -359,8 +355,8 @@ export type SyncedTeamTree = ReturnType<typeof mapRowToTeam> & {
   childTeams: SyncedTeamTree[];
 };
 
-export async function fetchSyncedTeamHierarchy(userId: string): Promise<SyncedTeamTree[]> {
-  const teams = await fetchSyncedTeams(userId);
+export async function fetchSyncedTeamHierarchy(): Promise<SyncedTeamTree[]> {
+  const teams = await fetchSyncedTeams();
   const teamMap = new Map<string, SyncedTeamTree>();
 
   // First pass: wrap all teams
@@ -418,13 +414,12 @@ export function mapRowToProject(row: {
 }
 
 export async function fetchSyncedProjects(
-  userId: string,
   options?: { statusName?: string }
 ) {
   let query = supabaseAdmin
     .from("synced_projects")
     .select("linear_id, data, created_at, updated_at")
-    .eq("user_id", userId)
+    .eq("user_id", WORKSPACE_USER_ID)
     .order("updated_at", { ascending: false });
 
   if (options?.statusName) {
@@ -475,13 +470,12 @@ export function mapRowToInitiative(row: {
 }
 
 export async function fetchSyncedInitiatives(
-  userId: string,
   options?: { status?: string }
 ) {
   let query = supabaseAdmin
     .from("synced_initiatives")
     .select("linear_id, data, created_at, updated_at")
-    .eq("user_id", userId)
+    .eq("user_id", WORKSPACE_USER_ID)
     .order("updated_at", { ascending: false });
 
   if (options?.status) {

@@ -17,28 +17,6 @@ export function verifyWebhookSignature(
   );
 }
 
-// -- Subscription lookup -----------------------------------------------------
-
-export async function lookupSubscriptionByWebhookId(webhookId: string) {
-  const { data, error } = await supabaseAdmin
-    .from("sync_subscriptions")
-    .select("*")
-    .eq("webhook_id", webhookId)
-    .eq("is_active", true)
-    .single();
-
-  if (error || !data) return null;
-  return data as {
-    id: string;
-    user_id: string;
-    linear_team_id: string;
-    webhook_id: string;
-    webhook_secret: string;
-    events: string[];
-    is_active: boolean;
-  };
-}
-
 // -- Linear webhook payload types --------------------------------------------
 
 type LinearWebhookPayload = {
