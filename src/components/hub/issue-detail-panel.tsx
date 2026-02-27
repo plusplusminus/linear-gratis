@@ -247,8 +247,8 @@ export function IssueDetailPanel({
 
             {/* Scrollable content */}
             <div className="flex-1 overflow-y-auto">
-              {/* Labels */}
-              {(issue.labels.length > 0 || !isViewOnly) && (
+              {/* Labels — only show if hub has labels configured for this team */}
+              {(issue.labels.length > 0 || hubLabels.length > 0) && (
                 <LabelEditor
                   issueLabels={issue.labels}
                   hubLabels={hubLabels}
