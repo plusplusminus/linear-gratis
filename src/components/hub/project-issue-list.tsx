@@ -24,6 +24,7 @@ import {
   Plus,
   Check,
   FolderKanban,
+  Tag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCanInteract } from "@/hooks/use-can-interact";
@@ -429,31 +430,24 @@ export function ProjectIssueList({
 
           {/* Project filter (team-level view only) */}
           {projects && projects.length > 0 && (
-            <ProjectFilterDropdown
-              projects={projects}
+            <CheckboxFilterDropdown
+              items={projects.map((p) => ({ id: p.id, name: p.name, color: p.color }))}
               selected={filters.projectIds}
               onChange={(next) => updateFilters({ ...filters, projectIds: next })}
+              label="Project"
+              icon={<FolderKanban className="w-3 h-3" />}
             />
           )}
 
           {/* Label filter */}
           {labels.length > 0 && (
-            <FilterGroup label="Label">
-              {labels.map((l) => (
-                <FilterChip
-                  key={l.id}
-                  label={l.name}
-                  color={l.color}
-                  active={filters.labelIds.includes(l.id)}
-                  onClick={() => {
-                    const next = filters.labelIds.includes(l.id)
-                      ? filters.labelIds.filter((x) => x !== l.id)
-                      : [...filters.labelIds, l.id];
-                    updateFilters({ ...filters, labelIds: next });
-                  }}
-                />
-              ))}
-            </FilterGroup>
+            <CheckboxFilterDropdown
+              items={labels.map((l) => ({ id: l.id, name: l.name, color: l.color }))}
+              selected={filters.labelIds}
+              onChange={(next) => updateFilters({ ...filters, labelIds: next })}
+              label="Label"
+              icon={<Tag className="w-3 h-3" />}
+            />
           )}
         </div>
       )}
@@ -539,14 +533,18 @@ export function ProjectIssueList({
 
 // -- Sub-components ──────────────────────────────────────────────────────────
 
-function ProjectFilterDropdown({
-  projects,
+function CheckboxFilterDropdown({
+  items,
   selected,
   onChange,
+  label,
+  icon,
 }: {
-  projects: ProjectInfo[];
+  items: Array<{ id: string; name: string; color?: string }>;
   selected: string[];
   onChange: (ids: string[]) => void;
+  label: string;
+  icon: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -581,8 +579,8 @@ function ProjectFilterDropdown({
             : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
         )}
       >
-        <FolderKanban className="w-3 h-3" />
-        Project
+        {icon}
+        {label}
         {selected.length > 0 && (
           <span className="px-1 py-0 rounded bg-primary text-primary-foreground text-[10px]">
             {selected.length}
@@ -592,13 +590,13 @@ function ProjectFilterDropdown({
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1 z-50 w-56 rounded-md border border-border bg-popover shadow-md py-1">
-          {projects.map((p) => {
-            const isSelected = selected.includes(p.id);
+        <div className="absolute top-full left-0 mt-1 z-50 w-56 max-h-64 overflow-y-auto rounded-md border border-border bg-popover shadow-md py-1">
+          {items.map((item) => {
+            const isSelected = selected.includes(item.id);
             return (
               <button
-                key={p.id}
-                onClick={() => toggle(p.id)}
+                key={item.id}
+                onClick={() => toggle(item.id)}
                 className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-accent/50 transition-colors text-left"
               >
                 <div
@@ -613,9 +611,9 @@ function ProjectFilterDropdown({
                 </div>
                 <span
                   className="w-2 h-2 rounded-full shrink-0"
-                  style={{ backgroundColor: p.color || "var(--muted-foreground)" }}
+                  style={{ backgroundColor: item.color || "var(--muted-foreground)" }}
                 />
-                <span className="truncate">{p.name}</span>
+                <span className="truncate">{item.name}</span>
               </button>
             );
           })}
