@@ -55,6 +55,11 @@ export async function PATCH(
     const body = (await request.json()) as {
       name?: string;
       is_active?: boolean;
+      request_forms_enabled?: boolean;
+      logo_url?: string | null;
+      primary_color?: string | null;
+      accent_color?: string | null;
+      footer_text?: string | null;
     };
 
     const updates: Record<string, unknown> = {};
@@ -75,6 +80,25 @@ export async function PATCH(
         );
       }
       updates.is_active = body.is_active;
+    }
+    if (body.request_forms_enabled !== undefined) {
+      if (typeof body.request_forms_enabled !== "boolean") {
+        return NextResponse.json(
+          { error: "request_forms_enabled must be a boolean" },
+          { status: 400 }
+        );
+      }
+      updates.request_forms_enabled = body.request_forms_enabled;
+    }
+
+    // Branding fields — nullable strings
+    const brandingFields = ["logo_url", "primary_color", "accent_color", "footer_text"] as const;
+    for (const field of brandingFields) {
+      if (body[field] !== undefined) {
+        updates[field] = typeof body[field] === "string" && body[field].trim()
+          ? body[field].trim()
+          : null;
+      }
     }
 
     if (Object.keys(updates).length === 0) {

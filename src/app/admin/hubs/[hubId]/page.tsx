@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   Circle,
 } from "lucide-react";
+import { HubSyncButton } from "@/components/admin/hub-sync-button";
 
 export default async function HubDashboardPage({
   params,
@@ -158,7 +159,8 @@ export default async function HubDashboardPage({
       )}
 
       {/* Quick actions */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <HubSyncButton hubId={hub.id} />
         <QuickAction
           href={`/admin/hubs/${hub.id}/members`}
           icon={<UserPlus className="w-4 h-4" />}

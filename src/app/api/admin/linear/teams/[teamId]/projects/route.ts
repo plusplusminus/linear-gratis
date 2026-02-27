@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { withAdminAuth } from "@/lib/admin-auth";
 import { supabaseAdmin } from "@/lib/supabase";
+import { getWorkspaceToken } from "@/lib/workspace";
 
-// GET: List projects for a specific team from synced data
+// GET: List projects for a specific team — from synced data, or Linear API if no sync exists
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ teamId: string }> }
@@ -12,13 +13,10 @@ export async function GET(
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
-    const { user } = auth;
 
     const { teamId } = await params;
 
-    // Projects have team info in their data JSONB — filter by team_id column
-    // or by data->'teams' array. The synced_projects table has a team_id if
-    // it was synced per-team, but let's also check the JSONB for robustness.
+    // Try synced data first
     const { data: projects, error } = await supabaseAdmin
       .from("synced_projects")
       .select("*")
@@ -37,23 +35,88 @@ export async function GET(
     }
 
     // Filter projects that belong to the given team
-    // Projects may reference teams in their data JSONB (data.teams array)
     const filtered = (projects ?? []).filter((p) => {
       const data = p.data as Record<string, unknown>;
-      // Check teams array in JSONB data
       if (Array.isArray(data?.teams)) {
         return (data.teams as Array<{ id?: string }>).some(
           (t) => t.id === teamId
         );
       }
-      // Fallback: check if data has a single teamId reference
       if (data?.team && typeof data.team === "object") {
         return (data.team as { id?: string }).id === teamId;
       }
       return false;
     });
 
-    return NextResponse.json(filtered);
+    // If we have synced projects for this team, return them
+    if (filtered.length > 0) {
+      return NextResponse.json(filtered);
+    }
+
+    // No synced projects — fetch directly from Linear API
+    let token: string;
+    try {
+      token = await getWorkspaceToken();
+    } catch {
+      return NextResponse.json([]);
+    }
+
+    const res = await fetch("https://api.linear.app/graphql", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: token,
+      },
+      body: JSON.stringify({
+        query: `query($teamId: String!) {
+          team(id: $teamId) {
+            projects {
+              nodes {
+                id
+                name
+                color
+                icon
+                state
+                teams {
+                  nodes { id }
+                }
+              }
+            }
+          }
+        }`,
+        variables: { teamId },
+      }),
+    });
+
+    const result = (await res.json()) as {
+      data?: {
+        team?: {
+          projects: {
+            nodes: Array<{
+              id: string;
+              name: string;
+              color?: string;
+              icon?: string;
+              state?: string;
+            }>;
+          };
+        };
+      };
+      errors?: Array<{ message: string }>;
+    };
+
+    if (result.errors || !result.data?.team) {
+      return NextResponse.json([]);
+    }
+
+    const liveProjects = result.data.team.projects.nodes.map((p) => ({
+      linear_id: p.id,
+      name: p.name,
+      status_name: p.state ?? null,
+      data: { id: p.id, name: p.name, color: p.color, icon: p.icon, status: { name: p.state } },
+    }));
+
+    return NextResponse.json(liveProjects);
   } catch (error) {
     console.error(
       "GET /api/admin/linear/teams/[teamId]/projects error:",

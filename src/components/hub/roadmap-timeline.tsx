@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Calendar, FolderKanban } from "lucide-react";
+import { HubVoteButton } from "./vote-button";
 
 type Project = {
   id: string;
@@ -13,6 +14,11 @@ type Project = {
   targetDate?: string;
   progress: number;
   status: { name: string; color: string; type: string };
+};
+
+type VoteData = {
+  counts: Record<string, number>;
+  userVotes: string[];
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -30,12 +36,47 @@ function getStatusColor(status: { color: string; type: string }): string {
 export function RoadmapTimeline({
   projects,
   hubSlug,
+  hubId,
   teamKey,
 }: {
   projects: Project[];
   hubSlug: string;
+  hubId: string;
   teamKey: string;
 }) {
+  const [voteData, setVoteData] = useState<VoteData>({ counts: {}, userVotes: [] });
+
+  const projectIds = useMemo(() => projects.map((p) => p.id), [projects]);
+
+  // Fetch vote data on mount
+  useEffect(() => {
+    if (projectIds.length === 0) return;
+
+    async function fetchVotes() {
+      try {
+        const res = await fetch(
+          `/api/hubs/${hubId}/votes?issueIds=${projectIds.join(",")}`
+        );
+        if (!res.ok) return;
+        const data = (await res.json()) as VoteData;
+        setVoteData(data);
+      } catch {
+        // Silently fail — votes are non-critical
+      }
+    }
+    fetchVotes();
+  }, [hubId, projectIds]);
+
+  const getVoteCount = useCallback(
+    (projectId: string) => voteData.counts[projectId] ?? 0,
+    [voteData.counts]
+  );
+
+  const hasUserVoted = useCallback(
+    (projectId: string) => voteData.userVotes.includes(projectId),
+    [voteData.userVotes]
+  );
+
   const { dated, undated } = useMemo(() => {
     const d: Project[] = [];
     const u: Project[] = [];
@@ -65,12 +106,10 @@ export function RoadmapTimeline({
     for (const p of dated) {
       if (p.startDate) earliest = Math.min(earliest, new Date(p.startDate).getTime());
       if (p.targetDate) latest = Math.max(latest, new Date(p.targetDate).getTime());
-      // If only one date, use it for both bounds
       if (p.startDate && !p.targetDate) latest = Math.max(latest, new Date(p.startDate).getTime());
       if (p.targetDate && !p.startDate) earliest = Math.min(earliest, new Date(p.targetDate).getTime());
     }
 
-    // Pad by 1 month on each side
     const start = new Date(earliest);
     start.setMonth(start.getMonth() - 1);
     start.setDate(1);
@@ -171,6 +210,9 @@ export function RoadmapTimeline({
                     leftPct={Math.max(0, leftPct)}
                     widthPct={Math.max(3, Math.min(100 - leftPct, widthPct))}
                     href={`/hub/${hubSlug}/${teamKey}/projects/${project.id}`}
+                    hubId={hubId}
+                    voteCount={getVoteCount(project.id)}
+                    hasVoted={hasUserVoted(project.id)}
                   />
                 );
               })}
@@ -186,6 +228,9 @@ export function RoadmapTimeline({
             key={project.id}
             project={project}
             href={`/hub/${hubSlug}/${teamKey}/projects/${project.id}`}
+            hubId={hubId}
+            voteCount={getVoteCount(project.id)}
+            hasVoted={hasUserVoted(project.id)}
           />
         ))}
       </div>
@@ -202,6 +247,9 @@ export function RoadmapTimeline({
                 key={project.id}
                 project={project}
                 href={`/hub/${hubSlug}/${teamKey}/projects/${project.id}`}
+                hubId={hubId}
+                voteCount={getVoteCount(project.id)}
+                hasVoted={hasUserVoted(project.id)}
               />
             ))}
           </div>
@@ -218,38 +266,52 @@ function ProjectBar({
   leftPct,
   widthPct,
   href,
+  hubId,
+  voteCount,
+  hasVoted,
 }: {
   project: Project;
   leftPct: number;
   widthPct: number;
   href: string;
+  hubId: string;
+  voteCount: number;
+  hasVoted: boolean;
 }) {
   const color = project.color || getStatusColor(project.status);
   const progressPct = Math.round(project.progress * 100);
 
   return (
-    <div className="relative h-8" style={{ marginLeft: `${leftPct}%`, width: `${widthPct}%` }}>
-      <Link
-        href={href}
-        className="block h-full rounded-md overflow-hidden group relative"
-        style={{ backgroundColor: `${color}20`, borderLeft: `3px solid ${color}` }}
-        title={`${project.name} — ${project.status.name} (${progressPct}%)`}
-      >
-        {/* Progress fill */}
-        <div
-          className="absolute inset-y-0 left-0 opacity-20"
-          style={{ width: `${progressPct}%`, backgroundColor: color }}
-        />
-        {/* Text */}
-        <div className="relative flex items-center justify-between h-full px-2 min-w-0">
-          <span className="text-[11px] font-medium truncate group-hover:text-primary transition-colors">
-            {project.name}
-          </span>
-          <span className="text-[10px] tabular-nums text-muted-foreground shrink-0 ml-2">
-            {progressPct}%
-          </span>
-        </div>
-      </Link>
+    <div className="flex items-center gap-1.5">
+      <HubVoteButton
+        hubId={hubId}
+        issueLinearId={project.id}
+        initialCount={voteCount}
+        initialVoted={hasVoted}
+      />
+      <div className="relative h-8 flex-1" style={{ marginLeft: `${leftPct}%`, width: `${widthPct}%` }}>
+        <Link
+          href={href}
+          className="block h-full rounded-md overflow-hidden group relative"
+          style={{ backgroundColor: `${color}20`, borderLeft: `3px solid ${color}` }}
+          title={`${project.name} — ${project.status.name} (${progressPct}%)`}
+        >
+          {/* Progress fill */}
+          <div
+            className="absolute inset-y-0 left-0 opacity-20"
+            style={{ width: `${progressPct}%`, backgroundColor: color }}
+          />
+          {/* Text */}
+          <div className="relative flex items-center justify-between h-full px-2 min-w-0">
+            <span className="text-[11px] font-medium truncate group-hover:text-primary transition-colors">
+              {project.name}
+            </span>
+            <span className="text-[10px] tabular-nums text-muted-foreground shrink-0 ml-2">
+              {progressPct}%
+            </span>
+          </div>
+        </Link>
+      </div>
     </div>
   );
 }
@@ -257,50 +319,64 @@ function ProjectBar({
 function ProjectListItem({
   project,
   href,
+  hubId,
+  voteCount,
+  hasVoted,
 }: {
   project: Project;
   href: string;
+  hubId: string;
+  voteCount: number;
+  hasVoted: boolean;
 }) {
   const color = project.color || getStatusColor(project.status);
   const progressPct = Math.round(project.progress * 100);
 
   return (
-    <Link
-      href={href}
-      className="flex items-center gap-3 border border-border rounded-md px-3 py-2 bg-card hover:bg-accent/50 transition-colors group"
-    >
-      <div
-        className="w-2.5 h-2.5 rounded-full shrink-0"
-        style={{ backgroundColor: color }}
+    <div className="flex items-center gap-2">
+      <HubVoteButton
+        hubId={hubId}
+        issueLinearId={project.id}
+        initialCount={voteCount}
+        initialVoted={hasVoted}
       />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">
-          {project.name}
-        </p>
-        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-          <span>{project.status.name}</span>
-          {(project.startDate || project.targetDate) && (
-            <span className="flex items-center gap-0.5">
-              <Calendar className="w-3 h-3" />
-              {project.startDate && formatShort(project.startDate)}
-              {project.startDate && project.targetDate && " → "}
-              {project.targetDate && formatShort(project.targetDate)}
-            </span>
-          )}
+      <Link
+        href={href}
+        className="flex-1 flex items-center gap-3 border border-border rounded-md px-3 py-2 bg-card hover:bg-accent/50 transition-colors group"
+      >
+        <div
+          className="w-2.5 h-2.5 rounded-full shrink-0"
+          style={{ backgroundColor: color }}
+        />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">
+            {project.name}
+          </p>
+          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+            <span>{project.status.name}</span>
+            {(project.startDate || project.targetDate) && (
+              <span className="flex items-center gap-0.5">
+                <Calendar className="w-3 h-3" />
+                {project.startDate && formatShort(project.startDate)}
+                {project.startDate && project.targetDate && " → "}
+                {project.targetDate && formatShort(project.targetDate)}
+              </span>
+            )}
+          </div>
         </div>
-      </div>
-      <div className="flex items-center gap-1.5 shrink-0">
-        <div className="w-12 h-1.5 rounded-full bg-muted overflow-hidden">
-          <div
-            className="h-full rounded-full"
-            style={{ width: `${progressPct}%`, backgroundColor: color }}
-          />
+        <div className="flex items-center gap-1.5 shrink-0">
+          <div className="w-12 h-1.5 rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${progressPct}%`, backgroundColor: color }}
+            />
+          </div>
+          <span className="text-[10px] tabular-nums text-muted-foreground w-6 text-right">
+            {progressPct}%
+          </span>
         </div>
-        <span className="text-[10px] tabular-nums text-muted-foreground w-6 text-right">
-          {progressPct}%
-        </span>
-      </div>
-    </Link>
+      </Link>
+    </div>
   );
 }
 

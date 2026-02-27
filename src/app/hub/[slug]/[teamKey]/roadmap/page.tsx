@@ -61,6 +61,7 @@ export default async function RoadmapPage({
       <RoadmapTimeline
         projects={projects}
         hubSlug={slug}
+        hubId={hub.id}
         teamKey={teamKey}
       />
     </div>

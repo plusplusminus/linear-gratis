@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchSyncedIssues } from "@/lib/sync-read";
+import { fetchSyncedIssues } from "@/lib/hub-read";
 
 export type LinearIssue = {
   id: string;

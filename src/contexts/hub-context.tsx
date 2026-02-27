@@ -17,11 +17,19 @@ export type HubTeam = {
   icon?: string;
 };
 
+export type HubBranding = {
+  logoUrl: string | null;
+  primaryColor: string | null;
+  accentColor: string | null;
+  footerText: string | null;
+};
+
 export type HubContextValue = {
   hubId: string;
   hubSlug: string;
   hubName: string;
   teams: HubTeam[];
+  branding: HubBranding;
   userId: string;
   email: string;
   firstName: string | null;
@@ -29,6 +37,7 @@ export type HubContextValue = {
   role: HubMemberRole;
   isViewOnly: boolean;
   isLoading: boolean;
+  requestFormsEnabled: boolean;
 };
 
 const HubContext = createContext<HubContextValue | null>(null);
@@ -43,12 +52,14 @@ export function HubProvider({
   hubSlug,
   hubName,
   teams,
+  branding,
   children,
 }: {
   hubId: string;
   hubSlug: string;
   hubName: string;
   teams: HubTeam[];
+  branding: HubBranding;
   children: ReactNode;
 }) {
   const [authState, setAuthState] = useState<{
@@ -59,6 +70,7 @@ export function HubProvider({
     role: HubMemberRole;
     isViewOnly: boolean;
     isLoading: boolean;
+    requestFormsEnabled: boolean;
   }>({
     userId: "",
     email: "",
@@ -67,6 +79,7 @@ export function HubProvider({
     role: "default",
     isViewOnly: false,
     isLoading: true,
+    requestFormsEnabled: false,
   });
 
   useEffect(() => {
@@ -81,6 +94,7 @@ export function HubProvider({
           lastName: string | null;
           role: HubMemberRole;
           isViewOnly: boolean;
+          requestFormsEnabled: boolean;
         };
         setAuthState({
           userId: data.userId,
@@ -90,6 +104,7 @@ export function HubProvider({
           role: data.role,
           isViewOnly: data.isViewOnly,
           isLoading: false,
+          requestFormsEnabled: data.requestFormsEnabled ?? false,
         });
       } catch {
         setAuthState((prev) => ({ ...prev, isLoading: false }));
@@ -105,6 +120,7 @@ export function HubProvider({
         hubSlug,
         hubName,
         teams,
+        branding,
         ...authState,
       }}
     >

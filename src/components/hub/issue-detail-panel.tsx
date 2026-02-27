@@ -25,6 +25,9 @@ import {
   MessageSquare,
   AlertCircle,
   Loader2,
+  History,
+  ArrowRight,
+  Tag,
 } from "lucide-react";
 
 type IssueDetail = {
@@ -52,6 +55,18 @@ type Comment = {
   push_error?: string;
 };
 
+type HistoryEntry = {
+  id: string;
+  createdAt: string;
+  type: "state" | "priority" | "label";
+  fromState?: { name: string; color: string; type: string };
+  toState?: { name: string; color: string; type: string };
+  fromPriority?: number;
+  toPriority?: number;
+  addedLabels?: Array<{ name: string; color: string }>;
+  removedLabels?: Array<{ name: string; color: string }>;
+};
+
 export function IssueDetailPanel({
   issueId,
   hubId,
@@ -68,6 +83,7 @@ export function IssueDetailPanel({
   const [issue, setIssue] = useState<IssueDetail | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [hubLabels, setHubLabels] = useState<Array<{ id: string; name: string; color: string }>>([]);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
   const [descOverflows, setDescOverflows] = useState(false);
@@ -81,6 +97,7 @@ export function IssueDetailPanel({
     setIssue(null);
     setComments([]);
     setHubLabels([]);
+    setHistory([]);
     setDescExpanded(false);
     onClose();
     // Remove issue from URL params
@@ -95,6 +112,7 @@ export function IssueDetailPanel({
     if (!activeId) {
       setIssue(null);
       setComments([]);
+      setHistory([]);
       return;
     }
 
@@ -103,19 +121,27 @@ export function IssueDetailPanel({
 
     async function fetchIssue() {
       try {
-        const res = await fetch(
-          `/api/hub/${hubId}/issues/${activeId}`
-        );
-        if (!res.ok) return;
-        const data = (await res.json()) as {
-          issue: IssueDetail;
-          comments: Comment[];
-          hubLabels: Array<{ id: string; name: string; color: string }>;
-        };
-        if (!cancelled) {
+        const [issueRes, historyRes] = await Promise.all([
+          fetch(`/api/hub/${hubId}/issues/${activeId}`),
+          fetch(`/api/hub/${hubId}/issues/${activeId}/history`),
+        ]);
+
+        if (!cancelled && issueRes.ok) {
+          const data = (await issueRes.json()) as {
+            issue: IssueDetail;
+            comments: Comment[];
+            hubLabels: Array<{ id: string; name: string; color: string }>;
+          };
           setIssue(data.issue);
           setComments(data.comments);
           setHubLabels(data.hubLabels ?? []);
+        }
+
+        if (!cancelled && historyRes.ok) {
+          const historyData = (await historyRes.json()) as {
+            history: HistoryEntry[];
+          };
+          setHistory(historyData.history ?? []);
         }
       } catch {
         // silently fail
@@ -291,6 +317,26 @@ export function IssueDetailPanel({
                 )}
 
               </div>
+
+              {/* History */}
+              {history.length > 0 && (
+                <div className="px-4 py-4 border-t border-border">
+                  <div className="flex items-center gap-2 mb-3">
+                    <History className="w-4 h-4 text-muted-foreground" />
+                    <h3 className="text-xs font-semibold">
+                      Activity
+                      <span className="text-muted-foreground font-normal ml-1">
+                        ({history.length})
+                      </span>
+                    </h3>
+                  </div>
+                  <div className="space-y-0">
+                    {history.map((entry) => (
+                      <HistoryItem key={entry.id} entry={entry} />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Comment composer — hidden for view_only users */}
@@ -438,6 +484,118 @@ function CommentBubble({ comment }: { comment: Comment }) {
         <ReactMarkdown remarkPlugins={[remarkGfm]}>
           {comment.body}
         </ReactMarkdown>
+      </div>
+    </div>
+  );
+}
+
+const PRIORITY_LABELS: Record<number, string> = {
+  0: "No priority",
+  1: "Urgent",
+  2: "High",
+  3: "Medium",
+  4: "Low",
+};
+
+function HistoryItem({ entry }: { entry: HistoryEntry }) {
+  return (
+    <div className="flex items-start gap-3 py-2 group">
+      {/* Timeline dot */}
+      <div className="flex flex-col items-center pt-0.5 shrink-0">
+        <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40" />
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        {entry.type === "state" && (
+          <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
+            <span>Status changed</span>
+            {entry.fromState && (
+              <>
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted text-[10px] text-foreground">
+                  <StatusIcon
+                    type={entry.fromState.type}
+                    color={entry.fromState.color}
+                    size={10}
+                  />
+                  {entry.fromState.name}
+                </span>
+                <ArrowRight className="w-3 h-3 text-muted-foreground/60" />
+              </>
+            )}
+            {entry.toState && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted text-[10px] text-foreground">
+                <StatusIcon
+                  type={entry.toState.type}
+                  color={entry.toState.color}
+                  size={10}
+                />
+                {entry.toState.name}
+              </span>
+            )}
+          </div>
+        )}
+
+        {entry.type === "priority" && (
+          <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
+            <span>Priority changed</span>
+            {entry.fromPriority != null && (
+              <>
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted text-[10px] text-foreground">
+                  <PriorityIcon priority={entry.fromPriority} />
+                  {PRIORITY_LABELS[entry.fromPriority] ?? `P${entry.fromPriority}`}
+                </span>
+                <ArrowRight className="w-3 h-3 text-muted-foreground/60" />
+              </>
+            )}
+            {entry.toPriority != null && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted text-[10px] text-foreground">
+                <PriorityIcon priority={entry.toPriority} />
+                {PRIORITY_LABELS[entry.toPriority] ?? `P${entry.toPriority}`}
+              </span>
+            )}
+          </div>
+        )}
+
+        {entry.type === "label" && (
+          <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
+            <Tag className="w-3 h-3" />
+            {entry.addedLabels?.map((label) => (
+              <span key={label.name} className="inline-flex items-center gap-1">
+                <span>Added</span>
+                <span
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-foreground"
+                  style={{ backgroundColor: `${label.color}20` }}
+                >
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: label.color }}
+                  />
+                  {label.name}
+                </span>
+              </span>
+            ))}
+            {entry.removedLabels?.map((label) => (
+              <span key={label.name} className="inline-flex items-center gap-1">
+                <span>Removed</span>
+                <span
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-foreground line-through opacity-60"
+                  style={{ backgroundColor: `${label.color}20` }}
+                >
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: label.color }}
+                  />
+                  {label.name}
+                </span>
+              </span>
+            ))}
+          </div>
+        )}
+
+        <span className="text-[10px] text-muted-foreground/60 mt-0.5 block">
+          <RelativeTime dateStr={entry.createdAt} />
+        </span>
       </div>
     </div>
   );

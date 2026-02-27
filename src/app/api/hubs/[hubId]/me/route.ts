@@ -20,10 +20,10 @@ export async function GET(
 
     const { user, role } = auth;
 
-    // Get hub name
+    // Get hub name and settings
     const { data: hub } = await supabaseAdmin
       .from("client_hubs")
-      .select("name")
+      .select("name, request_forms_enabled")
       .eq("id", hubId)
       .single();
 
@@ -36,6 +36,7 @@ export async function GET(
       hubId,
       hubName: hub?.name ?? null,
       isViewOnly: role === "view_only",
+      requestFormsEnabled: hub?.request_forms_enabled ?? false,
     });
   } catch (error) {
     console.error("GET /api/hubs/[hubId]/me error:", error);

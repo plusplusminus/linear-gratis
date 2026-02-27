@@ -41,7 +41,7 @@ export function TeamPicker({ value, onChange }: TeamPickerProps) {
       error={error}
       onRetry={refetch}
       empty={teams.length === 0}
-      emptyMessage="No teams synced yet. Run an initial sync first."
+      emptyMessage="No teams found. Check your Linear API token in Settings."
       searchPlaceholder="Filter teams..."
     >
       {(filter) => {

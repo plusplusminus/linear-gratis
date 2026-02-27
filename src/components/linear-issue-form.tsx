@@ -13,8 +13,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { LinearCustomerRequestManager } from "@/lib/linear"
 import { useAuth } from "@/hooks/use-auth"
-import { supabase } from "@/lib/supabase"
-import { decryptTokenClient } from "@/lib/client-encryption"
+import { useWorkspaceToken } from "@/hooks/use-workspace-token"
 import Link from "next/link"
 
 const formSchema = z.object({
@@ -38,11 +37,10 @@ type Project = {
 
 export function LinearIssueForm() {
   const { user } = useAuth()
+  const { token: savedToken, loading: loadingProfile } = useWorkspaceToken()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
   const [isLoadingProjects, setIsLoadingProjects] = useState(false)
-  const [loadingProfile, setLoadingProfile] = useState(true)
-  const [savedToken, setSavedToken] = useState<string | null>(null)
   const [result, setResult] = useState<{
     success: boolean
     message: string
@@ -66,41 +64,12 @@ export function LinearIssueForm() {
     },
   })
 
-  // Load user's saved Linear token
+  // Set token in form when loaded from workspace
   useEffect(() => {
-    if (!user) return
-
-    const loadProfile = async () => {
-      setLoadingProfile(true)
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('linear_api_token')
-          .eq('id', user.id)
-          .single()
-
-        if (error && error.code !== 'PGRST116') {
-          console.error('Error loading profile:', error)
-        } else if (data?.linear_api_token) {
-          try {
-            const decryptedToken = await decryptTokenClient(data.linear_api_token)
-            setSavedToken(decryptedToken)
-            form.setValue('apiToken', decryptedToken)
-          } catch (error) {
-            console.error('Error decrypting token:', error)
-            // Token is corrupted, clear it
-            setSavedToken(null)
-          }
-        }
-      } catch (error) {
-        console.error('Error loading profile:', error)
-      } finally {
-        setLoadingProfile(false)
-      }
+    if (savedToken) {
+      form.setValue('apiToken', savedToken)
     }
-
-    loadProfile()
-  }, [user, form])
+  }, [savedToken, form])
 
   async function fetchProjects(apiToken: string) {
     if (!apiToken.trim()) {

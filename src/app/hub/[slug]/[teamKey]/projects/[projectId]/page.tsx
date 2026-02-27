@@ -8,6 +8,7 @@ import {
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { ProjectIssueList } from "@/components/hub/project-issue-list";
+import { ProjectUpdates } from "@/components/hub/project-updates";
 
 export default async function ProjectViewPage({
   params,
@@ -104,6 +105,9 @@ export default async function ProjectViewPage({
         )}
       </div>
 
+      {/* Project Updates */}
+      <ProjectUpdates hubId={hub.id} projectId={projectId} />
+
       {/* Issue list (client component for interactive filtering) */}
       <ProjectIssueList
         issues={issues}
@@ -111,6 +115,7 @@ export default async function ProjectViewPage({
         labels={metadata.labels}
         hubSlug={slug}
         teamKey={teamKey}
+        teamId={team.id}
         projectId={projectId}
         hubId={hub.id}
       />

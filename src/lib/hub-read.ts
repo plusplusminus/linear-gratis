@@ -1,14 +1,275 @@
 import { supabaseAdmin, type HubTeamMapping, type HubMemberRole } from "./supabase";
 import type { LinearIssue, RoadmapIssue } from "./linear";
-import {
-  mapRowToLinearIssue,
-  mapRowToComment,
-  mapRowToTeam,
-  mapRowToProject,
-  mapRowToInitiative,
-} from "./sync-read";
 
 const WORKSPACE_USER_ID = "workspace";
+
+// -- Row mapper types (inlined from former sync-read.ts) ─────────────────────
+
+type IssueData = {
+  id?: string;
+  identifier?: string;
+  title?: string;
+  description?: string;
+  priority?: number;
+  priorityLabel?: string;
+  url?: string;
+  dueDate?: string;
+  state?: { id?: string; name?: string; color?: string; type?: string };
+  assignee?: { id?: string; name?: string };
+  labels?: Array<{ id: string; name: string; color: string }>;
+  project?: { id?: string; name?: string; color?: string };
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+type CommentData = {
+  id?: string;
+  body?: string;
+  user?: { id?: string; name?: string };
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+type TeamData = {
+  id?: string;
+  name?: string;
+  displayName?: string;
+  key?: string;
+  description?: string;
+  icon?: string;
+  color?: string;
+  private?: boolean;
+  parent?: { id?: string; name?: string; key?: string };
+  children?: Array<{ id: string }>;
+  members?: Array<{ id: string; name: string }>;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+type ProjectData = {
+  id?: string;
+  name?: string;
+  description?: string;
+  icon?: string;
+  color?: string;
+  url?: string;
+  priority?: number;
+  priorityLabel?: string;
+  progress?: number;
+  health?: string;
+  startDate?: string;
+  targetDate?: string;
+  status?: { id?: string; name?: string; color?: string; type?: string };
+  lead?: { id?: string; name?: string };
+  teams?: Array<{ id: string; name: string; key: string }>;
+  initiatives?: Array<{ id: string; name: string }>;
+  milestones?: Array<{ id: string; name: string; targetDate?: string }>;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+type InitiativeData = {
+  id?: string;
+  name?: string;
+  description?: string;
+  icon?: string;
+  color?: string;
+  url?: string;
+  status?: string;
+  health?: string;
+  healthUpdatedAt?: string;
+  targetDate?: string;
+  owner?: { id?: string; name?: string };
+  projects?: Array<{ id: string; name: string }>;
+  subInitiatives?: Array<{ id: string; name: string }>;
+  parentInitiative?: { id?: string; name?: string };
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export function priorityToLabel(priority: number): string {
+  switch (priority) {
+    case 0: return "No priority";
+    case 1: return "Urgent";
+    case 2: return "High";
+    case 3: return "Medium";
+    case 4: return "Low";
+    default: return "No priority";
+  }
+}
+
+export function mapRowToLinearIssue(row: {
+  linear_id: string;
+  data: IssueData;
+  created_at: string;
+  updated_at: string;
+}): LinearIssue {
+  const d = row.data;
+  return {
+    id: d.id ?? row.linear_id,
+    identifier: d.identifier ?? "",
+    title: d.title ?? "",
+    description: d.description ?? undefined,
+    priority: d.priority ?? 0,
+    priorityLabel: d.priorityLabel ?? priorityToLabel(d.priority ?? 0),
+    url: d.url ?? "",
+    state: {
+      id: d.state?.id ?? "",
+      name: d.state?.name ?? "Unknown",
+      color: d.state?.color ?? "",
+      type: d.state?.type ?? "",
+    },
+    assignee: d.assignee
+      ? { id: d.assignee.id ?? "", name: d.assignee.name ?? "" }
+      : undefined,
+    labels: Array.isArray(d.labels) ? d.labels : [],
+    createdAt: d.createdAt ?? row.created_at,
+    updatedAt: d.updatedAt ?? row.updated_at,
+  };
+}
+
+export function mapRowToComment(row: {
+  linear_id: string;
+  data: CommentData;
+  created_at: string;
+  updated_at: string;
+}) {
+  const d = row.data;
+  return {
+    id: d.id ?? row.linear_id,
+    body: d.body ?? "",
+    createdAt: d.createdAt ?? row.created_at,
+    updatedAt: d.updatedAt ?? row.updated_at,
+    user: {
+      id: d.user?.id ?? "",
+      name: d.user?.name ?? "Unknown",
+    },
+  };
+}
+
+export function mapRowToTeam(row: {
+  linear_id: string;
+  data: TeamData;
+  created_at: string;
+  updated_at: string;
+}) {
+  const d = row.data;
+  return {
+    id: d.id ?? row.linear_id,
+    name: d.name ?? "",
+    displayName: d.displayName ?? d.name ?? "",
+    key: d.key ?? "",
+    description: d.description ?? undefined,
+    icon: d.icon ?? undefined,
+    color: d.color ?? undefined,
+    private: d.private ?? false,
+    parent: d.parent ?? undefined,
+    children: Array.isArray(d.children) ? d.children : [],
+    members: Array.isArray(d.members) ? d.members : [],
+    createdAt: d.createdAt ?? row.created_at,
+    updatedAt: d.updatedAt ?? row.updated_at,
+  };
+}
+
+export function mapRowToProject(row: {
+  linear_id: string;
+  data: ProjectData;
+  created_at: string;
+  updated_at: string;
+}) {
+  const d = row.data;
+  return {
+    id: d.id ?? row.linear_id,
+    name: d.name ?? "",
+    description: d.description ?? undefined,
+    icon: d.icon ?? undefined,
+    color: d.color ?? undefined,
+    url: d.url ?? "",
+    priority: d.priority ?? 0,
+    priorityLabel: d.priorityLabel ?? priorityToLabel(d.priority ?? 0),
+    progress: d.progress ?? 0,
+    health: d.health ?? undefined,
+    startDate: d.startDate ?? undefined,
+    targetDate: d.targetDate ?? undefined,
+    status: d.status
+      ? { id: d.status.id ?? "", name: d.status.name ?? "", color: d.status.color ?? "", type: d.status.type ?? "" }
+      : { id: "", name: "Unknown", color: "", type: "" },
+    lead: d.lead
+      ? { id: d.lead.id ?? "", name: d.lead.name ?? "" }
+      : undefined,
+    teams: Array.isArray(d.teams) ? d.teams : [],
+    initiatives: Array.isArray(d.initiatives) ? d.initiatives : [],
+    milestones: Array.isArray(d.milestones) ? d.milestones : [],
+    createdAt: d.createdAt ?? row.created_at,
+    updatedAt: d.updatedAt ?? row.updated_at,
+  };
+}
+
+export function mapRowToInitiative(row: {
+  linear_id: string;
+  data: InitiativeData;
+  created_at: string;
+  updated_at: string;
+}) {
+  const d = row.data;
+  return {
+    id: d.id ?? row.linear_id,
+    name: d.name ?? "",
+    description: d.description ?? undefined,
+    icon: d.icon ?? undefined,
+    color: d.color ?? undefined,
+    url: d.url ?? "",
+    status: d.status ?? "Planned",
+    health: d.health ?? undefined,
+    healthUpdatedAt: d.healthUpdatedAt ?? undefined,
+    targetDate: d.targetDate ?? undefined,
+    owner: d.owner
+      ? { id: d.owner.id ?? "", name: d.owner.name ?? "" }
+      : undefined,
+    projects: Array.isArray(d.projects) ? d.projects : [],
+    subInitiatives: Array.isArray(d.subInitiatives) ? d.subInitiatives : [],
+    parentInitiative: d.parentInitiative ?? undefined,
+    createdAt: d.createdAt ?? row.created_at,
+    updatedAt: d.updatedAt ?? row.updated_at,
+  };
+}
+
+// -- Standalone query functions (formerly in sync-read.ts) ───────────────────
+
+export async function fetchSyncedIssues(
+  options: {
+    projectId?: string;
+    teamId?: string;
+    statuses?: string[];
+  }
+): Promise<LinearIssue[]> {
+  let query = supabaseAdmin
+    .from("synced_issues")
+    .select("linear_id, data, created_at, updated_at")
+    .eq("user_id", WORKSPACE_USER_ID)
+    .order("updated_at", { ascending: false });
+
+  if (options.projectId) {
+    query = query.eq("project_id", options.projectId);
+  }
+  if (options.teamId) {
+    query = query.eq("team_id", options.teamId);
+  }
+  if (options.statuses && options.statuses.length > 0) {
+    query = query.in("state_name", options.statuses);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("fetchSyncedIssues error:", error);
+    throw error;
+  }
+
+  return (data || []).map((row) =>
+    mapRowToLinearIssue(row as { linear_id: string; data: IssueData; created_at: string; updated_at: string })
+  );
+}
 
 // -- Hub access ──────────────────────────────────────────────────────────────
 
@@ -507,6 +768,56 @@ export async function fetchHubInitiatives(
       row as { linear_id: string; data: Record<string, unknown>; created_at: string; updated_at: string }
     )
   );
+}
+
+// -- Hub votes ────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch vote counts per issue for a list of issue Linear IDs within a hub.
+ */
+export async function fetchHubVotes(
+  hubId: string,
+  issueLinearIds: string[]
+): Promise<Record<string, number>> {
+  if (issueLinearIds.length === 0) return {};
+
+  const { data, error } = await supabaseAdmin
+    .from("hub_votes")
+    .select("issue_linear_id")
+    .eq("hub_id", hubId)
+    .in("issue_linear_id", issueLinearIds);
+
+  if (error) {
+    console.error("fetchHubVotes error:", error);
+    return {};
+  }
+
+  const counts: Record<string, number> = {};
+  for (const row of data || []) {
+    counts[row.issue_linear_id] = (counts[row.issue_linear_id] || 0) + 1;
+  }
+  return counts;
+}
+
+/**
+ * Fetch the set of issue Linear IDs that a user has voted on in a hub.
+ */
+export async function fetchUserVotes(
+  hubId: string,
+  userId: string
+): Promise<string[]> {
+  const { data, error } = await supabaseAdmin
+    .from("hub_votes")
+    .select("issue_linear_id")
+    .eq("hub_id", hubId)
+    .eq("user_id", userId);
+
+  if (error) {
+    console.error("fetchUserVotes error:", error);
+    return [];
+  }
+
+  return (data || []).map((row) => row.issue_linear_id);
 }
 
 /**

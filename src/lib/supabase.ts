@@ -114,7 +114,7 @@ export type CustomDomain = {
   ssl_issued_at?: string
   redirect_to_https?: boolean
   is_active: boolean
-  target_type?: 'form' | 'view' | 'roadmap'
+  target_type?: 'hub'
   target_slug?: string
   last_checked_at?: string
   error_message?: string
@@ -284,6 +284,10 @@ export type ClientHub = {
   is_active: boolean
   created_by: string
   workos_org_id: string | null
+  logo_url: string | null
+  primary_color: string | null
+  accent_color: string | null
+  footer_text: string | null
   created_at: string
   updated_at: string
 }

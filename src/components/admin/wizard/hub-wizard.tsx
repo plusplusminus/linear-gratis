@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer, useTransition } from "react";
+import { useReducer, useTransition, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { StepName } from "./step-name";
@@ -8,6 +8,7 @@ import { StepTeams } from "./step-teams";
 import { StepScoping } from "./step-scoping";
 import { StepReview } from "./step-review";
 import { cn } from "@/lib/utils";
+import { refreshAdminHubs } from "@/hooks/use-admin-hubs";
 
 export interface TeamScoping {
   teamId: string;
@@ -94,6 +95,7 @@ const STEPS = ["Hub Name", "Select Teams", "Scoping", "Review"];
 export function HubWizard() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [syncing, setSyncing] = useState(false);
 
   const [state, dispatch] = useReducer(reducer, {
     step: 0,
@@ -109,10 +111,43 @@ export function HubWizard() {
         ? state.selectedTeamIds.length > 0
         : true;
 
-  function next() {
-    if (state.step < STEPS.length - 1) {
-      dispatch({ type: "SET_STEP", step: state.step + 1 });
+  async function next() {
+    if (state.step >= STEPS.length - 1) return;
+
+    // When moving from teams → scoping, sync the selected teams first
+    if (state.step === 1) {
+      setSyncing(true);
+      try {
+        const res = await fetch("/api/admin/sync/teams", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ teamIds: state.selectedTeamIds }),
+        });
+
+        if (!res.ok) {
+          const err = (await res.json()) as { error?: string };
+          throw new Error(err.error ?? "Sync failed");
+        }
+
+        const data = (await res.json()) as {
+          teamCount: number;
+          projectCount: number;
+          initiativeCount: number;
+        };
+
+        toast.success(
+          `Synced ${data.teamCount} teams, ${data.projectCount} projects, ${data.initiativeCount} initiatives`
+        );
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to sync teams");
+        setSyncing(false);
+        return;
+      } finally {
+        setSyncing(false);
+      }
     }
+
+    dispatch({ type: "SET_STEP", step: state.step + 1 });
   }
 
   function back() {
@@ -170,8 +205,8 @@ export function HubWizard() {
           toast.success("Hub created successfully");
         }
 
+        await refreshAdminHubs();
         router.push(`/admin/hubs/${hub.id}`);
-        router.refresh();
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Failed to create hub");
       }
@@ -266,15 +301,15 @@ export function HubWizard() {
         {state.step < STEPS.length - 1 ? (
           <button
             onClick={next}
-            disabled={!canNext}
+            disabled={!canNext || syncing}
             className={cn(
               "px-4 py-2 text-sm font-medium rounded-md transition-colors",
-              canNext
+              canNext && !syncing
                 ? "bg-primary text-primary-foreground hover:bg-primary/90"
                 : "bg-muted text-muted-foreground cursor-not-allowed"
             )}
           >
-            Next
+            {syncing ? "Syncing teams..." : "Next"}
           </button>
         ) : (
           <button

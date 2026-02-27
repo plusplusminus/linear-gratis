@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { withAuth } from "@workos-inc/authkit-nextjs";
 import { supabaseAdmin } from "@/lib/supabase";
-import { decryptToken } from "@/lib/encryption";
-import { runInitialSync } from "@/lib/initial-sync";
+import { runHubSync, type HubSyncResult } from "@/lib/initial-sync";
+import type { HubTeamMapping } from "@/lib/supabase";
 
+/**
+ * POST: Trigger a workspace-wide sync for all active hubs.
+ * This replaces the old per-user sync — now syncs all configured hub teams.
+ */
 export async function POST() {
   try {
     const { user } = await withAuth();
@@ -11,58 +15,62 @@ export async function POST() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get active subscription
-    const { data: sub } = await supabaseAdmin
-      .from("sync_subscriptions")
-      .select("linear_team_id")
-      .eq("user_id", user.id)
-      .eq("is_active", true)
-      .single();
+    // Get all active hubs and their team mappings
+    const { data: hubs } = await supabaseAdmin
+      .from("client_hubs")
+      .select("id")
+      .eq("is_active", true);
 
-    if (!sub) {
+    if (!hubs || hubs.length === 0) {
       return NextResponse.json(
-        { error: "No active sync subscription. Enable sync first." },
+        { error: "No active hubs configured. Create a hub in the admin panel first." },
         { status: 400 }
       );
     }
 
-    // Get Linear API token
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("linear_api_token")
-      .eq("id", user.id)
-      .single();
+    let totalIssues = 0;
+    let totalComments = 0;
+    let totalTeams = 0;
+    let totalProjects = 0;
+    let totalInitiatives = 0;
 
-    if (!profile?.linear_api_token) {
-      return NextResponse.json(
-        { error: "Linear API token not configured." },
-        { status: 400 }
+    for (const hub of hubs) {
+      const { data: mappings } = await supabaseAdmin
+        .from("hub_team_mappings")
+        .select("*")
+        .eq("hub_id", hub.id)
+        .eq("is_active", true);
+
+      if (!mappings || mappings.length === 0) continue;
+
+      const result: HubSyncResult = await runHubSync(
+        hub.id,
+        mappings as HubTeamMapping[]
       );
-    }
 
-    const apiToken = decryptToken(profile.linear_api_token);
-    const result = await runInitialSync(apiToken, user.id, sub.linear_team_id);
-
-    if (!result.success) {
-      return NextResponse.json(
-        { error: result.error || "Sync failed" },
-        { status: 500 }
-      );
+      if (result.success) {
+        totalTeams += result.teamCount;
+        totalInitiatives += result.initiativeCount;
+        for (const tr of result.teamResults) {
+          totalIssues += tr.issueCount;
+          totalComments += tr.commentCount;
+          totalProjects += tr.projectCount;
+        }
+      }
     }
 
     return NextResponse.json({
       success: true,
-      issueCount: result.issueCount,
-      commentCount: result.commentCount,
-      teamCount: result.teamCount,
-      projectCount: result.projectCount,
-      initiativeCount: result.initiativeCount,
+      issueCount: totalIssues,
+      commentCount: totalComments,
+      teamCount: totalTeams,
+      projectCount: totalProjects,
+      initiativeCount: totalInitiatives,
     });
   } catch (error) {
     console.error("POST /api/sync/initial error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    const message =
+      error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

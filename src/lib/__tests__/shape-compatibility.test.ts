@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mapRowToLinearIssue, mapRowToProject, mapRowToInitiative } from "../sync-read";
+import { mapRowToLinearIssue, mapRowToProject, mapRowToInitiative } from "../hub-read";
 import { mapIssueWebhookToRow, mapProjectWebhookToRow, mapInitiativeWebhookToRow } from "../webhook-handlers";
 
 /**

@@ -20,6 +20,22 @@ function notifyListeners() {
   listeners.forEach((fn) => fn());
 }
 
+/**
+ * Imperatively refresh the admin hubs cache from anywhere.
+ * Triggers re-render in all components using useAdminHubs().
+ */
+export async function refreshAdminHubs() {
+  try {
+    const res = await fetch("/api/admin/hubs");
+    if (!res.ok) return;
+    const data: AdminHub[] = await res.json();
+    cachedHubs = data;
+    notifyListeners();
+  } catch {
+    // silent — sidebar will show stale data until next mount
+  }
+}
+
 export function useAdminHubs() {
   const [hubs, setHubs] = useState<AdminHub[]>(cachedHubs ?? []);
   const [loading, setLoading] = useState(cachedHubs === null);

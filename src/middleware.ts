@@ -7,7 +7,7 @@ export default async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Enforce auth on protected PPM routes
-  const protectedPaths = ['/forms', '/views', '/roadmaps', '/profile', '/docs']
+  const protectedPaths = ['/profile', '/docs']
   const isProtected = protectedPaths.some(p => pathname === p || pathname.startsWith(p + '/'))
 
   if (isProtected && !session.user && authorizationUrl) {
@@ -42,6 +42,12 @@ export default async function middleware(request: NextRequest) {
 
     // If authenticated, verify org match or PPM admin status
     if (!isLoginPage && session.user) {
+      // PPM admins can access any hub
+      const isAdmin = await lookupPPMAdmin(session.user.id)
+      if (isAdmin) {
+        return handleAuthkitHeaders(request, headers)
+      }
+
       const hub = await lookupHubBySlug(slug)
 
       if (session.organizationId) {
@@ -51,11 +57,8 @@ export default async function middleware(request: NextRequest) {
           return handleAuthkitHeaders(request, headers, { redirect: loginUrl.toString() })
         }
       } else {
-        // No org in session — PPM user. Only allow if they're an admin.
-        const isAdmin = await lookupPPMAdmin(session.user.id)
-        if (!isAdmin) {
-          return new NextResponse('Forbidden', { status: 403 })
-        }
+        // No org, not admin — deny
+        return new NextResponse('Forbidden', { status: 403 })
       }
     }
 
@@ -94,20 +97,8 @@ export default async function middleware(request: NextRequest) {
       if (result.success) {
         const { domain } = result
 
-        if (domain.target_type === 'form' && domain.target_slug) {
-          const rewriteUrl = new URL(`/form/${domain.target_slug}`, request.url)
-          request.nextUrl.searchParams.forEach((value, key) => {
-            rewriteUrl.searchParams.set(key, value)
-          })
-          return NextResponse.rewrite(rewriteUrl)
-        } else if (domain.target_type === 'view' && domain.target_slug) {
-          const rewriteUrl = new URL(`/view/${domain.target_slug}`, request.url)
-          request.nextUrl.searchParams.forEach((value, key) => {
-            rewriteUrl.searchParams.set(key, value)
-          })
-          return NextResponse.rewrite(rewriteUrl)
-        } else if (domain.target_type === 'roadmap' && domain.target_slug) {
-          const rewriteUrl = new URL(`/roadmap/${domain.target_slug}`, request.url)
+        if (domain.target_type === 'hub' && domain.target_slug) {
+          const rewriteUrl = new URL(`/hub/${domain.target_slug}${pathname}`, request.url)
           request.nextUrl.searchParams.forEach((value, key) => {
             rewriteUrl.searchParams.set(key, value)
           })

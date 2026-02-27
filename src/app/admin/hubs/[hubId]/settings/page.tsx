@@ -35,6 +35,11 @@ export default async function HubSettingsPage({
           name: hub.name,
           slug: hub.slug,
           is_active: hub.is_active,
+          logo_url: hub.logo_url ?? null,
+          primary_color: hub.primary_color ?? null,
+          accent_color: hub.accent_color ?? null,
+          footer_text: hub.footer_text ?? null,
+          request_forms_enabled: hub.request_forms_enabled ?? false,
         }}
         mappings={mappings}
       />

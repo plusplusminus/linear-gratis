@@ -4,6 +4,7 @@
  */
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 /**
@@ -11,6 +12,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
  */
 export async function lookupPPMAdmin(userId: string): Promise<boolean> {
   try {
+    const key = supabaseServiceKey || supabaseAnonKey
     const url = new URL(`${supabaseUrl}/rest/v1/ppm_admins`)
     url.searchParams.set('user_id', `eq.${userId}`)
     url.searchParams.set('select', 'user_id')
@@ -18,17 +20,21 @@ export async function lookupPPMAdmin(userId: string): Promise<boolean> {
 
     const response = await fetch(url.toString(), {
       headers: {
-        'apikey': supabaseAnonKey,
-        'Authorization': `Bearer ${supabaseAnonKey}`,
+        'apikey': key,
+        'Authorization': `Bearer ${key}`,
         'Content-Type': 'application/json',
       },
     })
 
-    if (!response.ok) return false
+    if (!response.ok) {
+      console.error('[lookupPPMAdmin] Supabase error:', response.status, await response.text())
+      return false
+    }
 
     const data = await response.json() as { user_id: string }[]
     return data.length > 0
-  } catch {
+  } catch (err) {
+    console.error('[lookupPPMAdmin] error:', err)
     return false
   }
 }
@@ -51,7 +57,7 @@ export type CustomDomain = {
   ssl_issued_at?: string
   redirect_to_https?: boolean
   is_active: boolean
-  target_type?: 'form' | 'view' | 'roadmap'
+  target_type?: 'hub'
   target_slug?: string
   last_checked_at?: string
   error_message?: string
@@ -76,6 +82,7 @@ export async function lookupHubBySlug(
   slug: string
 ): Promise<{ id: string; workos_org_id: string | null } | null> {
   try {
+    const key = supabaseServiceKey || supabaseAnonKey
     const url = new URL(`${supabaseUrl}/rest/v1/client_hubs`)
     url.searchParams.set('slug', `eq.${slug}`)
     url.searchParams.set('is_active', 'eq.true')
@@ -84,8 +91,8 @@ export async function lookupHubBySlug(
 
     const response = await fetch(url.toString(), {
       headers: {
-        'apikey': supabaseAnonKey,
-        'Authorization': `Bearer ${supabaseAnonKey}`,
+        'apikey': key,
+        'Authorization': `Bearer ${key}`,
         'Content-Type': 'application/json',
       },
     })

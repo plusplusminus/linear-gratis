@@ -21,11 +21,13 @@ import {
   List,
   Columns3,
   Search,
+  Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCanInteract } from "@/hooks/use-can-interact";
 import { IssueDetailPanel } from "./issue-detail-panel";
 import { HubKanban } from "./hub-kanban";
+import { HubIssueCreationModal, type CreatedIssueData } from "./issue-creation-modal";
 
 type Issue = {
   id: string;
@@ -61,22 +63,29 @@ const STATUS_ORDER: Record<string, number> = {
 };
 
 export function ProjectIssueList({
-  issues,
+  issues: initialIssues,
   states,
   labels,
   hubId,
+  teamId,
+  projectId,
 }: {
   issues: Issue[];
   states: Array<{ id: string; name: string; color: string; type: string }>;
   labels: Array<{ id: string; name: string; color: string }>;
   hubSlug: string;
   teamKey: string;
+  teamId: string;
   projectId: string;
   hubId: string;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const isViewOnly = !useCanInteract();
+  const canInteract = useCanInteract();
+  const isViewOnly = !canInteract;
+
+  const [issues, setIssues] = useState(initialIssues);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Parse filters from URL
   const [filters, setFilters] = useState<FilterState>(() => ({
@@ -229,6 +238,21 @@ export function ProjectIssueList({
     );
   }
 
+  function handleIssueCreated(created: CreatedIssueData) {
+    const newIssue: Issue = {
+      id: created.id,
+      identifier: created.identifier,
+      title: created.title,
+      priority: created.priority,
+      priorityLabel: created.priorityLabel,
+      state: created.state,
+      labels: created.labels,
+      createdAt: created.createdAt,
+      updatedAt: created.createdAt,
+    };
+    setIssues((prev) => [newIssue, ...prev]);
+  }
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Toolbar: search, filters, view toggle, sort */}
@@ -273,6 +297,16 @@ export function ProjectIssueList({
           >
             <X className="w-3 h-3" />
             Clear
+          </button>
+        )}
+
+        {canInteract && (
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New Issue
           </button>
         )}
 
@@ -453,6 +487,16 @@ export function ProjectIssueList({
         hubId={hubId}
         isViewOnly={isViewOnly}
         onClose={() => setSelectedIssueId(null)}
+      />
+
+      {/* Issue creation modal */}
+      <HubIssueCreationModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onCreated={handleIssueCreated}
+        teamId={teamId}
+        projectId={projectId}
+        labels={labels}
       />
     </div>
   );

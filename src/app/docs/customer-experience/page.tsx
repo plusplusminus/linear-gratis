@@ -395,7 +395,7 @@ export default function CustomerExperiencePage() {
                     <li>&quot;Powered by linear.gratis&quot; removed (if toggled off)</li>
                   </ul>
                   <p>
-                    Branding is configured once in <Link href="/profile/branding" className="text-primary underline underline-offset-2">Branding</Link> and applies across all your public pages.
+                    Branding is configured per hub in the admin settings and applies across all hub pages.
                   </p>
                 </CardContent>
               </Card>

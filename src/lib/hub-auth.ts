@@ -10,7 +10,7 @@ import type { User } from "@workos-inc/node";
 export async function resolveHubBySlug(slug: string) {
   const { data } = await supabaseAdmin
     .from("client_hubs")
-    .select("id, name, slug, workos_org_id, is_active")
+    .select("id, name, slug, workos_org_id, is_active, logo_url, primary_color, accent_color, footer_text")
     .eq("slug", slug)
     .single();
 

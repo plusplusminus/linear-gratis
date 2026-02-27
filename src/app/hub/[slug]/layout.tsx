@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { resolveHubBySlug, getHubMembership } from "@/lib/hub-auth";
 import { isPPMAdmin } from "@/lib/ppm-admin";
 import { fetchHubTeams } from "@/lib/hub-read";
-import { HubProvider, type HubTeam } from "@/contexts/hub-context";
+import { HubProvider, type HubTeam, type HubBranding } from "@/contexts/hub-context";
 import { HubShell } from "@/components/hub/hub-shell";
 
 export default async function HubLayout({
@@ -37,24 +37,22 @@ export default async function HubLayout({
     redirect(`/hub/${slug}/login`);
   }
 
-  // Client users: verify session org matches this hub
-  // PPM admins: no organizationId in session, bypass org check
-  if (organizationId) {
-    if (organizationId !== hub.workos_org_id) {
-      redirect(`/hub/${slug}/login`);
-    }
-  } else {
-    const admin = await isPPMAdmin(user.id);
-    if (!admin) {
-      redirect(`/hub/${slug}/login`);
-    }
-  }
+  // PPM admins bypass all org/membership checks
+  const admin = await isPPMAdmin(user.id);
 
-  // Verify hub membership or PPM admin status
-  const membership = await getHubMembership(hub.id, user.id, user.email);
-  if (!membership) {
-    const admin = await isPPMAdmin(user.id);
-    if (!admin) {
+  if (!admin) {
+    // Client users: verify session org matches this hub
+    if (organizationId) {
+      if (organizationId !== hub.workos_org_id) {
+        redirect(`/hub/${slug}/login`);
+      }
+    } else {
+      redirect(`/hub/${slug}/login`);
+    }
+
+    // Verify hub membership
+    const membership = await getHubMembership(hub.id, user.id, user.email);
+    if (!membership) {
       return (
         <div className="flex min-h-screen items-center justify-center bg-background">
           <div className="w-full max-w-sm rounded-lg border border-border bg-card p-8 text-center">
@@ -79,12 +77,20 @@ export default async function HubLayout({
     icon: t.icon,
   }));
 
+  const branding: HubBranding = {
+    logoUrl: hub.logo_url ?? null,
+    primaryColor: hub.primary_color ?? null,
+    accentColor: hub.accent_color ?? null,
+    footerText: hub.footer_text ?? null,
+  };
+
   return (
     <HubProvider
       hubId={hub.id}
       hubSlug={hub.slug}
       hubName={hub.name}
       teams={teams}
+      branding={branding}
     >
       <HubShell>{children}</HubShell>
     </HubProvider>
