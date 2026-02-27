@@ -90,10 +90,14 @@ export function IssueDetailPanel({
   const descRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Track whether panel is being explicitly closed to avoid URL-driven reopen
+  const [closing, setClosing] = useState(false);
+
   // Resolve active issue from prop or URL
-  const activeId = issueId ?? searchParams.get("issue");
+  const activeId = closing ? null : (issueId ?? searchParams.get("issue"));
 
   const handleClose = useCallback(() => {
+    setClosing(true);
     setIssue(null);
     setComments([]);
     setHubLabels([]);
@@ -106,6 +110,11 @@ export function IssueDetailPanel({
     const qs = params.toString();
     router.replace(qs ? `?${qs}` : "?", { scroll: false });
   }, [onClose, router, searchParams]);
+
+  // Reset closing flag when a new issue is selected via prop
+  useEffect(() => {
+    if (issueId) setClosing(false);
+  }, [issueId]);
 
   // Fetch issue data
   useEffect(() => {
