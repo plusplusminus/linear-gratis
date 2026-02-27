@@ -331,7 +331,7 @@ export async function fetchAllIssues(
   return allIssues;
 }
 
-async function fetchCommentsForIssue(
+export async function fetchCommentsForIssue(
   apiToken: string,
   issueId: string
 ): Promise<LinearGqlComment[]> {
@@ -443,7 +443,7 @@ export function mapIssueToRow(issue: LinearGqlIssue, userId: string) {
   };
 }
 
-function mapCommentToRow(
+export function mapCommentToRow(
   comment: LinearGqlComment,
   issueLinearId: string,
   userId: string

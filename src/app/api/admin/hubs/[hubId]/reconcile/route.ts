@@ -7,10 +7,12 @@ import {
   fetchAllTeams,
   fetchAllProjects,
   fetchAllInitiatives,
+  fetchCommentsForIssue,
   mapIssueToRow,
   mapTeamToRow,
   mapProjectToRow,
   mapInitiativeToRow,
+  mapCommentToRow,
   batchUpsert,
 } from "@/lib/initial-sync";
 
@@ -67,6 +69,7 @@ export async function POST(
       teamsUpserted: 0,
       projectsUpserted: 0,
       issuesUpserted: 0,
+      commentsUpserted: 0,
       initiativesUpserted: 0,
       errors: 0,
     };
@@ -124,6 +127,23 @@ export async function POST(
           );
         }
         result.issuesUpserted += issues.length;
+
+        // Comments: fetch per issue and batch upsert
+        for (const issue of issues) {
+          try {
+            const comments = await fetchCommentsForIssue(apiToken, issue.id);
+            if (comments.length > 0) {
+              await batchUpsert(
+                "synced_comments",
+                comments.map((c) => mapCommentToRow(c, issue.id, WORKSPACE_USER_ID)),
+                "user_id,linear_id"
+              );
+              result.commentsUpserted += comments.length;
+            }
+          } catch (commentError) {
+            console.error(`Hub ${hubId} reconcile: comments for issue ${issue.id} failed:`, commentError);
+          }
+        }
       } catch (error) {
         console.error(
           `Hub ${hubId} reconcile: team ${mapping.linear_team_id} failed:`,

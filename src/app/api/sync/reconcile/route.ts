@@ -7,10 +7,12 @@ import {
   fetchAllTeams,
   fetchAllProjects,
   fetchAllInitiatives,
+  fetchCommentsForIssue,
   mapIssueToRow,
   mapTeamToRow,
   mapProjectToRow,
   mapInitiativeToRow,
+  mapCommentToRow,
   batchUpsert,
 } from "@/lib/initial-sync";
 
@@ -20,6 +22,7 @@ type HubReconcileResult = {
   hubsReconciled: number;
   teamsReconciled: number;
   issuesUpserted: number;
+  commentsUpserted: number;
   teamsUpserted: number;
   projectsUpserted: number;
   initiativesUpserted: number;
@@ -85,6 +88,7 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
     hubsReconciled: 0,
     teamsReconciled: 0,
     issuesUpserted: 0,
+    commentsUpserted: 0,
     teamsUpserted: 0,
     projectsUpserted: 0,
     initiativesUpserted: 0,
@@ -166,6 +170,23 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
       }
       result.issuesUpserted += issues.length;
 
+      // Comments: fetch per issue and batch upsert
+      for (const issue of issues) {
+        try {
+          const comments = await fetchCommentsForIssue(apiToken, issue.id);
+          if (comments.length > 0) {
+            await batchUpsert(
+              "synced_comments",
+              comments.map((c) => mapCommentToRow(c, issue.id, WORKSPACE_USER_ID)),
+              "user_id,linear_id"
+            );
+            result.commentsUpserted += comments.length;
+          }
+        } catch (commentError) {
+          console.error(`Reconcile: comments for issue ${issue.id} failed:`, commentError);
+        }
+      }
+
       result.teamsReconciled++;
     } catch (error) {
       console.error(
@@ -180,7 +201,8 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
 
   console.log(
     `Reconcile complete: ${result.hubsReconciled} hubs, ${result.teamsReconciled} teams, ` +
-      `${result.issuesUpserted} issues, ${result.projectsUpserted} projects, ` +
+      `${result.issuesUpserted} issues, ${result.commentsUpserted} comments, ` +
+      `${result.projectsUpserted} projects, ` +
       `${result.initiativesUpserted} initiatives, ${result.errors} errors`
   );
 
