@@ -9,8 +9,8 @@ type HistoryNode = {
   toState?: { name: string; color: string; type: string } | null;
   fromPriority?: number | null;
   toPriority?: number | null;
-  addedLabels?: { nodes: Array<{ name: string; color: string }> };
-  removedLabels?: { nodes: Array<{ name: string; color: string }> };
+  addedLabels?: Array<{ name: string; color: string }>;
+  removedLabels?: Array<{ name: string; color: string }>;
   // Assignee fields — fetched but filtered out
   fromAssignee?: unknown;
   toAssignee?: unknown;
@@ -64,8 +64,8 @@ export async function GET(
               toState { name color type }
               fromPriority
               toPriority
-              addedLabels { nodes { name color } }
-              removedLabels { nodes { name color } }
+              addedLabels { name color }
+              removedLabels { name color }
               fromAssignee { id }
               toAssignee { id }
             }
@@ -88,7 +88,7 @@ export async function GET(
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Linear API error:", errorText);
+      console.error("Linear API error (HTTP):", response.status, errorText);
       return NextResponse.json(
         { error: "Failed to fetch issue history" },
         { status: 502 }
@@ -97,21 +97,26 @@ export async function GET(
 
     const result = (await response.json()) as {
       data?: {
-        issue: {
+        issue?: {
           history: {
             nodes: HistoryNode[];
           };
-        };
+        } | null;
       };
       errors?: Array<{ message: string }>;
     };
 
-    if (result.errors || !result.data?.issue) {
-      console.error("GraphQL errors:", result.errors);
+    if (result.errors) {
+      console.error("GraphQL errors for issue", linearId, ":", JSON.stringify(result.errors));
       return NextResponse.json(
         { error: "Failed to fetch issue history" },
         { status: 502 }
       );
+    }
+
+    if (!result.data?.issue) {
+      // Issue not found in Linear — return empty history instead of 502
+      return NextResponse.json({ history: [], priorityLabels: PRIORITY_LABELS });
     }
 
     // Filter: only keep state, priority, and label changes.
@@ -146,8 +151,8 @@ export async function GET(
       }
 
       // Label changes
-      const added = node.addedLabels?.nodes ?? [];
-      const removed = node.removedLabels?.nodes ?? [];
+      const added = node.addedLabels ?? [];
+      const removed = node.removedLabels ?? [];
       if (added.length > 0 || removed.length > 0) {
         entries.push({
           id: node.id,

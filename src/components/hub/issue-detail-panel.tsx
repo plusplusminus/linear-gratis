@@ -384,6 +384,7 @@ function StatusIcon({
   const s = { width: size, height: size };
 
   switch (type) {
+    case "triage":
     case "backlog":
       return <CircleDashed style={{ ...style, ...s }} />;
     case "unstarted":

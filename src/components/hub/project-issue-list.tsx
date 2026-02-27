@@ -55,11 +55,12 @@ type SortDir = "asc" | "desc";
 
 // Status type ordering for grouping
 const STATUS_ORDER: Record<string, number> = {
-  backlog: 0,
-  unstarted: 1,
-  started: 2,
-  completed: 3,
-  cancelled: 4,
+  triage: 0,
+  backlog: 1,
+  unstarted: 2,
+  started: 3,
+  completed: 4,
+  cancelled: 5,
 };
 
 export function ProjectIssueList({
@@ -575,6 +576,7 @@ function StatusIcon({ type, color }: { type: string; color: string }) {
   const style = { color: color || "var(--muted-foreground)" };
   const cls = "w-3.5 h-3.5 shrink-0";
   switch (type) {
+    case "triage":
     case "backlog":
       return <CircleDashed className={cls} style={style} />;
     case "unstarted":
