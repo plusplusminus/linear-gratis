@@ -105,8 +105,8 @@ export function ProjectUpdates({
     };
   }, [hubId, projectId]);
 
-  // Don't render anything if no updates and done loading
-  if (!loading && !error && updates.length === 0) {
+  // Don't render anything while loading or if no updates
+  if (loading || (!error && updates.length === 0)) {
     return null;
   }
 
