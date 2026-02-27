@@ -18,10 +18,14 @@ import {
   Calendar,
   Filter,
   X,
+  List,
+  Columns3,
+  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCanInteract } from "@/hooks/use-can-interact";
 import { IssueDetailPanel } from "./issue-detail-panel";
+import { HubKanban } from "./hub-kanban";
 
 type Issue = {
   id: string;
@@ -37,11 +41,13 @@ type Issue = {
 };
 
 type FilterState = {
+  search: string;
   statuses: string[];
   priorities: number[];
   labelIds: string[];
 };
 
+type ViewMode = "list" | "kanban";
 type SortField = "priority" | "dueDate" | "createdAt";
 type SortDir = "asc" | "desc";
 
@@ -74,10 +80,15 @@ export function ProjectIssueList({
 
   // Parse filters from URL
   const [filters, setFilters] = useState<FilterState>(() => ({
+    search: searchParams.get("q") ?? "",
     statuses: searchParams.getAll("status"),
     priorities: searchParams.getAll("priority").map(Number).filter((n) => !isNaN(n)),
     labelIds: searchParams.getAll("label"),
   }));
+
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    () => (searchParams.get("view") as ViewMode) || "list"
+  );
 
   const [sort, setSort] = useState<{ field: SortField; dir: SortDir }>({
     field: "priority",
@@ -92,20 +103,41 @@ export function ProjectIssueList({
   );
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
 
-  // Update URL params when filters change
-  function updateFilters(next: FilterState) {
-    setFilters(next);
+  // Update URL params when filters/view change
+  function updateUrl(next: FilterState, view: ViewMode) {
     const params = new URLSearchParams();
+    if (next.search) params.set("q", next.search);
     next.statuses.forEach((s) => params.append("status", s));
     next.priorities.forEach((p) => params.append("priority", String(p)));
     next.labelIds.forEach((l) => params.append("label", l));
+    if (view !== "list") params.set("view", view);
     const qs = params.toString();
     router.replace(qs ? `?${qs}` : "?", { scroll: false });
+  }
+
+  function updateFilters(next: FilterState) {
+    setFilters(next);
+    updateUrl(next, viewMode);
+  }
+
+  function changeView(view: ViewMode) {
+    setViewMode(view);
+    updateUrl(filters, view);
   }
 
   // Filter issues
   const filtered = useMemo(() => {
     return issues.filter((issue) => {
+      // Text search
+      if (filters.search) {
+        const q = filters.search.toLowerCase();
+        if (
+          !issue.title.toLowerCase().includes(q) &&
+          !issue.identifier.toLowerCase().includes(q)
+        ) {
+          return false;
+        }
+      }
       if (
         filters.statuses.length > 0 &&
         !filters.statuses.includes(issue.state.name)
@@ -149,7 +181,7 @@ export function ProjectIssueList({
     return copy;
   }, [filtered, sort]);
 
-  // Group by status type
+  // Group by status type (for list view)
   const groups = useMemo(() => {
     const map = new Map<
       string,
@@ -164,7 +196,6 @@ export function ProjectIssueList({
       map.get(key)!.issues.push(issue);
     }
 
-    // Sort groups by status type order
     return Array.from(map.entries()).sort(([, a], [, b]) => {
       const oa = STATUS_ORDER[a.state.type] ?? 1;
       const ob = STATUS_ORDER[b.state.type] ?? 1;
@@ -173,9 +204,13 @@ export function ProjectIssueList({
   }, [sorted]);
 
   const hasActiveFilters =
+    filters.search.length > 0 ||
     filters.statuses.length > 0 ||
     filters.priorities.length > 0 ||
     filters.labelIds.length > 0;
+
+  const activeFilterCount =
+    filters.statuses.length + filters.priorities.length + filters.labelIds.length;
 
   function toggleGroup(name: string) {
     setCollapsedGroups((prev) => {
@@ -196,31 +231,44 @@ export function ProjectIssueList({
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      {/* Filter bar */}
+      {/* Toolbar: search, filters, view toggle, sort */}
       <div className="px-6 py-2 border-b border-border flex items-center gap-2 shrink-0">
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search issues..."
+            value={filters.search}
+            onChange={(e) => updateFilters({ ...filters, search: e.target.value })}
+            className="pl-7 pr-2 py-1 w-40 rounded-md border border-border bg-background text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+        </div>
+
+        {/* Filter toggle */}
         <button
           onClick={() => setShowFilters(!showFilters)}
           className={cn(
             "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-colors",
-            showFilters || hasActiveFilters
+            showFilters || activeFilterCount > 0
               ? "bg-accent text-foreground"
               : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
           )}
         >
           <Filter className="w-3.5 h-3.5" />
           Filter
-          {hasActiveFilters && (
+          {activeFilterCount > 0 && (
             <span className="ml-0.5 px-1 py-0 rounded bg-primary text-primary-foreground text-[10px]">
-              {filters.statuses.length +
-                filters.priorities.length +
-                filters.labelIds.length}
+              {activeFilterCount}
             </span>
           )}
         </button>
 
         {hasActiveFilters && (
           <button
-            onClick={() => updateFilters({ statuses: [], priorities: [], labelIds: [] })}
+            onClick={() =>
+              updateFilters({ search: "", statuses: [], priorities: [], labelIds: [] })
+            }
             className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
           >
             <X className="w-3 h-3" />
@@ -230,32 +278,62 @@ export function ProjectIssueList({
 
         <div className="flex-1" />
 
-        {/* Sort controls */}
-        <div className="flex items-center gap-1">
-          <span className="text-[10px] text-muted-foreground mr-1">Sort:</span>
-          {(["priority", "dueDate", "createdAt"] as SortField[]).map((field) => (
-            <button
-              key={field}
-              onClick={() => toggleSort(field)}
-              className={cn(
-                "px-1.5 py-0.5 rounded text-[10px] transition-colors",
-                sort.field === field
-                  ? "bg-accent text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {field === "priority"
-                ? "Priority"
-                : field === "dueDate"
-                  ? "Due"
-                  : "Created"}
-              {sort.field === field && (sort.dir === "asc" ? " ↑" : " ↓")}
-            </button>
-          ))}
+        {/* View toggle */}
+        <div className="flex items-center border border-border rounded-md overflow-hidden">
+          <button
+            onClick={() => changeView("list")}
+            className={cn(
+              "flex items-center gap-1 px-2 py-1 text-xs transition-colors",
+              viewMode === "list"
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <List className="w-3.5 h-3.5" />
+            List
+          </button>
+          <button
+            onClick={() => changeView("kanban")}
+            className={cn(
+              "flex items-center gap-1 px-2 py-1 text-xs transition-colors",
+              viewMode === "kanban"
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Columns3 className="w-3.5 h-3.5" />
+            Board
+          </button>
         </div>
+
+        {/* Sort controls (list view only) */}
+        {viewMode === "list" && (
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] text-muted-foreground mr-1">Sort:</span>
+            {(["priority", "dueDate", "createdAt"] as SortField[]).map((field) => (
+              <button
+                key={field}
+                onClick={() => toggleSort(field)}
+                className={cn(
+                  "px-1.5 py-0.5 rounded text-[10px] transition-colors",
+                  sort.field === field
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {field === "priority"
+                  ? "Priority"
+                  : field === "dueDate"
+                    ? "Due"
+                    : "Created"}
+                {sort.field === field && (sort.dir === "asc" ? " \u2191" : " \u2193")}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Filter dropdowns */}
+      {/* Filter chips */}
       {showFilters && (
         <div className="px-6 py-2 border-b border-border flex flex-wrap gap-3 shrink-0">
           {/* Status filter */}
@@ -315,53 +393,59 @@ export function ProjectIssueList({
         </div>
       )}
 
-      {/* Issue list */}
-      <div className="flex-1 overflow-y-auto">
-        {groups.length === 0 ? (
-          <div className="p-10 text-center">
-            <p className="text-sm text-muted-foreground">
-              {hasActiveFilters
-                ? "No issues match the current filters"
-                : "No issues in this project"}
-            </p>
-          </div>
-        ) : (
-          groups.map(([groupName, group]) => {
-            const isCollapsed = collapsedGroups.has(groupName);
-            return (
-              <div key={groupName}>
-                {/* Group header */}
-                <button
-                  onClick={() => toggleGroup(groupName)}
-                  className="w-full flex items-center gap-2 px-6 py-2 text-xs font-medium hover:bg-accent/30 transition-colors sticky top-0 bg-background z-10 border-b border-border"
-                >
-                  {isCollapsed ? (
-                    <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
-                  ) : (
-                    <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
-                  )}
-                  <StatusIcon type={group.state.type} color={group.state.color} />
-                  <span>{groupName}</span>
-                  <span className="text-muted-foreground tabular-nums">
-                    {group.issues.length}
-                  </span>
-                </button>
+      {/* Content area */}
+      {viewMode === "kanban" ? (
+        <div className="flex-1 overflow-x-auto overflow-y-auto p-4">
+          <HubKanban issues={sorted} onIssueClick={setSelectedIssueId} />
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto">
+          {groups.length === 0 ? (
+            <div className="p-10 text-center">
+              <p className="text-sm text-muted-foreground">
+                {hasActiveFilters
+                  ? "No issues match the current filters"
+                  : "No issues in this project"}
+              </p>
+            </div>
+          ) : (
+            groups.map(([groupName, group]) => {
+              const isCollapsed = collapsedGroups.has(groupName);
+              return (
+                <div key={groupName}>
+                  {/* Group header */}
+                  <button
+                    onClick={() => toggleGroup(groupName)}
+                    className="w-full flex items-center gap-2 px-6 py-2 text-xs font-medium hover:bg-accent/30 transition-colors sticky top-0 bg-background z-10 border-b border-border"
+                  >
+                    {isCollapsed ? (
+                      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                    )}
+                    <StatusIcon type={group.state.type} color={group.state.color} />
+                    <span>{groupName}</span>
+                    <span className="text-muted-foreground tabular-nums">
+                      {group.issues.length}
+                    </span>
+                  </button>
 
-                {/* Issue rows */}
-                {!isCollapsed &&
-                  group.issues.map((issue) => (
-                    <IssueRow
-                      key={issue.id}
-                      issue={issue}
-                      selected={selectedIssueId === issue.id}
-                      onClick={() => setSelectedIssueId(issue.id)}
-                    />
-                  ))}
-              </div>
-            );
-          })
-        )}
-      </div>
+                  {/* Issue rows */}
+                  {!isCollapsed &&
+                    group.issues.map((issue) => (
+                      <IssueRow
+                        key={issue.id}
+                        issue={issue}
+                        selected={selectedIssueId === issue.id}
+                        onClick={() => setSelectedIssueId(issue.id)}
+                      />
+                    ))}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
 
       {/* Issue detail panel */}
       <IssueDetailPanel
@@ -400,18 +484,11 @@ function IssueRow({
         selected && "bg-accent/50"
       )}
     >
-      {/* Status icon */}
       <StatusIcon type={issue.state.type} color={issue.state.color} />
-
-      {/* Identifier */}
       <span className="text-[11px] font-mono text-muted-foreground shrink-0 w-16">
         {issue.identifier}
       </span>
-
-      {/* Title */}
       <span className="text-sm truncate flex-1 min-w-0">{issue.title}</span>
-
-      {/* Labels */}
       {issue.labels.length > 0 && (
         <div className="flex items-center gap-1 shrink-0">
           {issue.labels.slice(0, 3).map((label) => (
@@ -430,11 +507,7 @@ function IssueRow({
           )}
         </div>
       )}
-
-      {/* Priority */}
       <PriorityIcon priority={issue.priority} />
-
-      {/* Due date */}
       {issue.dueDate && (
         <span
           className={cn(
@@ -454,16 +527,9 @@ function IssueRow({
   );
 }
 
-function StatusIcon({
-  type,
-  color,
-}: {
-  type: string;
-  color: string;
-}) {
+function StatusIcon({ type, color }: { type: string; color: string }) {
   const style = { color: color || "var(--muted-foreground)" };
   const cls = "w-3.5 h-3.5 shrink-0";
-
   switch (type) {
     case "backlog":
       return <CircleDashed className={cls} style={style} />;
