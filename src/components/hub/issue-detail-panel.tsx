@@ -28,6 +28,7 @@ import {
   History,
   ArrowRight,
   Tag,
+  Reply,
 } from "lucide-react";
 
 type IssueDetail = {
@@ -46,13 +47,16 @@ type IssueDetail = {
 
 type Comment = {
   id: string;
+  linearId?: string;
   body: string;
+  parentId?: string;
   createdAt: string;
   updatedAt: string;
   user: { id: string; name: string };
   isHubComment?: boolean;
   push_status?: string;
   push_error?: string;
+  children?: Comment[];
 };
 
 type HistoryEntry = {
@@ -82,6 +86,7 @@ export function IssueDetailPanel({
   const searchParams = useSearchParams();
   const [issue, setIssue] = useState<IssueDetail | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
+  const [replyingTo, setReplyingTo] = useState<{ parentId: string; authorName: string } | null>(null);
   const [hubLabels, setHubLabels] = useState<Array<{ id: string; name: string; color: string }>>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -307,7 +312,7 @@ export function IssueDetailPanel({
                     Comments
                     {comments.length > 0 && (
                       <span className="text-muted-foreground font-normal ml-1">
-                        ({comments.length})
+                        ({comments.reduce((n, c) => n + 1 + (c.children?.length ?? 0), 0)})
                       </span>
                     )}
                   </h3>
@@ -320,7 +325,11 @@ export function IssueDetailPanel({
                 ) : (
                   <div className="space-y-3">
                     {comments.map((comment) => (
-                      <CommentBubble key={comment.id} comment={comment} />
+                      <CommentThread
+                        key={comment.id}
+                        comment={comment}
+                        onReply={isViewOnly ? undefined : (parentId, authorName) => setReplyingTo({ parentId, authorName })}
+                      />
                     ))}
                   </div>
                 )}
@@ -353,8 +362,21 @@ export function IssueDetailPanel({
               <CommentComposer
                 hubId={hubId}
                 issueLinearId={issue.id}
+                replyingTo={replyingTo}
+                onCancelReply={() => setReplyingTo(null)}
                 onCommentAdded={(comment) => {
-                  setComments((prev) => [...prev, comment]);
+                  if (comment.parentId) {
+                    // Insert reply under its parent thread
+                    setComments((prev) =>
+                      prev.map((c) =>
+                        c.linearId === comment.parentId || c.id === comment.parentId
+                          ? { ...c, children: [...(c.children ?? []), comment] }
+                          : c
+                      )
+                    );
+                  } else {
+                    setComments((prev) => [...prev, comment]);
+                  }
                 }}
               />
             )}
@@ -455,7 +477,42 @@ function DueDateBadge({ dueDate }: { dueDate: string }) {
   );
 }
 
-function CommentBubble({ comment }: { comment: Comment }) {
+function CommentThread({
+  comment,
+  onReply,
+}: {
+  comment: Comment;
+  onReply?: (parentId: string, authorName: string) => void;
+}) {
+  const replies = comment.children ?? [];
+  // The parentId for replies should be the Linear comment ID of this thread's root
+  const parentLinearId = comment.linearId ?? comment.id;
+  return (
+    <div>
+      <CommentBubble
+        comment={comment}
+        onReply={onReply ? () => onReply(parentLinearId, comment.user.name) : undefined}
+      />
+      {replies.length > 0 && (
+        <div className="ml-4 mt-1 border-l-2 border-border pl-3 space-y-1">
+          {replies.map((reply) => (
+            <CommentBubble key={reply.id} comment={reply} compact />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CommentBubble({
+  comment,
+  compact,
+  onReply,
+}: {
+  comment: Comment;
+  compact?: boolean;
+  onReply?: () => void;
+}) {
   const isHub = comment.isHubComment;
   const isFailed = comment.push_status === "failed";
   const isPending = comment.push_status === "pending";
@@ -463,7 +520,8 @@ function CommentBubble({ comment }: { comment: Comment }) {
   return (
     <div
       className={cn(
-        "rounded-lg p-3",
+        "rounded-lg",
+        compact ? "p-2" : "p-3",
         isHub ? "bg-accent/50 border border-border" : "bg-muted/50",
         isFailed && "border-destructive/30"
       )}
@@ -495,6 +553,15 @@ function CommentBubble({ comment }: { comment: Comment }) {
           {comment.body}
         </ReactMarkdown>
       </div>
+      {onReply && (
+        <button
+          onClick={onReply}
+          className="flex items-center gap-1 mt-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Reply className="w-3 h-3" />
+          Reply
+        </button>
+      )}
     </div>
   );
 }

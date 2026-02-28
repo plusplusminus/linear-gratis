@@ -335,6 +335,7 @@ export type HubComment = {
   hub_id: string
   issue_linear_id: string
   linear_comment_id: string | null
+  parent_comment_id: string | null
   author_user_id: string
   author_name: string
   author_email: string | null
