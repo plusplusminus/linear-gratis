@@ -3,7 +3,7 @@ import { withHubAuth, withHubAuthWrite, type HubAuthError } from "@/lib/hub-auth
 import {
   fetchHubIssueDetail,
   fetchHubComments,
-  fetchHubMetadata,
+  fetchHubTeamLabels,
   getHubVisibleLabelIds,
 } from "@/lib/hub-read";
 import { supabaseAdmin } from "@/lib/supabase";
@@ -24,20 +24,22 @@ export async function GET(
       );
     }
 
-    const [issue, comments, metadata] = await Promise.all([
+    const [issue, comments] = await Promise.all([
       fetchHubIssueDetail(hubId, linearId),
       fetchHubComments(hubId, linearId),
-      fetchHubMetadata(hubId),
     ]);
 
     if (!issue) {
       return NextResponse.json({ error: "Issue not found" }, { status: 404 });
     }
 
+    // Fetch label definitions from Linear, scoped to the issue's team
+    const hubLabels = await fetchHubTeamLabels(hubId, issue.teamId);
+
     return NextResponse.json({
       issue,
       comments,
-      hubLabels: metadata.labels,
+      hubLabels,
     });
   } catch (error) {
     console.error("GET /api/hub/[hubId]/issues/[linearId] error:", error);
@@ -76,25 +78,27 @@ export async function POST(
       );
     }
 
-    // Verify the label is hub-visible
-    const allowedLabelIds = await getHubVisibleLabelIds(hubId);
-    if (allowedLabelIds && !allowedLabelIds.includes(labelId)) {
-      return NextResponse.json(
-        { error: "Label not visible in this hub" },
-        { status: 403 }
-      );
-    }
-
-    // Get current issue labels from synced data
+    // Look up the issue's team_id for per-team label scoping
     const { data: issueRow } = await supabaseAdmin
       .from("synced_issues")
-      .select("data")
+      .select("data, team_id")
       .eq("user_id", "workspace")
       .eq("linear_id", linearId)
       .single();
 
     if (!issueRow) {
       return NextResponse.json({ error: "Issue not found" }, { status: 404 });
+    }
+
+    const issueTeamId = issueRow.team_id as string;
+
+    // Verify the label is visible for this issue's team
+    const allowedLabelIds = await getHubVisibleLabelIds(hubId, issueTeamId);
+    if (allowedLabelIds && !allowedLabelIds.includes(labelId)) {
+      return NextResponse.json(
+        { error: "Label not visible in this hub" },
+        { status: 403 }
+      );
     }
 
     const issueData = issueRow.data as Record<string, unknown>;

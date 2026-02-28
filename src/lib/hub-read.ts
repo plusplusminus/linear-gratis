@@ -1,4 +1,5 @@
 import { supabaseAdmin, type HubTeamMapping, type HubMemberRole } from "./supabase";
+import { getWorkspaceToken } from "./workspace";
 import type { LinearIssue, RoadmapIssue } from "./linear";
 
 const WORKSPACE_USER_ID = "workspace";
@@ -335,20 +336,17 @@ function mergeVisibility(
   mappings: HubTeamMapping[],
   field: "visible_project_ids" | "visible_initiative_ids" | "visible_label_ids"
 ): string[] | null {
-  let hasUnscoped = false;
   const ids = new Set<string>();
 
   for (const m of mappings) {
     const arr = m[field];
-    if (!arr || arr.length === 0) {
-      hasUnscoped = true;
-    } else {
+    if (arr && arr.length > 0) {
       for (const id of arr) ids.add(id);
     }
+    // Empty array = nothing configured for this team → contributes nothing
   }
 
-  // If any mapping is unscoped, don't filter
-  if (hasUnscoped) return null;
+  // Union of all configured IDs. Empty = nothing configured = nothing visible.
   return Array.from(ids);
 }
 
@@ -360,16 +358,34 @@ function stripAssignee<T extends LinearIssue>(issue: T): T {
 }
 
 /**
- * Filter labels on an issue to only those visible in the hub.
+ * Get visible label IDs for a specific team within a hub.
+ * Returns null if the team has no label restrictions (empty config).
+ * Returns empty array if the team isn't found in mappings.
  */
-function filterLabels<T extends LinearIssue>(
+function getTeamLabelIds(
+  mappings: HubTeamMapping[],
+  teamId: string
+): string[] | null {
+  const mapping = mappings.find((m) => m.linear_team_id === teamId);
+  if (!mapping) return [];
+  const arr = mapping.visible_label_ids;
+  if (!arr || arr.length === 0) return [];
+  return arr;
+}
+
+/**
+ * Filter labels on an issue using the per-team visibility config.
+ */
+function filterLabelsByTeam<T extends LinearIssue>(
   issue: T,
-  allowedLabelIds: string[] | null
+  mappings: HubTeamMapping[],
+  teamId: string
 ): T {
-  if (!allowedLabelIds) return issue;
+  const allowed = getTeamLabelIds(mappings, teamId);
+  if (!allowed) return issue;
   return {
     ...issue,
-    labels: issue.labels.filter((l) => allowedLabelIds.includes(l.id)),
+    labels: issue.labels.filter((l) => allowed.includes(l.id)),
   };
 }
 
@@ -392,7 +408,6 @@ export async function fetchHubIssues(
 
   const teamIds = mappings.map((m) => m.linear_team_id);
   const allowedProjectIds = mergeVisibility(mappings, "visible_project_ids");
-  const allowedLabelIds = mergeVisibility(mappings, "visible_label_ids");
 
   // If a specific teamId is requested, verify it belongs to this hub
   if (options?.teamId && !teamIds.includes(options.teamId)) {
@@ -406,7 +421,7 @@ export async function fetchHubIssues(
 
   let query = supabaseAdmin
     .from("synced_issues")
-    .select("linear_id, data, created_at, updated_at")
+    .select("linear_id, data, created_at, updated_at, team_id")
     .eq("user_id", WORKSPACE_USER_ID)
     .in("team_id", options?.teamId ? [options.teamId] : teamIds)
     .order("updated_at", { ascending: false });
@@ -429,10 +444,9 @@ export async function fetchHubIssues(
   }
 
   return (data || []).map((row) => {
-    const issue = mapRowToLinearIssue(
-      row as { linear_id: string; data: Record<string, unknown>; created_at: string; updated_at: string }
-    );
-    return filterLabels(stripAssignee(issue), allowedLabelIds);
+    const r = row as { linear_id: string; data: Record<string, unknown>; created_at: string; updated_at: string; team_id: string };
+    const issue = mapRowToLinearIssue(r);
+    return filterLabelsByTeam(stripAssignee(issue), mappings, r.team_id);
   });
 }
 
@@ -448,7 +462,6 @@ export async function fetchHubIssueDetail(
   if (mappings.length === 0) return null;
 
   const teamIds = mappings.map((m) => m.linear_team_id);
-  const allowedLabelIds = mergeVisibility(mappings, "visible_label_ids");
 
   const { data: row } = await supabaseAdmin
     .from("synced_issues")
@@ -464,10 +477,15 @@ export async function fetchHubIssueDetail(
   );
   const d = row.data as Record<string, unknown>;
 
-  return filterLabels(stripAssignee({
+  const detailed = stripAssignee({
     ...issue,
     dueDate: (d.dueDate as string) ?? undefined,
-  }), allowedLabelIds);
+  });
+
+  return {
+    ...filterLabelsByTeam(detailed, mappings, row.team_id),
+    teamId: row.team_id as string,
+  };
 }
 
 /**
@@ -481,7 +499,6 @@ export async function fetchHubRoadmapIssues(
   if (mappings.length === 0) return [];
 
   const allowedProjectIds = mergeVisibility(mappings, "visible_project_ids");
-  const allowedLabelIds = mergeVisibility(mappings, "visible_label_ids");
 
   // Filter requested projectIds to only those visible in the hub
   const filteredProjectIds = allowedProjectIds
@@ -492,7 +509,7 @@ export async function fetchHubRoadmapIssues(
 
   const { data, error } = await supabaseAdmin
     .from("synced_issues")
-    .select("linear_id, data, created_at, updated_at")
+    .select("linear_id, data, created_at, updated_at, team_id")
     .eq("user_id", WORKSPACE_USER_ID)
     .in("project_id", filteredProjectIds)
     .order("updated_at", { ascending: false });
@@ -503,11 +520,10 @@ export async function fetchHubRoadmapIssues(
   }
 
   return (data || []).map((row) => {
-    const d = row.data as Record<string, unknown>;
-    const issue = mapRowToLinearIssue(
-      row as { linear_id: string; data: Record<string, unknown>; created_at: string; updated_at: string }
-    );
-    return filterLabels(stripAssignee({
+    const r = row as { linear_id: string; data: Record<string, unknown>; created_at: string; updated_at: string; team_id: string };
+    const d = r.data;
+    const issue = mapRowToLinearIssue(r);
+    return filterLabelsByTeam(stripAssignee({
       ...issue,
       dueDate: (d.dueDate as string) ?? undefined,
       project: d.project
@@ -517,7 +533,7 @@ export async function fetchHubRoadmapIssues(
             color: (d.project as Record<string, unknown>).color as string | undefined,
           }
         : undefined,
-    }), allowedLabelIds);
+    }), mappings, r.team_id);
   });
 }
 
@@ -821,14 +837,59 @@ export async function fetchUserVotes(
 }
 
 /**
- * Get the set of hub-visible label IDs.
- * Returns null if unscoped (all labels visible).
+ * Get the set of hub-visible label IDs for a specific team.
+ * Returns empty array if the team has no labels configured (= nothing visible).
  */
 export async function getHubVisibleLabelIds(
-  hubId: string
+  hubId: string,
+  teamId: string
 ): Promise<string[] | null> {
   const mappings = await getHubMappings(hubId);
-  return mergeVisibility(mappings, "visible_label_ids");
+  return getTeamLabelIds(mappings, teamId);
+}
+
+/**
+ * Fetch the full label definitions (id, name, color) for a team's visible labels.
+ * Queries the Linear API for the team's labels and filters to the hub's configured visible set.
+ * Returns empty array if no labels are configured for the team.
+ */
+export async function fetchHubTeamLabels(
+  hubId: string,
+  teamId: string
+): Promise<Array<{ id: string; name: string; color: string }>> {
+  const mappings = await getHubMappings(hubId);
+  const allowedIds = getTeamLabelIds(mappings, teamId);
+
+  // No labels configured or empty = nothing visible
+  if (!allowedIds || allowedIds.length === 0) return [];
+
+  const token = await getWorkspaceToken();
+  const res = await fetch("https://api.linear.app/graphql", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: token,
+    },
+    body: JSON.stringify({
+      query: `
+        query TeamLabels($teamId: String!) {
+          team(id: $teamId) {
+            labels(first: 250) {
+              nodes { id name color }
+            }
+          }
+        }
+      `,
+      variables: { teamId },
+    }),
+  });
+
+  const result = (await res.json()) as {
+    data?: { team?: { labels: { nodes: Array<{ id: string; name: string; color: string }> } } };
+  };
+
+  const allLabels = result.data?.team?.labels.nodes ?? [];
+  return allLabels.filter((l) => allowedIds.includes(l.id));
 }
 
 /**
@@ -843,16 +904,21 @@ export async function fetchHubMetadata(
   if (mappings.length === 0) return { states: [], labels: [] };
 
   const teamIds = mappings.map((m) => m.linear_team_id);
-  const allowedLabelIds = mergeVisibility(mappings, "visible_label_ids");
 
   // If a specific teamId is requested, verify it belongs to this hub
   if (options?.teamId && !teamIds.includes(options.teamId)) {
     return { states: [], labels: [] };
   }
 
+  // For labels, scope to the requested team only
+  const labelTeamId = options?.teamId;
+  const allowedLabelIds = labelTeamId
+    ? getTeamLabelIds(mappings, labelTeamId)
+    : null; // No team context = no label filtering (callers should provide teamId)
+
   let query = supabaseAdmin
     .from("synced_issues")
-    .select("data")
+    .select("data, team_id")
     .eq("user_id", WORKSPACE_USER_ID)
     .in("team_id", options?.teamId ? [options.teamId] : teamIds);
 
@@ -866,6 +932,7 @@ export async function fetchHubMetadata(
 
   for (const row of data) {
     const d = row.data as Record<string, unknown>;
+    const rowTeamId = (row as Record<string, unknown>).team_id as string;
     const state = d.state as { id?: string; name?: string; color?: string; type?: string } | undefined;
     if (state?.name) {
       statesMap.set(state.name, {
@@ -877,8 +944,14 @@ export async function fetchHubMetadata(
     }
     const labels = d.labels as Array<{ id: string; name: string; color: string }> | undefined;
     if (Array.isArray(labels)) {
+      // Use per-team label visibility
+      const teamLabelIds = labelTeamId
+        ? allowedLabelIds
+        : getTeamLabelIds(mappings, rowTeamId);
+      // teamLabelIds: null = no filtering, [] = nothing visible, [...ids] = only those
+      if (teamLabelIds && teamLabelIds.length === 0) continue; // nothing visible for this team
       for (const label of labels) {
-        if (allowedLabelIds && !allowedLabelIds.includes(label.id)) continue;
+        if (teamLabelIds && !teamLabelIds.includes(label.id)) continue;
         labelsMap.set(label.id, label);
       }
     }

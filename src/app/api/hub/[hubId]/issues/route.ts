@@ -44,7 +44,7 @@ export async function POST(
     // Validate labels against hub-visible set
     let labelIds = body.labelIds ?? [];
     if (labelIds.length > 0) {
-      const allowedLabelIds = await getHubVisibleLabelIds(hubId);
+      const allowedLabelIds = await getHubVisibleLabelIds(hubId, body.teamId);
       if (allowedLabelIds) {
         labelIds = labelIds.filter((id) => allowedLabelIds.includes(id));
       }
