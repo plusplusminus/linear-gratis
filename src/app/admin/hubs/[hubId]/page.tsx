@@ -37,6 +37,7 @@ export default async function HubDashboardPage({
     visible_project_ids: string[];
     visible_initiative_ids: string[];
     visible_label_ids: string[];
+    hidden_label_ids: string[];
   }>;
 
   const memberCount =
@@ -151,6 +152,11 @@ export default async function HubDashboardPage({
                       ? "All labels"
                       : `${m.visible_label_ids.length} labels`}
                   </span>
+                  {m.hidden_label_ids.length > 0 && (
+                    <span className="text-[10px] text-destructive/80 px-1.5 py-0.5 rounded bg-destructive/10">
+                      {m.hidden_label_ids.length} hidden
+                    </span>
+                  )}
                 </div>
               </div>
             ))}

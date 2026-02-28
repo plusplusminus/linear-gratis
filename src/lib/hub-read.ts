@@ -374,6 +374,22 @@ function getTeamLabelIds(
 }
 
 /**
+ * Check if an issue should be hidden based on the team's hidden_label_ids config.
+ * Returns true if the issue has ANY label in the hidden set.
+ */
+function isIssueHidden(
+  issue: LinearIssue,
+  mappings: HubTeamMapping[],
+  teamId: string
+): boolean {
+  const mapping = mappings.find((m) => m.linear_team_id === teamId);
+  if (!mapping) return false;
+  const hidden = mapping.hidden_label_ids;
+  if (!hidden || hidden.length === 0) return false;
+  return issue.labels.some((l) => hidden.includes(l.id));
+}
+
+/**
  * Filter labels on an issue using the per-team visibility config.
  */
 function filterLabelsByTeam<T extends LinearIssue>(
@@ -443,11 +459,13 @@ export async function fetchHubIssues(
     throw error;
   }
 
-  return (data || []).map((row) => {
+  return (data || []).reduce<LinearIssue[]>((acc, row) => {
     const r = row as { linear_id: string; data: Record<string, unknown>; created_at: string; updated_at: string; team_id: string };
-    const issue = mapRowToLinearIssue(r);
-    return filterLabelsByTeam(stripAssignee(issue), mappings, r.team_id);
-  });
+    const issue = stripAssignee(mapRowToLinearIssue(r));
+    if (isIssueHidden(issue, mappings, r.team_id)) return acc;
+    acc.push(filterLabelsByTeam(issue, mappings, r.team_id));
+    return acc;
+  }, []);
 }
 
 /**
@@ -481,6 +499,9 @@ export async function fetchHubIssueDetail(
     ...issue,
     dueDate: (d.dueDate as string) ?? undefined,
   });
+
+  // Exclude entirely if issue carries a hidden label
+  if (isIssueHidden(detailed, mappings, row.team_id)) return null;
 
   return {
     ...filterLabelsByTeam(detailed, mappings, row.team_id),
@@ -519,12 +540,11 @@ export async function fetchHubRoadmapIssues(
     throw error;
   }
 
-  return (data || []).map((row) => {
+  return (data || []).reduce<RoadmapIssue[]>((acc, row) => {
     const r = row as { linear_id: string; data: Record<string, unknown>; created_at: string; updated_at: string; team_id: string };
     const d = r.data;
-    const issue = mapRowToLinearIssue(r);
-    return filterLabelsByTeam(stripAssignee({
-      ...issue,
+    const issue = stripAssignee({
+      ...mapRowToLinearIssue(r),
       dueDate: (d.dueDate as string) ?? undefined,
       project: d.project
         ? {
@@ -533,8 +553,11 @@ export async function fetchHubRoadmapIssues(
             color: (d.project as Record<string, unknown>).color as string | undefined,
           }
         : undefined,
-    }), mappings, r.team_id);
-  });
+    });
+    if (isIssueHidden(issue, mappings, r.team_id)) return acc;
+    acc.push(filterLabelsByTeam(issue, mappings, r.team_id));
+    return acc;
+  }, []);
 }
 
 /**
@@ -933,6 +956,17 @@ export async function fetchHubMetadata(
   for (const row of data) {
     const d = row.data as Record<string, unknown>;
     const rowTeamId = (row as Record<string, unknown>).team_id as string;
+
+    // Skip hidden issues from metadata extraction
+    const issueLabels = d.labels as Array<{ id: string; name: string; color: string }> | undefined;
+    if (issueLabels) {
+      const mapping = mappings.find((m) => m.linear_team_id === rowTeamId);
+      const hiddenIds = mapping?.hidden_label_ids;
+      if (hiddenIds && hiddenIds.length > 0 && issueLabels.some((l) => hiddenIds.includes(l.id))) {
+        continue;
+      }
+    }
+
     const state = d.state as { id?: string; name?: string; color?: string; type?: string } | undefined;
     if (state?.name) {
       statesMap.set(state.name, {

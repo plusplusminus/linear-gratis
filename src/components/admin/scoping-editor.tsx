@@ -14,6 +14,7 @@ interface TeamMapping {
   visible_project_ids: string[];
   visible_initiative_ids: string[];
   visible_label_ids: string[];
+  hidden_label_ids: string[];
   is_active: boolean;
 }
 
@@ -34,7 +35,7 @@ export function ScopingEditor({ hubId, mappings }: ScopingEditorProps) {
   // IDs already mapped (for excluding from add picker)
   const mappedTeamIds = mappings.map((m) => m.linear_team_id);
 
-  function saveMapping(mapping: TeamMapping, updates: Partial<Pick<TeamMapping, "visible_project_ids" | "visible_initiative_ids" | "visible_label_ids">>) {
+  function saveMapping(mapping: TeamMapping, updates: Partial<Pick<TeamMapping, "visible_project_ids" | "visible_initiative_ids" | "visible_label_ids" | "hidden_label_ids">>) {
     startTransition(async () => {
       try {
         const res = await fetch(
@@ -194,18 +195,20 @@ function MappingCard({
   mapping: TeamMapping;
   expanded: boolean;
   onToggle: () => void;
-  onSave: (updates: Partial<Pick<TeamMapping, "visible_project_ids" | "visible_initiative_ids" | "visible_label_ids">>) => void;
+  onSave: (updates: Partial<Pick<TeamMapping, "visible_project_ids" | "visible_initiative_ids" | "visible_label_ids" | "hidden_label_ids">>) => void;
   onRemove: () => void;
   isPending: boolean;
 }) {
   const [projectIds, setProjectIds] = useState(mapping.visible_project_ids);
   const [initiativeIds, setInitiativeIds] = useState(mapping.visible_initiative_ids);
   const [labelIds, setLabelIds] = useState(mapping.visible_label_ids);
+  const [hiddenLabelIds, setHiddenLabelIds] = useState(mapping.hidden_label_ids);
 
   const hasChanges =
     JSON.stringify(projectIds) !== JSON.stringify(mapping.visible_project_ids) ||
     JSON.stringify(initiativeIds) !== JSON.stringify(mapping.visible_initiative_ids) ||
-    JSON.stringify(labelIds) !== JSON.stringify(mapping.visible_label_ids);
+    JSON.stringify(labelIds) !== JSON.stringify(mapping.visible_label_ids) ||
+    JSON.stringify(hiddenLabelIds) !== JSON.stringify(mapping.hidden_label_ids);
 
   return (
     <div className="border border-border rounded-lg bg-card overflow-hidden">
@@ -246,6 +249,17 @@ function MappingCard({
             value={labelIds}
             onChange={setLabelIds}
           />
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-1.5">
+              Hidden labels
+              <span className="ml-1 font-normal">— issues with these labels are excluded from client view</span>
+            </p>
+            <LabelPicker
+              teamId={mapping.linear_team_id}
+              value={hiddenLabelIds}
+              onChange={setHiddenLabelIds}
+            />
+          </div>
           <InitiativePicker
             value={initiativeIds}
             onChange={setInitiativeIds}
@@ -259,6 +273,7 @@ function MappingCard({
                     visible_project_ids: projectIds,
                     visible_initiative_ids: initiativeIds,
                     visible_label_ids: labelIds,
+                    hidden_label_ids: hiddenLabelIds,
                   })
                 }
                 disabled={isPending}
@@ -271,6 +286,7 @@ function MappingCard({
                   setProjectIds(mapping.visible_project_ids);
                   setInitiativeIds(mapping.visible_initiative_ids);
                   setLabelIds(mapping.visible_label_ids);
+                  setHiddenLabelIds(mapping.hidden_label_ids);
                 }}
                 className="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
@@ -287,6 +303,7 @@ function MappingCard({
 function ScopingBadges({ mapping }: { mapping: TeamMapping }) {
   const p = mapping.visible_project_ids.length;
   const l = mapping.visible_label_ids.length;
+  const h = mapping.hidden_label_ids.length;
   const i = mapping.visible_initiative_ids.length;
 
   return (
@@ -297,6 +314,11 @@ function ScopingBadges({ mapping }: { mapping: TeamMapping }) {
       <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 rounded bg-muted">
         {l === 0 ? "All" : l} labels
       </span>
+      {h > 0 && (
+        <span className="text-[10px] text-destructive/80 px-1.5 py-0.5 rounded bg-destructive/10">
+          {h} hidden
+        </span>
+      )}
       <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 rounded bg-muted">
         {i === 0 ? "All" : i} init
       </span>

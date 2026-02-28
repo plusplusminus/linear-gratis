@@ -20,6 +20,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       visible_project_ids?: string[];
       visible_initiative_ids?: string[];
       visible_label_ids?: string[];
+      hidden_label_ids?: string[];
       is_active?: boolean;
     };
 
@@ -32,6 +33,9 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     }
     if (body.visible_label_ids !== undefined) {
       updates.visible_label_ids = body.visible_label_ids;
+    }
+    if (body.hidden_label_ids !== undefined) {
+      updates.hidden_label_ids = body.hidden_label_ids;
     }
     if (body.is_active !== undefined) {
       updates.is_active = body.is_active;
