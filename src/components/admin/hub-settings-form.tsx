@@ -4,8 +4,10 @@ import { useState, useTransition, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useFetch } from "@/hooks/use-fetch";
 import { ScopingEditor } from "./scoping-editor";
-import { AlertTriangle, Globe, Loader2, Trash2 } from "lucide-react";
+import { AlertTriangle, Globe, Loader2, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import type { FormTemplate, FormField, HubFormConfig } from "@/lib/supabase";
 
 interface TeamMapping {
   id: string;
@@ -29,7 +31,9 @@ interface HubSettingsFormProps {
   mappings: TeamMapping[];
 }
 
-type Tab = "general" | "scoping" | "domain" | "danger";
+type Tab = "general" | "scoping" | "forms" | "domain" | "danger";
+
+type FormWithFields = FormTemplate & { fields: FormField[] };
 
 export function HubSettingsForm({ hub, mappings }: HubSettingsFormProps) {
   const router = useRouter();
@@ -184,6 +188,7 @@ export function HubSettingsForm({ hub, mappings }: HubSettingsFormProps) {
   const tabs: { key: Tab; label: string }[] = [
     { key: "general", label: "General" },
     { key: "scoping", label: "Teams & Scoping" },
+    { key: "forms", label: "Forms" },
     { key: "domain", label: "Custom Domain" },
     { key: "danger", label: "Danger Zone" },
   ];
@@ -279,6 +284,11 @@ export function HubSettingsForm({ hub, mappings }: HubSettingsFormProps) {
       {/* Scoping tab */}
       {tab === "scoping" && (
         <ScopingEditor hubId={hub.id} mappings={mappings} />
+      )}
+
+      {/* Forms tab */}
+      {tab === "forms" && (
+        <HubFormsTab hubId={hub.id} />
       )}
 
       {/* Custom domain tab */}
@@ -420,6 +430,369 @@ export function HubSettingsForm({ hub, mappings }: HubSettingsFormProps) {
             </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// Hub Forms Tab
+// ============================================================
+
+const TYPE_BADGE: Record<string, { bg: string; text: string; label: string }> = {
+  bug: { bg: "var(--badge-orange-bg)", text: "var(--badge-orange-text)", label: "Bug" },
+  feature: { bg: "var(--badge-blue-bg)", text: "var(--badge-blue-text)", label: "Feature" },
+  custom: { bg: "var(--badge-gray-bg)", text: "var(--badge-gray-text)", label: "Custom" },
+};
+
+const PRIORITY_OPTIONS = [
+  { value: "", label: "Inherit default" },
+  { value: "0", label: "No priority" },
+  { value: "1", label: "Urgent" },
+  { value: "2", label: "High" },
+  { value: "3", label: "Medium" },
+  { value: "4", label: "Low" },
+];
+
+const inputClass =
+  "w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent";
+
+type HubFormsApiResponse = {
+  global_forms: Array<FormTemplate & { hub_config: HubFormConfig | null }>;
+  hub_forms: FormTemplate[];
+};
+
+function HubFormsTab({ hubId }: { hubId: string }) {
+  const [isPending, startTransition] = useTransition();
+  const { data: globalForms, loading: formsLoading } =
+    useFetch<FormWithFields[]>("/api/admin/forms");
+  const { data: hubFormsData, loading: configsLoading, refetch: refetchConfigs } =
+    useFetch<HubFormsApiResponse>(`/api/admin/hubs/${hubId}/forms`);
+  const [expandedForm, setExpandedForm] = useState<string | null>(null);
+
+  // Override state per form
+  const [overrides, setOverrides] = useState<
+    Record<string, Partial<HubFormConfig>>
+  >({});
+
+  // Seed overrides from fetched hub form configs
+  useEffect(() => {
+    if (hubFormsData?.global_forms) {
+      const map: Record<string, Partial<HubFormConfig>> = {};
+      for (const gf of hubFormsData.global_forms) {
+        if (gf.hub_config) {
+          map[gf.id] = {
+            is_enabled: gf.hub_config.is_enabled,
+            target_team_id: gf.hub_config.target_team_id,
+            target_project_id: gf.hub_config.target_project_id,
+            target_cycle_id: gf.hub_config.target_cycle_id,
+            target_label_ids: gf.hub_config.target_label_ids,
+            target_priority: gf.hub_config.target_priority,
+            confirmation_message: gf.hub_config.confirmation_message,
+          };
+        }
+      }
+      setOverrides(map);
+    }
+  }, [hubFormsData]);
+
+  const getOverride = (formId: string) =>
+    overrides[formId] ?? {};
+
+  const isEnabled = (formId: string) =>
+    getOverride(formId).is_enabled ?? false;
+
+  const toggleEnabled = (formId: string) => {
+    const current = isEnabled(formId);
+    const newEnabled = !current;
+
+    setOverrides((prev) => ({
+      ...prev,
+      [formId]: { ...prev[formId], is_enabled: newEnabled },
+    }));
+
+    // Save immediately
+    startTransition(async () => {
+      try {
+        const res = await fetch(
+          `/api/admin/hubs/${hubId}/forms/${formId}/config`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ is_enabled: newEnabled }),
+          }
+        );
+        if (!res.ok) {
+          const err = (await res.json()) as { error?: string };
+          throw new Error(err.error ?? "Failed to update");
+        }
+        toast.success(
+          newEnabled ? "Form enabled for hub" : "Form disabled for hub"
+        );
+        refetchConfigs();
+      } catch (e) {
+        // Revert
+        setOverrides((prev) => ({
+          ...prev,
+          [formId]: { ...prev[formId], is_enabled: current },
+        }));
+        toast.error(e instanceof Error ? e.message : "Failed to update");
+      }
+    });
+  };
+
+  const saveOverrides = (formId: string) => {
+    const ovr = getOverride(formId);
+    startTransition(async () => {
+      try {
+        const res = await fetch(
+          `/api/admin/hubs/${hubId}/forms/${formId}/config`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              target_team_id: ovr.target_team_id || null,
+              target_project_id: ovr.target_project_id || null,
+              target_cycle_id: ovr.target_cycle_id || null,
+              target_label_ids: ovr.target_label_ids ?? null,
+              target_priority:
+                ovr.target_priority !== undefined && ovr.target_priority !== null
+                  ? ovr.target_priority
+                  : null,
+              confirmation_message: ovr.confirmation_message || null,
+            }),
+          }
+        );
+        if (!res.ok) {
+          const err = (await res.json()) as { error?: string };
+          throw new Error(err.error ?? "Failed to save overrides");
+        }
+        toast.success("Overrides saved");
+        refetchConfigs();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to save");
+      }
+    });
+  };
+
+  const updateOverride = (
+    formId: string,
+    patch: Partial<HubFormConfig>
+  ) => {
+    setOverrides((prev) => ({
+      ...prev,
+      [formId]: { ...prev[formId], ...patch },
+    }));
+  };
+
+  const loading = formsLoading || configsLoading;
+  const forms = globalForms ?? [];
+
+  return (
+    <div className="space-y-6">
+      {loading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Loading forms...
+        </div>
+      ) : forms.length === 0 ? (
+        <div className="text-sm text-muted-foreground text-center py-6">
+          No global forms created yet.{" "}
+          <a
+            href="/admin/forms/new"
+            className="text-primary hover:underline"
+          >
+            Create one
+          </a>
+        </div>
+      ) : (
+        <>
+          <div>
+            <h3 className="text-sm font-semibold mb-3">Global Forms</h3>
+            <div className="border border-border rounded-lg bg-card overflow-hidden">
+              {forms.map((form, i) => {
+                const badge = TYPE_BADGE[form.type] ?? TYPE_BADGE.custom;
+                const enabled = isEnabled(form.id);
+                const isExpanded = expandedForm === form.id;
+                const ovr = getOverride(form.id);
+
+                return (
+                  <div
+                    key={form.id}
+                    className={cn(
+                      i < forms.length - 1 && "border-b border-border"
+                    )}
+                  >
+                    <div className="flex items-center gap-3 px-4 py-3">
+                      {/* Enable toggle */}
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={enabled}
+                        onClick={() => toggleEnabled(form.id)}
+                        className={cn(
+                          "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
+                          enabled ? "bg-primary" : "bg-muted"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform",
+                            enabled ? "translate-x-4" : "translate-x-0"
+                          )}
+                        />
+                      </button>
+
+                      {/* Form name + type */}
+                      <span className="text-sm font-medium flex-1 truncate">
+                        {form.name}
+                      </span>
+                      <span
+                        className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium"
+                        style={{
+                          backgroundColor: badge.bg,
+                          color: badge.text,
+                        }}
+                      >
+                        {badge.label}
+                      </span>
+
+                      {/* Expand overrides */}
+                      <button
+                        onClick={() =>
+                          setExpandedForm(isExpanded ? null : form.id)
+                        }
+                        className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                        title="Routing overrides"
+                      >
+                        {isExpanded ? (
+                          <ChevronDown className="w-4 h-4" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Override panel */}
+                    {isExpanded && (
+                      <div className="px-4 pb-4 space-y-3 border-t border-border/50 bg-muted/20">
+                        <p className="text-xs text-muted-foreground pt-3">
+                          Override routing for this hub. Leave blank to use form defaults.
+                        </p>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium mb-1">
+                              Team Override
+                            </label>
+                            <input
+                              type="text"
+                              value={ovr.target_team_id ?? ""}
+                              onChange={(e) =>
+                                updateOverride(form.id, {
+                                  target_team_id: e.target.value || null,
+                                })
+                              }
+                              placeholder="Team ID"
+                              className={inputClass}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium mb-1">
+                              Project Override
+                            </label>
+                            <input
+                              type="text"
+                              value={ovr.target_project_id ?? ""}
+                              onChange={(e) =>
+                                updateOverride(form.id, {
+                                  target_project_id: e.target.value || null,
+                                })
+                              }
+                              placeholder="Project ID"
+                              className={inputClass}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium mb-1">
+                              Cycle Override
+                            </label>
+                            <input
+                              type="text"
+                              value={ovr.target_cycle_id ?? ""}
+                              onChange={(e) =>
+                                updateOverride(form.id, {
+                                  target_cycle_id: e.target.value || null,
+                                })
+                              }
+                              placeholder="Cycle ID"
+                              className={inputClass}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium mb-1">
+                              Priority Override
+                            </label>
+                            <select
+                              value={
+                                ovr.target_priority !== undefined &&
+                                ovr.target_priority !== null
+                                  ? String(ovr.target_priority)
+                                  : ""
+                              }
+                              onChange={(e) =>
+                                updateOverride(form.id, {
+                                  target_priority: e.target.value
+                                    ? parseInt(e.target.value, 10)
+                                    : null,
+                                })
+                              }
+                              className={inputClass}
+                            >
+                              {PRIORITY_OPTIONS.map((p) => (
+                                <option key={p.value} value={p.value}>
+                                  {p.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-medium mb-1">
+                            Confirmation Message Override
+                          </label>
+                          <textarea
+                            value={ovr.confirmation_message ?? ""}
+                            onChange={(e) =>
+                              updateOverride(form.id, {
+                                confirmation_message: e.target.value || null,
+                              })
+                            }
+                            placeholder="Leave blank for form default"
+                            rows={2}
+                            className={inputClass}
+                          />
+                        </div>
+
+                        <button
+                          onClick={() => saveOverrides(form.id)}
+                          disabled={isPending}
+                          className="px-3 py-1.5 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                        >
+                          {isPending ? "Saving..." : "Save Overrides"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Settings,
   Activity,
+  ClipboardList,
 } from "lucide-react";
 
 export function AdminSidebar() {
@@ -119,6 +120,19 @@ export function AdminSidebar() {
         >
           <Plus className="w-4 h-4 shrink-0" />
           {!collapsed && <span>Create Hub</span>}
+        </Link>
+        <Link
+          href="/admin/forms"
+          className={cn(
+            "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-colors",
+            pathname.startsWith("/admin/forms")
+              ? "bg-accent text-foreground"
+              : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+          )}
+          title={collapsed ? "Forms" : undefined}
+        >
+          <ClipboardList className="w-4 h-4 shrink-0" />
+          {!collapsed && <span>Forms</span>}
         </Link>
         <Link
           href="/admin/sync"

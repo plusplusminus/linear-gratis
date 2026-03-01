@@ -1,0 +1,984 @@
+"use client";
+
+import { useState, useTransition, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { useFetch } from "@/hooks/use-fetch";
+import {
+  ChevronUp,
+  ChevronDown,
+  X,
+  Plus,
+  Loader2,
+  GripVertical,
+} from "lucide-react";
+import type {
+  FormTemplate,
+  FormField,
+  FormFieldType,
+  LinearFieldMapping,
+} from "@/lib/supabase";
+
+type FormWithFields = FormTemplate & { fields: FormField[] };
+
+interface FormBuilderProps {
+  form: FormWithFields | null;
+}
+
+interface FieldDraft {
+  id: string;
+  field_key: string;
+  field_type: FormFieldType;
+  label: string;
+  description: string;
+  placeholder: string;
+  is_required: boolean;
+  is_removable: boolean;
+  is_hidden: boolean;
+  linear_field: LinearFieldMapping | null;
+  options: Array<{ value: string; label: string }>;
+  default_value: string;
+  display_order: number;
+}
+
+interface TeamOption {
+  linear_id: string;
+  name: string;
+  key: string;
+}
+
+interface ProjectOption {
+  linear_id: string;
+  name: string;
+}
+
+const FIELD_TYPES: { value: FormFieldType; label: string }[] = [
+  { value: "text", label: "Text" },
+  { value: "textarea", label: "Text Area" },
+  { value: "select", label: "Select" },
+  { value: "radio", label: "Radio" },
+  { value: "checkbox", label: "Checkbox" },
+  { value: "url", label: "URL" },
+  { value: "file", label: "File" },
+];
+
+const FIELD_TYPE_BADGE: Record<string, { bg: string; text: string }> = {
+  text: { bg: "var(--badge-blue-bg)", text: "var(--badge-blue-text)" },
+  textarea: { bg: "var(--badge-blue-bg)", text: "var(--badge-blue-text)" },
+  select: { bg: "var(--badge-purple-bg)", text: "var(--badge-purple-text)" },
+  radio: { bg: "var(--badge-purple-bg)", text: "var(--badge-purple-text)" },
+  checkbox: { bg: "var(--badge-green-bg)", text: "var(--badge-green-text)" },
+  url: { bg: "var(--badge-yellow-bg)", text: "var(--badge-yellow-text)" },
+  file: { bg: "var(--badge-orange-bg)", text: "var(--badge-orange-text)" },
+};
+
+const PRIORITY_OPTIONS = [
+  { value: "0", label: "No priority" },
+  { value: "1", label: "Urgent" },
+  { value: "2", label: "High" },
+  { value: "3", label: "Medium" },
+  { value: "4", label: "Low" },
+];
+
+function makeFieldKey(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "")
+    || "field";
+}
+
+function newFieldDraft(order: number): FieldDraft {
+  return {
+    id: `new-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    field_key: "",
+    field_type: "text",
+    label: "",
+    description: "",
+    placeholder: "",
+    is_required: false,
+    is_removable: true,
+    is_hidden: false,
+    linear_field: null,
+    options: [],
+    default_value: "",
+    display_order: order,
+  };
+}
+
+function fieldFromApi(f: FormField): FieldDraft {
+  return {
+    id: f.id,
+    field_key: f.field_key,
+    field_type: f.field_type,
+    label: f.label,
+    description: f.description ?? "",
+    placeholder: f.placeholder ?? "",
+    is_required: f.is_required,
+    is_removable: f.is_removable,
+    is_hidden: f.is_hidden,
+    linear_field: f.linear_field,
+    options: f.options ?? [],
+    default_value: f.default_value ?? "",
+    display_order: f.display_order,
+  };
+}
+
+const inputClass =
+  "w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent";
+
+export function FormBuilder({ form }: FormBuilderProps) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const isNew = !form;
+
+  // Form settings
+  const [name, setName] = useState(form?.name ?? "");
+  const [type, setType] = useState<"bug" | "feature" | "custom">(form?.type ?? "custom");
+  const [description, setDescription] = useState(form?.description ?? "");
+  const [confirmationMessage, setConfirmationMessage] = useState(
+    form?.confirmation_message ?? "Thank you! Your request has been submitted."
+  );
+  const [errorMessage, setErrorMessage] = useState(
+    form?.error_message ?? "Something went wrong. Please try again."
+  );
+  const [isActive, setIsActive] = useState(form?.is_active ?? false);
+
+  // Linear routing
+  const [targetTeamId, setTargetTeamId] = useState(form?.target_team_id ?? "");
+  const [targetProjectId, setTargetProjectId] = useState(form?.target_project_id ?? "");
+  const [targetCycleId, setTargetCycleId] = useState(form?.target_cycle_id ?? "");
+  const [targetLabelIds, setTargetLabelIds] = useState(
+    (form?.target_label_ids ?? []).join(", ")
+  );
+  const [targetPriority, setTargetPriority] = useState(
+    form?.target_priority?.toString() ?? ""
+  );
+
+  // Fields
+  const [fields, setFields] = useState<FieldDraft[]>(
+    form?.fields
+      ? [...form.fields]
+          .sort((a, b) => a.display_order - b.display_order)
+          .map(fieldFromApi)
+      : []
+  );
+  const [expandedField, setExpandedField] = useState<string | null>(null);
+  const [addingField, setAddingField] = useState(false);
+  const [newFieldType, setNewFieldType] = useState<FormFieldType>("text");
+  const [newFieldLabel, setNewFieldLabel] = useState("");
+
+  // Fetch teams
+  const { data: teams } = useFetch<TeamOption[]>("/api/admin/linear/teams");
+
+  // Fetch projects when team changes
+  const { data: projects } = useFetch<ProjectOption[]>(
+    targetTeamId
+      ? `/api/admin/linear/teams/${targetTeamId}/projects`
+      : null
+  );
+
+  // Reset project when team changes
+  useEffect(() => {
+    if (targetTeamId && form?.target_team_id !== targetTeamId) {
+      setTargetProjectId("");
+    }
+  }, [targetTeamId, form?.target_team_id]);
+
+  // Field operations
+  const moveField = useCallback((index: number, direction: -1 | 1) => {
+    setFields((prev) => {
+      const next = [...prev];
+      const target = index + direction;
+      if (target < 0 || target >= next.length) return prev;
+      [next[index], next[target]] = [next[target], next[index]];
+      return next.map((f, i) => ({ ...f, display_order: i }));
+    });
+  }, []);
+
+  const removeField = useCallback((id: string) => {
+    setFields((prev) =>
+      prev.filter((f) => f.id !== id).map((f, i) => ({ ...f, display_order: i }))
+    );
+  }, []);
+
+  const updateField = useCallback((id: string, patch: Partial<FieldDraft>) => {
+    setFields((prev) =>
+      prev.map((f) => (f.id === id ? { ...f, ...patch } : f))
+    );
+  }, []);
+
+  const addField = useCallback(() => {
+    if (!newFieldLabel.trim()) return;
+    const draft = newFieldDraft(fields.length);
+    draft.field_type = newFieldType;
+    draft.label = newFieldLabel.trim();
+    draft.field_key = makeFieldKey(newFieldLabel.trim());
+    setFields((prev) => [...prev, draft]);
+    setNewFieldLabel("");
+    setNewFieldType("text");
+    setAddingField(false);
+    setExpandedField(draft.id);
+  }, [newFieldLabel, newFieldType, fields.length]);
+
+  // Save
+  const save = useCallback(() => {
+    if (!name.trim()) {
+      toast.error("Form name is required");
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        const body = {
+          name: name.trim(),
+          type,
+          description: description.trim() || null,
+          is_active: isActive,
+          confirmation_message: confirmationMessage.trim(),
+          error_message: errorMessage.trim(),
+          target_team_id: targetTeamId || null,
+          target_project_id: targetProjectId || null,
+          target_cycle_id: targetCycleId || null,
+          target_label_ids: targetLabelIds
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+          target_priority: targetPriority ? parseInt(targetPriority, 10) : null,
+          fields: fields.map((f) => ({
+            id: f.id.startsWith("new-") ? undefined : f.id,
+            field_key: f.field_key || makeFieldKey(f.label),
+            field_type: f.field_type,
+            label: f.label,
+            description: f.description || null,
+            placeholder: f.placeholder || null,
+            is_required: f.is_required,
+            is_removable: f.is_removable,
+            is_hidden: f.is_hidden,
+            linear_field: f.linear_field,
+            options: f.options,
+            default_value: f.default_value || null,
+            display_order: f.display_order,
+          })),
+        };
+
+        const url = isNew
+          ? "/api/admin/forms"
+          : `/api/admin/forms/${form.id}`;
+        const method = isNew ? "POST" : "PATCH";
+
+        const res = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+          const err = (await res.json()) as { error?: string };
+          throw new Error(err.error ?? "Failed to save form");
+        }
+
+        const saved = (await res.json()) as { id: string };
+        toast.success(isNew ? "Form created" : "Form saved");
+
+        if (isNew) {
+          router.replace(`/admin/forms/${saved.id}`);
+        }
+        router.refresh();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to save");
+      }
+    });
+  }, [
+    name, type, description, isActive, confirmationMessage, errorMessage,
+    targetTeamId, targetProjectId, targetCycleId, targetLabelIds, targetPriority,
+    fields, isNew, form, router,
+  ]);
+
+  return (
+    <div className="max-w-2xl">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-semibold">
+          {isNew ? "New Form" : form.name}
+        </h1>
+        <div className="flex items-center gap-3">
+          {/* Active toggle */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">
+              {isActive ? "Active" : "Draft"}
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isActive}
+              onClick={() => setIsActive(!isActive)}
+              className={cn(
+                "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
+                isActive ? "bg-primary" : "bg-muted"
+              )}
+            >
+              <span
+                className={cn(
+                  "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform",
+                  isActive ? "translate-x-4" : "translate-x-0"
+                )}
+              />
+            </button>
+          </div>
+          <button
+            onClick={save}
+            disabled={!name.trim() || isPending}
+            className={cn(
+              "px-4 py-2 text-sm font-medium rounded-md transition-colors",
+              name.trim()
+                ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                : "bg-muted text-muted-foreground cursor-not-allowed"
+            )}
+          >
+            {isPending ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-6">
+        {/* Section 1: Form Settings */}
+        <section className="border border-border rounded-lg bg-card">
+          <div className="px-4 py-3 border-b border-border">
+            <h2 className="text-sm font-semibold">Form Settings</h2>
+          </div>
+          <div className="p-4 space-y-4">
+            <div>
+              <label htmlFor="form-name" className="block text-sm font-medium mb-1.5">
+                Name
+              </label>
+              <input
+                id="form-name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Bug Report"
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="form-type" className="block text-sm font-medium mb-1.5">
+                Type
+              </label>
+              <select
+                id="form-type"
+                value={type}
+                onChange={(e) => setType(e.target.value as "bug" | "feature" | "custom")}
+                className={inputClass}
+              >
+                <option value="bug">Bug Report</option>
+                <option value="feature">Feature Request</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="form-description" className="block text-sm font-medium mb-1.5">
+                Description
+              </label>
+              <textarea
+                id="form-description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Describe what this form is for..."
+                rows={2}
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="form-confirmation" className="block text-sm font-medium mb-1.5">
+                Confirmation Message
+              </label>
+              <textarea
+                id="form-confirmation"
+                value={confirmationMessage}
+                onChange={(e) => setConfirmationMessage(e.target.value)}
+                rows={2}
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="form-error" className="block text-sm font-medium mb-1.5">
+                Error Message
+              </label>
+              <textarea
+                id="form-error"
+                value={errorMessage}
+                onChange={(e) => setErrorMessage(e.target.value)}
+                rows={2}
+                className={inputClass}
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* Section 2: Linear Routing */}
+        <section className="border border-border rounded-lg bg-card">
+          <div className="px-4 py-3 border-b border-border">
+            <h2 className="text-sm font-semibold">Linear Routing</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Where submitted issues are created in Linear
+            </p>
+          </div>
+          <div className="p-4 space-y-4">
+            <div>
+              <label htmlFor="target-team" className="block text-sm font-medium mb-1.5">
+                Target Team
+              </label>
+              <select
+                id="target-team"
+                value={targetTeamId}
+                onChange={(e) => setTargetTeamId(e.target.value)}
+                className={inputClass}
+              >
+                <option value="">Select a team...</option>
+                {(teams ?? []).map((t) => (
+                  <option key={t.linear_id} value={t.linear_id}>
+                    {t.name} ({t.key})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="target-project" className="block text-sm font-medium mb-1.5">
+                Target Project
+              </label>
+              <select
+                id="target-project"
+                value={targetProjectId}
+                onChange={(e) => setTargetProjectId(e.target.value)}
+                disabled={!targetTeamId}
+                className={cn(inputClass, !targetTeamId && "opacity-50")}
+              >
+                <option value="">
+                  {targetTeamId ? "Select a project..." : "Select a team first"}
+                </option>
+                {(projects ?? []).map((p) => (
+                  <option key={p.linear_id} value={p.linear_id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="target-cycle" className="block text-sm font-medium mb-1.5">
+                Target Cycle
+              </label>
+              <input
+                id="target-cycle"
+                type="text"
+                value={targetCycleId}
+                onChange={(e) => setTargetCycleId(e.target.value)}
+                placeholder="Cycle ID (optional)"
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="target-labels" className="block text-sm font-medium mb-1.5">
+                Default Labels
+              </label>
+              <input
+                id="target-labels"
+                type="text"
+                value={targetLabelIds}
+                onChange={(e) => setTargetLabelIds(e.target.value)}
+                placeholder="Comma-separated label IDs"
+                className={inputClass}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Labels automatically applied to created issues
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="target-priority" className="block text-sm font-medium mb-1.5">
+                Default Priority
+              </label>
+              <select
+                id="target-priority"
+                value={targetPriority}
+                onChange={(e) => setTargetPriority(e.target.value)}
+                className={inputClass}
+              >
+                <option value="">Inherit from Linear</option>
+                {PRIORITY_OPTIONS.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </section>
+
+        {/* Section 3: Fields */}
+        <section className="border border-border rounded-lg bg-card">
+          <div className="px-4 py-3 border-b border-border">
+            <h2 className="text-sm font-semibold">Fields</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {fields.length} field{fields.length !== 1 ? "s" : ""}
+            </p>
+          </div>
+
+          <div>
+            {fields.map((field, index) => {
+              const badge = FIELD_TYPE_BADGE[field.field_type] ?? FIELD_TYPE_BADGE.text;
+              const isExpanded = expandedField === field.id;
+              const hasOptions =
+                field.field_type === "select" ||
+                field.field_type === "radio" ||
+                field.field_type === "checkbox";
+
+              return (
+                <div
+                  key={field.id}
+                  className={cn(
+                    "border-b border-border last:border-b-0",
+                    isExpanded && "bg-muted/20"
+                  )}
+                >
+                  {/* Field row */}
+                  <div
+                    className="flex items-center gap-2 px-4 py-2.5 cursor-pointer hover:bg-accent/30 transition-colors"
+                    onClick={() =>
+                      setExpandedField(isExpanded ? null : field.id)
+                    }
+                  >
+                    <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" />
+
+                    {/* Type badge */}
+                    <span
+                      className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0"
+                      style={{ backgroundColor: badge.bg, color: badge.text }}
+                    >
+                      {field.field_type}
+                    </span>
+
+                    {/* Label */}
+                    <span className="text-sm flex-1 truncate">
+                      {field.label || (
+                        <span className="text-muted-foreground italic">
+                          Untitled
+                        </span>
+                      )}
+                    </span>
+
+                    {/* Linear mapping indicator */}
+                    {field.linear_field && (
+                      <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 rounded bg-muted">
+                        {field.linear_field}
+                      </span>
+                    )}
+
+                    {/* Required indicator */}
+                    {field.is_required && (
+                      <span className="text-[10px] text-destructive font-medium">
+                        Required
+                      </span>
+                    )}
+
+                    {/* Hidden indicator */}
+                    {field.is_hidden && (
+                      <span className="text-[10px] text-muted-foreground">
+                        Hidden
+                      </span>
+                    )}
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          moveField(index, -1);
+                        }}
+                        disabled={index === 0}
+                        className={cn(
+                          "p-1 rounded transition-colors",
+                          index === 0
+                            ? "text-muted-foreground/30"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                        title="Move up"
+                      >
+                        <ChevronUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          moveField(index, 1);
+                        }}
+                        disabled={index === fields.length - 1}
+                        className={cn(
+                          "p-1 rounded transition-colors",
+                          index === fields.length - 1
+                            ? "text-muted-foreground/30"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                        title="Move down"
+                      >
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeField(field.id);
+                        }}
+                        disabled={!field.is_removable}
+                        className={cn(
+                          "p-1 rounded transition-colors",
+                          !field.is_removable
+                            ? "text-muted-foreground/30 cursor-not-allowed"
+                            : "text-muted-foreground hover:text-destructive"
+                        )}
+                        title={
+                          field.is_removable
+                            ? "Remove field"
+                            : "This field cannot be removed"
+                        }
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Expanded field detail */}
+                  {isExpanded && (
+                    <div className="px-4 pb-4 pt-1 space-y-3 border-t border-border/50">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium mb-1">
+                            Label
+                          </label>
+                          <input
+                            type="text"
+                            value={field.label}
+                            onChange={(e) =>
+                              updateField(field.id, {
+                                label: e.target.value,
+                                field_key:
+                                  field.field_key || makeFieldKey(e.target.value),
+                              })
+                            }
+                            className={inputClass}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium mb-1">
+                            Type
+                          </label>
+                          <select
+                            value={field.field_type}
+                            onChange={(e) =>
+                              updateField(field.id, {
+                                field_type: e.target.value as FormFieldType,
+                              })
+                            }
+                            className={inputClass}
+                          >
+                            {FIELD_TYPES.map((ft) => (
+                              <option key={ft.value} value={ft.value}>
+                                {ft.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium mb-1">
+                          Placeholder
+                        </label>
+                        <input
+                          type="text"
+                          value={field.placeholder}
+                          onChange={(e) =>
+                            updateField(field.id, { placeholder: e.target.value })
+                          }
+                          className={inputClass}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium mb-1">
+                          Description
+                        </label>
+                        <input
+                          type="text"
+                          value={field.description}
+                          onChange={(e) =>
+                            updateField(field.id, { description: e.target.value })
+                          }
+                          placeholder="Help text shown below the field"
+                          className={inputClass}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium mb-1">
+                          Default Value
+                        </label>
+                        <input
+                          type="text"
+                          value={field.default_value}
+                          onChange={(e) =>
+                            updateField(field.id, {
+                              default_value: e.target.value,
+                            })
+                          }
+                          className={inputClass}
+                        />
+                      </div>
+
+                      {/* Options editor for select/radio/checkbox */}
+                      {hasOptions && (
+                        <OptionsEditor
+                          options={field.options}
+                          onChange={(options) =>
+                            updateField(field.id, { options })
+                          }
+                        />
+                      )}
+
+                      {/* Toggles row */}
+                      <div className="flex items-center gap-6 pt-1">
+                        <ToggleSwitch
+                          label="Required"
+                          checked={field.is_required}
+                          onChange={(v) =>
+                            updateField(field.id, { is_required: v })
+                          }
+                        />
+                        {field.linear_field && (
+                          <ToggleSwitch
+                            label="Hidden"
+                            checked={field.is_hidden}
+                            onChange={(v) =>
+                              updateField(field.id, { is_hidden: v })
+                            }
+                          />
+                        )}
+                      </div>
+
+                      {/* Linear field mapping */}
+                      <div>
+                        <label className="block text-xs font-medium mb-1">
+                          Linear Field Mapping
+                        </label>
+                        <select
+                          value={field.linear_field ?? ""}
+                          onChange={(e) =>
+                            updateField(field.id, {
+                              linear_field:
+                                (e.target.value as LinearFieldMapping) || null,
+                            })
+                          }
+                          className={inputClass}
+                        >
+                          <option value="">None</option>
+                          <option value="title">Title</option>
+                          <option value="description">Description</option>
+                          <option value="priority">Priority</option>
+                          <option value="label_ids">Labels</option>
+                          <option value="project_id">Project</option>
+                          <option value="cycle_id">Cycle</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Add field */}
+          <div className="px-4 py-3">
+            {addingField ? (
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <label className="block text-xs font-medium mb-1">
+                    Label
+                  </label>
+                  <input
+                    type="text"
+                    value={newFieldLabel}
+                    onChange={(e) => setNewFieldLabel(e.target.value)}
+                    placeholder="Field label"
+                    className={inputClass}
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") addField();
+                      if (e.key === "Escape") setAddingField(false);
+                    }}
+                  />
+                </div>
+                <div className="w-32">
+                  <label className="block text-xs font-medium mb-1">
+                    Type
+                  </label>
+                  <select
+                    value={newFieldType}
+                    onChange={(e) =>
+                      setNewFieldType(e.target.value as FormFieldType)
+                    }
+                    className={inputClass}
+                  >
+                    {FIELD_TYPES.map((ft) => (
+                      <option key={ft.value} value={ft.value}>
+                        {ft.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  onClick={addField}
+                  disabled={!newFieldLabel.trim()}
+                  className={cn(
+                    "px-3 py-2 text-sm font-medium rounded-md transition-colors",
+                    newFieldLabel.trim()
+                      ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                      : "bg-muted text-muted-foreground cursor-not-allowed"
+                  )}
+                >
+                  Add
+                </button>
+                <button
+                  onClick={() => setAddingField(false)}
+                  className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground rounded-md transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setAddingField(true)}
+                className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add Field
+              </button>
+            )}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function ToggleSwitch({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 cursor-pointer">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={cn(
+          "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
+          checked ? "bg-primary" : "bg-muted"
+        )}
+      >
+        <span
+          className={cn(
+            "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform",
+            checked ? "translate-x-4" : "translate-x-0"
+          )}
+        />
+      </button>
+      <span className="text-xs font-medium">{label}</span>
+    </label>
+  );
+}
+
+function OptionsEditor({
+  options,
+  onChange,
+}: {
+  options: Array<{ value: string; label: string }>;
+  onChange: (opts: Array<{ value: string; label: string }>) => void;
+}) {
+  const [newOption, setNewOption] = useState("");
+
+  const addOption = () => {
+    if (!newOption.trim()) return;
+    const value = newOption
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_");
+    onChange([...options, { value, label: newOption.trim() }]);
+    setNewOption("");
+  };
+
+  return (
+    <div>
+      <label className="block text-xs font-medium mb-1">Options</label>
+      <div className="space-y-1.5">
+        {options.map((opt, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <input
+              type="text"
+              value={opt.label}
+              onChange={(e) => {
+                const next = [...options];
+                next[i] = { ...next[i], label: e.target.value };
+                onChange(next);
+              }}
+              className={cn(inputClass, "flex-1")}
+            />
+            <button
+              onClick={() => onChange(options.filter((_, j) => j !== i))}
+              className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={newOption}
+            onChange={(e) => setNewOption(e.target.value)}
+            placeholder="Add option..."
+            className={cn(inputClass, "flex-1")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addOption();
+              }
+            }}
+          />
+          <button
+            onClick={addOption}
+            disabled={!newOption.trim()}
+            className={cn(
+              "p-1.5 rounded-md transition-colors",
+              newOption.trim()
+                ? "text-primary hover:bg-accent"
+                : "text-muted-foreground/30"
+            )}
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

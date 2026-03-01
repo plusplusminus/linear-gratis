@@ -137,7 +137,9 @@ const ISSUE_CREATE_MUTATION = `
     $description: String,
     $priority: Int,
     $labelIds: [String!],
-    $projectId: String
+    $projectId: String,
+    $stateId: String,
+    $cycleId: String
   ) {
     issueCreate(input: {
       teamId: $teamId,
@@ -145,7 +147,9 @@ const ISSUE_CREATE_MUTATION = `
       description: $description,
       priority: $priority,
       labelIds: $labelIds,
-      projectId: $projectId
+      projectId: $projectId,
+      stateId: $stateId,
+      cycleId: $cycleId
     }) {
       success
       issue {
@@ -181,6 +185,8 @@ export type CreateIssueParams = {
   priority?: number;
   labelIds?: string[];
   projectId?: string;
+  stateId?: string;
+  cycleId?: string;
 };
 
 export type CreatedIssue = {
@@ -219,6 +225,8 @@ export async function createIssueInLinear(
         priority: params.priority ?? undefined,
         labelIds: params.labelIds?.length ? params.labelIds : undefined,
         projectId: params.projectId ?? undefined,
+        stateId: params.stateId ?? undefined,
+        cycleId: params.cycleId ?? undefined,
       },
     }),
   });

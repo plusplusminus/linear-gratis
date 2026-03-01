@@ -369,3 +369,82 @@ export type HubWorkflowLog = {
   created_at: string
 }
 
+// ============================================================
+// Form system types
+// ============================================================
+
+export type FormTemplate = {
+  id: string
+  hub_id: string | null
+  type: 'bug' | 'feature' | 'custom'
+  name: string
+  description: string | null
+  is_active: boolean
+  target_team_id: string | null
+  target_project_id: string | null
+  target_cycle_id: string | null
+  target_label_ids: string[]
+  target_priority: number | null
+  confirmation_message: string
+  error_message: string
+  display_order: number
+  created_at: string
+  updated_at: string
+}
+
+export type FormFieldType = 'text' | 'textarea' | 'select' | 'radio' | 'checkbox' | 'file' | 'url'
+export type LinearFieldMapping = 'title' | 'description' | 'priority' | 'label_ids' | 'project_id' | 'cycle_id'
+
+export type FormField = {
+  id: string
+  form_id: string
+  field_key: string
+  field_type: FormFieldType
+  label: string
+  description: string | null
+  placeholder: string | null
+  is_required: boolean
+  is_removable: boolean
+  is_hidden: boolean
+  linear_field: LinearFieldMapping | null
+  options: Array<{ value: string; label: string }>
+  default_value: string | null
+  display_order: number
+  created_at: string
+  updated_at: string
+}
+
+export type HubFormConfig = {
+  id: string
+  hub_id: string
+  form_id: string
+  is_enabled: boolean
+  target_team_id: string | null
+  target_project_id: string | null
+  target_cycle_id: string | null
+  target_label_ids: string[] | null
+  target_priority: number | null
+  confirmation_message: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type FormSubmission = {
+  id: string
+  form_id: string
+  hub_id: string
+  submitter_user_id: string
+  submitter_email: string
+  submitter_name: string | null
+  field_values: Record<string, unknown>
+  derived_title: string
+  sync_status: 'pending' | 'synced' | 'failed'
+  linear_issue_id: string | null
+  linear_issue_identifier: string | null
+  sync_error: string | null
+  sync_attempted_at: string | null
+  attachment_paths: string[]
+  created_at: string
+  updated_at: string
+}
+

@@ -6,48 +6,62 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useHub } from "@/contexts/hub-context";
 import { useCanInteract } from "@/hooks/use-can-interact";
-import { RequestFormModal } from "@/components/hub/request-form";
+import { FormModal } from "@/components/hub/form-modal";
+import { SubmissionHistory } from "@/components/hub/submission-history";
 import {
   ChevronLeft,
   ChevronRight,
   LayoutDashboard,
-  MessageSquarePlus,
+  Bug,
+  Lightbulb,
+  FileText,
+  ClipboardList,
 } from "lucide-react";
 
-type SidebarProject = { id: string; name: string };
+type SidebarForm = {
+  id: string;
+  name: string;
+  type: "bug" | "feature" | "custom";
+};
+
+const formTypeIcons = {
+  bug: Bug,
+  feature: Lightbulb,
+  custom: FileText,
+} as const;
 
 export function HubSidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  const [showRequestForm, setShowRequestForm] = useState(false);
-  const [projects, setProjects] = useState<SidebarProject[]>([]);
+  const [activeFormId, setActiveFormId] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [forms, setForms] = useState<SidebarForm[]>([]);
   const pathname = usePathname();
-  const { hubId, hubSlug, hubName, teams, requestFormsEnabled } = useHub();
+  const { hubId, hubSlug, hubName, teams } = useHub();
   const canInteract = useCanInteract();
 
-  const showRequestButton = requestFormsEnabled && canInteract;
-
-  // Fetch projects when request forms are enabled (for the dropdown)
+  // Fetch available forms
   useEffect(() => {
-    if (!requestFormsEnabled) return;
+    if (!canInteract) return;
     let cancelled = false;
     async function load() {
       try {
-        const res = await fetch(`/api/hub/${hubId}/projects`);
+        const res = await fetch(`/api/hub/${hubId}/forms`);
         if (!res.ok || cancelled) return;
-        const data = (await res.json()) as SidebarProject[];
-        if (!cancelled) setProjects(data);
+        const data = (await res.json()) as SidebarForm[];
+        if (!cancelled) setForms(data);
       } catch {
-        // Non-critical — projects will load when modal opens
+        // Non-critical
       }
     }
     load();
-    return () => { cancelled = true; };
-  }, [hubId, requestFormsEnabled]);
+    return () => {
+      cancelled = true;
+    };
+  }, [hubId, canInteract]);
 
   const basePath = `/hub/${hubSlug}`;
   const isOverview = pathname === basePath || pathname === `${basePath}/`;
 
-  // Extract active team key from URL: /hub/[slug]/[teamKey]
   const activeTeamKey = pathname.match(
     /\/hub\/[^/]+\/([^/]+)/
   )?.[1];
@@ -141,31 +155,57 @@ export function HubSidebar() {
         </nav>
       </div>
 
-      {/* Submit Request button */}
-      {showRequestButton && (
-        <div className="px-1.5 py-2 border-t border-border shrink-0">
+      {/* Form buttons + submissions */}
+      {canInteract && (
+        <div className="px-1.5 py-2 border-t border-border shrink-0 space-y-0.5">
+          {forms.map((form) => {
+            const Icon = formTypeIcons[form.type] || FileText;
+            return (
+              <button
+                key={form.id}
+                onClick={() => setActiveFormId(form.id)}
+                className={cn(
+                  "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-colors w-full",
+                  "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                )}
+                title={collapsed ? form.name : undefined}
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                {!collapsed && <span className="truncate">{form.name}</span>}
+              </button>
+            );
+          })}
           <button
-            onClick={() => setShowRequestForm(true)}
+            onClick={() => setShowHistory(true)}
             className={cn(
               "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-colors w-full",
               "text-muted-foreground hover:text-foreground hover:bg-accent/50"
             )}
-            title={collapsed ? "Submit Request" : undefined}
+            title={collapsed ? "My Submissions" : undefined}
           >
-            <MessageSquarePlus className="w-4 h-4 shrink-0" />
-            {!collapsed && <span className="truncate">Submit Request</span>}
+            <ClipboardList className="w-4 h-4 shrink-0" />
+            {!collapsed && <span className="truncate">My Submissions</span>}
           </button>
         </div>
       )}
 
-      {/* Request form modal */}
-      {showRequestForm && (
-        <RequestFormModal
-          projects={projects}
-          onClose={() => setShowRequestForm(false)}
+      {/* Form modal */}
+      {activeFormId && (
+        <FormModal
+          formId={activeFormId}
+          hubId={hubId}
+          onClose={() => setActiveFormId(null)}
+          onSubmitted={() => {}}
+        />
+      )}
+
+      {/* Submission history panel */}
+      {showHistory && (
+        <SubmissionHistory
+          hubId={hubId}
+          onClose={() => setShowHistory(false)}
         />
       )}
     </aside>
   );
 }
-

@@ -1,0 +1,392 @@
+import { supabaseAdmin, type FormField, type FormSubmission } from "./supabase";
+import { createIssueInLinear, type CreatedIssue } from "./linear-push";
+import {
+  fetchFormWithFields,
+  fetchHubFormConfig,
+  resolveFormRouting,
+} from "./form-read";
+
+// -- Types ────────────────────────────────────────────────────────────────────
+
+export type SubmissionUser = {
+  id: string;
+  email: string;
+  name?: string;
+};
+
+export type SubmissionResult = {
+  submissionId: string;
+  syncStatus: "synced" | "failed";
+  linearIssueIdentifier?: string;
+  confirmationMessage: string;
+  errorMessage?: string;
+};
+
+// -- Description builder ─────────────────────────────────────────────────────
+
+/**
+ * Build a markdown description for the Linear issue.
+ * Linear-mapped fields (title, description) are handled separately.
+ * Everything else goes into an "Additional Information" block.
+ */
+export function buildIssueDescription(
+  fields: FormField[],
+  fieldValues: Record<string, unknown>,
+  attachmentUrls: string[]
+): string {
+  const parts: string[] = [];
+
+  // Find the description-mapped field
+  const descField = fields.find((f) => f.linear_field === "description");
+  if (descField) {
+    const val = fieldValues[descField.field_key];
+    if (val && typeof val === "string" && val.trim()) {
+      parts.push(val.trim());
+    }
+  }
+
+  // Custom fields (not mapped to title or description)
+  const customFields = fields.filter(
+    (f) =>
+      f.linear_field !== "title" &&
+      f.linear_field !== "description" &&
+      !f.is_hidden
+  );
+
+  const customParts: string[] = [];
+  for (const field of customFields) {
+    const val = fieldValues[field.field_key];
+    if (val === undefined || val === null || val === "") continue;
+
+    // Skip file fields (handled via attachments)
+    if (field.field_type === "file") continue;
+
+    const displayVal =
+      typeof val === "boolean"
+        ? val
+          ? "Yes"
+          : "No"
+        : Array.isArray(val)
+          ? val.join(", ")
+          : String(val);
+
+    if (displayVal.trim()) {
+      customParts.push(`**${field.label}**\n${displayVal.trim()}`);
+    }
+  }
+
+  if (customParts.length > 0) {
+    parts.push("---");
+    parts.push("**Additional Information**");
+    parts.push(customParts.join("\n\n"));
+  }
+
+  // Attachments
+  if (attachmentUrls.length > 0) {
+    parts.push("---");
+    parts.push("**Attachments**");
+    for (const url of attachmentUrls) {
+      parts.push(`![attachment](${url})`);
+    }
+  }
+
+  return parts.join("\n\n");
+}
+
+// -- Submission pipeline ─────────────────────────────────────────────────────
+
+/**
+ * Process a form submission end-to-end:
+ * 1. Fetch form + fields + hub config
+ * 2. Resolve routing
+ * 3. Extract Linear-mapped field values
+ * 4. Build description
+ * 5. Insert submission row (pending)
+ * 6. Create issue in Linear
+ * 7. Update submission row (synced/failed)
+ */
+export async function processFormSubmission(
+  formId: string,
+  hubId: string,
+  fieldValues: Record<string, unknown>,
+  attachmentPaths: string[],
+  user: SubmissionUser
+): Promise<SubmissionResult> {
+  // 1. Fetch form + fields
+  const form = await fetchFormWithFields(formId);
+  if (!form) throw new Error("Form not found");
+  if (!form.is_active) throw new Error("Form is not active");
+
+  // 2. Fetch hub config + resolve routing
+  const hubConfig = await fetchHubFormConfig(hubId, formId);
+  const routing = resolveFormRouting(form, hubConfig);
+
+  if (!routing.teamId) {
+    throw new Error("No target team configured for this form");
+  }
+
+  // 3. Extract Linear-mapped field values
+  const titleField = form.fields.find((f) => f.linear_field === "title");
+  const title = titleField
+    ? String(fieldValues[titleField.field_key] ?? "").trim()
+    : "Untitled submission";
+
+  if (!title) throw new Error("Title is required");
+
+  // Apply hidden field defaults
+  for (const field of form.fields) {
+    if (field.is_hidden && field.default_value !== null) {
+      fieldValues[field.field_key] = field.default_value;
+    }
+  }
+
+  // Priority from hidden field or routing default
+  const priorityField = form.fields.find(
+    (f) => f.linear_field === "priority"
+  );
+  const priority = priorityField
+    ? Number(fieldValues[priorityField.field_key])
+    : routing.priority;
+
+  // Label IDs from field or routing
+  const labelField = form.fields.find(
+    (f) => f.linear_field === "label_ids"
+  );
+  const labelIds = labelField
+    ? (fieldValues[labelField.field_key] as string[] | undefined) ?? routing.labelIds
+    : routing.labelIds;
+
+  // Project ID from field or routing
+  const projectField = form.fields.find(
+    (f) => f.linear_field === "project_id"
+  );
+  const projectId = projectField
+    ? (fieldValues[projectField.field_key] as string | undefined) ?? routing.projectId
+    : routing.projectId;
+
+  // Cycle ID from field or routing
+  const cycleField = form.fields.find(
+    (f) => f.linear_field === "cycle_id"
+  );
+  const cycleId = cycleField
+    ? (fieldValues[cycleField.field_key] as string | undefined) ?? routing.cycleId
+    : routing.cycleId;
+
+  // 4. Build description
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const attachmentUrls = attachmentPaths.map(
+    (path) => `${supabaseUrl}/storage/v1/object/public/form-attachments/${path}`
+  );
+
+  const description = buildIssueDescription(
+    form.fields,
+    fieldValues,
+    attachmentUrls
+  );
+
+  // 5. Insert submission row
+  const confirmationMessage =
+    hubConfig?.confirmation_message ?? form.confirmation_message;
+
+  const { data: submission, error: insertErr } = await supabaseAdmin
+    .from("form_submissions")
+    .insert({
+      form_id: formId,
+      hub_id: hubId,
+      submitter_user_id: user.id,
+      submitter_email: user.email,
+      submitter_name: user.name ?? null,
+      field_values: fieldValues,
+      derived_title: title,
+      sync_status: "pending",
+      attachment_paths: attachmentPaths,
+    })
+    .select("id")
+    .single();
+
+  if (insertErr) throw new Error(`Failed to save submission: ${insertErr.message}`);
+
+  const submissionId = submission.id;
+
+  // 6. Create issue in Linear
+  try {
+    const issue = await createIssueInLinear({
+      teamId: routing.teamId,
+      title,
+      description: description || undefined,
+      priority: priority ?? undefined,
+      labelIds: labelIds.length > 0 ? labelIds : undefined,
+      projectId: projectId ?? undefined,
+      cycleId: cycleId ?? undefined,
+    });
+
+    // 7a. Success — update row
+    await supabaseAdmin
+      .from("form_submissions")
+      .update({
+        sync_status: "synced",
+        linear_issue_id: issue.id,
+        linear_issue_identifier: issue.identifier,
+        sync_attempted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", submissionId);
+
+    return {
+      submissionId,
+      syncStatus: "synced",
+      linearIssueIdentifier: issue.identifier,
+      confirmationMessage,
+    };
+  } catch (err) {
+    // 7b. Failure — update row
+    const syncError =
+      err instanceof Error ? err.message : "Unknown error creating issue";
+
+    await supabaseAdmin
+      .from("form_submissions")
+      .update({
+        sync_status: "failed",
+        sync_error: syncError,
+        sync_attempted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", submissionId);
+
+    return {
+      submissionId,
+      syncStatus: "failed",
+      confirmationMessage,
+      errorMessage: form.error_message,
+    };
+  }
+}
+
+/**
+ * Retry a failed submission: re-attempt the Linear issue creation.
+ */
+export async function retrySubmission(
+  submissionId: string
+): Promise<SubmissionResult> {
+  // Fetch the submission
+  const { data: sub, error: subErr } = await supabaseAdmin
+    .from("form_submissions")
+    .select("*")
+    .eq("id", submissionId)
+    .single();
+
+  if (subErr) throw new Error(`Submission not found: ${subErr.message}`);
+
+  const submission = sub as FormSubmission;
+
+  if (submission.sync_status === "synced") {
+    return {
+      submissionId,
+      syncStatus: "synced",
+      linearIssueIdentifier: submission.linear_issue_identifier ?? undefined,
+      confirmationMessage: "Already synced.",
+    };
+  }
+
+  // Fetch form + hub config
+  const form = await fetchFormWithFields(submission.form_id);
+  if (!form) throw new Error("Form no longer exists");
+
+  const hubConfig = await fetchHubFormConfig(
+    submission.hub_id,
+    submission.form_id
+  );
+  const routing = resolveFormRouting(form, hubConfig);
+
+  if (!routing.teamId) {
+    throw new Error("No target team configured for this form");
+  }
+
+  // Rebuild description from saved field values
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const attachmentUrls = (submission.attachment_paths ?? []).map(
+    (path: string) =>
+      `${supabaseUrl}/storage/v1/object/public/form-attachments/${path}`
+  );
+
+  const description = buildIssueDescription(
+    form.fields,
+    submission.field_values,
+    attachmentUrls
+  );
+
+  // Extract mapped values from saved field_values
+  const priorityField = form.fields.find((f) => f.linear_field === "priority");
+  const priority = priorityField
+    ? Number(submission.field_values[priorityField.field_key])
+    : routing.priority;
+
+  const labelField = form.fields.find((f) => f.linear_field === "label_ids");
+  const labelIds = labelField
+    ? (submission.field_values[labelField.field_key] as string[] | undefined) ?? routing.labelIds
+    : routing.labelIds;
+
+  const projectField = form.fields.find((f) => f.linear_field === "project_id");
+  const projectId = projectField
+    ? (submission.field_values[projectField.field_key] as string | undefined) ?? routing.projectId
+    : routing.projectId;
+
+  const cycleField = form.fields.find((f) => f.linear_field === "cycle_id");
+  const cycleId = cycleField
+    ? (submission.field_values[cycleField.field_key] as string | undefined) ?? routing.cycleId
+    : routing.cycleId;
+
+  const confirmationMessage =
+    hubConfig?.confirmation_message ?? form.confirmation_message;
+
+  try {
+    const issue = await createIssueInLinear({
+      teamId: routing.teamId,
+      title: submission.derived_title,
+      description: description || undefined,
+      priority: priority ?? undefined,
+      labelIds: labelIds.length > 0 ? labelIds : undefined,
+      projectId: projectId ?? undefined,
+      cycleId: cycleId ?? undefined,
+    });
+
+    await supabaseAdmin
+      .from("form_submissions")
+      .update({
+        sync_status: "synced",
+        linear_issue_id: issue.id,
+        linear_issue_identifier: issue.identifier,
+        sync_error: null,
+        sync_attempted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", submissionId);
+
+    return {
+      submissionId,
+      syncStatus: "synced",
+      linearIssueIdentifier: issue.identifier,
+      confirmationMessage,
+    };
+  } catch (err) {
+    const syncError =
+      err instanceof Error ? err.message : "Unknown error creating issue";
+
+    await supabaseAdmin
+      .from("form_submissions")
+      .update({
+        sync_status: "failed",
+        sync_error: syncError,
+        sync_attempted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", submissionId);
+
+    return {
+      submissionId,
+      syncStatus: "failed",
+      confirmationMessage,
+      errorMessage: form.error_message,
+    };
+  }
+}
