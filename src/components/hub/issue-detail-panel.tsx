@@ -522,9 +522,9 @@ function CommentBubble({
     <div
       className={cn(
         "rounded-lg",
-        compact ? "p-2" : "p-3",
-        isHub ? "bg-accent/50 border border-border" : "bg-muted/50",
-        isFailed && "border-destructive/30"
+        compact ? "py-1.5" : "p-3",
+        !compact && (isHub ? "bg-accent/50 border border-border" : "bg-muted/50"),
+        isFailed && !compact && "border-destructive/30"
       )}
     >
       <div className="flex items-center gap-2 mb-1.5">
