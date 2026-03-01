@@ -35,6 +35,7 @@ interface WorkflowRulesProps {
   hubId: string;
   mappingId: string;
   teamId: string;
+  visibleLabelIds: string[];
 }
 
 const TRIGGER_LABELS: Record<WorkflowTriggerType, string> = {
@@ -43,7 +44,7 @@ const TRIGGER_LABELS: Record<WorkflowTriggerType, string> = {
   label_changed: "When label changes",
 };
 
-export function WorkflowRules({ hubId, mappingId, teamId }: WorkflowRulesProps) {
+export function WorkflowRules({ hubId, mappingId, teamId, visibleLabelIds }: WorkflowRulesProps) {
   const [rules, setRules] = useState<WorkflowRule[]>([]);
   const [labels, setLabels] = useState<LinearLabel[]>([]);
   const [states, setStates] = useState<LinearState[]>([]);
@@ -84,13 +85,18 @@ export function WorkflowRules({ hubId, mappingId, teamId }: WorkflowRulesProps) 
         labels: LinearLabel[];
         states: LinearState[];
       };
-      setLabels(data.labels);
+      // Only show labels that are visible in this team mapping
+      const filteredLabels =
+        visibleLabelIds.length > 0
+          ? data.labels.filter((l: LinearLabel) => visibleLabelIds.includes(l.id))
+          : data.labels;
+      setLabels(filteredLabels);
       setStates(data.states);
       setOptionsLoaded(true);
     } catch {
       // ignore
     }
-  }, [hubId, teamId, optionsLoaded]);
+  }, [hubId, teamId, optionsLoaded, visibleLabelIds]);
 
   useEffect(() => {
     fetchRules();

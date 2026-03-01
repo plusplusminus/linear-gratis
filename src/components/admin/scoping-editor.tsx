@@ -273,6 +273,7 @@ function MappingCard({
               hubId={hubId}
               mappingId={mapping.id}
               teamId={mapping.linear_team_id}
+              visibleLabelIds={labelIds}
             />
           </div>
 
