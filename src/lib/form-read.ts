@@ -87,14 +87,14 @@ export async function fetchHubForms(hubId: string): Promise<ResolvedForm[]> {
     configByFormId.set(cfg.form_id, cfg);
   }
 
-  // 4. Merge: global forms filtered by hub config
+  // 4. Merge: global forms — only include if explicitly enabled via hub config
   const resolved: ResolvedForm[] = [];
 
   for (const form of globalForms) {
     const cfg = configByFormId.get(form.id);
-    // If there's a hub config and it's disabled, skip
-    if (cfg && !cfg.is_enabled) continue;
-    resolved.push({ ...form, hub_config: cfg ?? null });
+    // Global forms require an explicit hub_form_config with is_enabled=true
+    if (!cfg?.is_enabled) continue;
+    resolved.push({ ...form, hub_config: cfg });
   }
 
   // 5. Add hub-specific forms
