@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { withHubAuth, type HubAuthError } from "@/lib/hub-auth";
-import { fetchFormWithFields } from "@/lib/form-read";
+import { fetchFormWithFields, fetchHubFormConfig } from "@/lib/form-read";
 
 /**
  * GET: Get form with visible fields for rendering.
@@ -26,6 +26,9 @@ export async function GET(
       return NextResponse.json({ error: "Form not found" }, { status: 404 });
     }
 
+    // Fetch hub config for message overrides
+    const hubConfig = await fetchHubFormConfig(hubId, formId);
+
     // Filter out hidden fields — those are only used server-side during submission
     const visibleFields = form.fields.filter((f) => !f.is_hidden);
 
@@ -34,7 +37,7 @@ export async function GET(
       name: form.name,
       type: form.type,
       description: form.description,
-      confirmation_message: form.confirmation_message,
+      confirmation_message: hubConfig?.confirmation_message ?? form.confirmation_message,
       error_message: form.error_message,
       fields: visibleFields.map((f) => ({
         id: f.id,
