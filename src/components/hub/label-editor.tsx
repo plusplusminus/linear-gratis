@@ -1,10 +1,25 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { X, Plus, Search, Loader2 } from "lucide-react";
+import { X, Plus, Search, Loader2, Zap } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 type Label = { id: string; name: string; color: string };
+
+type WorkflowRule = {
+  labelId: string;
+  triggerType: string;
+  description: string;
+};
+
+type WorkflowExecutionResult = {
+  ruleId: string;
+  action: string;
+  success: boolean;
+  error?: string;
+  details?: Record<string, unknown>;
+};
 
 export function LabelEditor({
   issueLabels,
@@ -12,6 +27,8 @@ export function LabelEditor({
   hubId,
   issueId,
   isViewOnly,
+  workflowLabelIds = [],
+  workflowRules = [],
   onLabelsChange,
 }: {
   issueLabels: Label[];
@@ -19,12 +36,28 @@ export function LabelEditor({
   hubId: string;
   issueId: string;
   isViewOnly?: boolean;
+  workflowLabelIds?: string[];
+  workflowRules?: WorkflowRule[];
   onLabelsChange: (labels: Label[]) => void;
 }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const workflowLabelSet = new Set(workflowLabelIds);
+
+  // Build a map of labelId -> description for tooltips
+  const ruleDescriptionMap = new Map<string, string>();
+  for (const rule of workflowRules) {
+    // If multiple rules target the same label, join them
+    const existing = ruleDescriptionMap.get(rule.labelId);
+    if (existing) {
+      ruleDescriptionMap.set(rule.labelId, `${existing}\n${rule.description}`);
+    } else {
+      ruleDescriptionMap.set(rule.labelId, rule.description);
+    }
+  }
 
   // Available labels = hub labels not already on the issue
   const issueIds = new Set(issueLabels.map((l) => l.id));
@@ -51,6 +84,23 @@ export function LabelEditor({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [dropdownOpen]);
 
+  function showWorkflowFeedback(results: WorkflowExecutionResult[]) {
+    for (const result of results) {
+      if (result.success && result.action === "set_status") {
+        const stateName =
+          (result.details?.stateName as string) || "updated";
+        toast.success(`Status updated to ${stateName}`, {
+          duration: 3500,
+        });
+      } else if (!result.success) {
+        toast.error("Workflow action failed", {
+          description: result.error || "An automation could not be applied",
+          duration: 4000,
+        });
+      }
+    }
+  }
+
   async function handleAdd(label: Label) {
     setPendingAction(label.id);
 
@@ -69,8 +119,15 @@ export function LabelEditor({
         // Revert
         onLabelsChange(issueLabels);
       } else {
-        const data = (await res.json()) as { labels: Label[] };
+        const data = (await res.json()) as {
+          labels: Label[];
+          workflowResults?: WorkflowExecutionResult[];
+        };
         onLabelsChange(data.labels);
+
+        if (data.workflowResults && data.workflowResults.length > 0) {
+          showWorkflowFeedback(data.workflowResults);
+        }
       }
     } catch {
       onLabelsChange(issueLabels);
@@ -99,8 +156,15 @@ export function LabelEditor({
         // Revert
         onLabelsChange(issueLabels);
       } else {
-        const data = (await res.json()) as { labels: Label[] };
+        const data = (await res.json()) as {
+          labels: Label[];
+          workflowResults?: WorkflowExecutionResult[];
+        };
         onLabelsChange(data.labels);
+
+        if (data.workflowResults && data.workflowResults.length > 0) {
+          showWorkflowFeedback(data.workflowResults);
+        }
       }
     } catch {
       onLabelsChange(issueLabels);
@@ -112,32 +176,41 @@ export function LabelEditor({
   return (
     <div className="px-4 py-3 border-b border-border">
       <div className="flex flex-wrap items-center gap-1.5">
-        {issueLabels.map((label) => (
-          <span
-            key={label.id}
-            className={cn(
-              "inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium text-white/90 group/chip",
-              pendingAction === label.id && "opacity-50"
-            )}
-            style={{ backgroundColor: label.color || "var(--muted)" }}
-          >
-            {label.name}
-            {!isViewOnly && (
-              <button
-                onClick={() => handleRemove(label.id)}
-                disabled={!!pendingAction}
-                className="opacity-0 group-hover/chip:opacity-100 transition-opacity -mr-0.5 hover:text-white"
-                title={`Remove ${label.name}`}
-              >
-                {pendingAction === label.id ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <X className="w-3 h-3" />
-                )}
-              </button>
-            )}
-          </span>
-        ))}
+        {issueLabels.map((label) => {
+          const hasWorkflow = workflowLabelSet.has(label.id);
+          const tooltip = ruleDescriptionMap.get(label.id);
+
+          return (
+            <span
+              key={label.id}
+              className={cn(
+                "inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium text-white/90 group/chip",
+                pendingAction === label.id && "opacity-50"
+              )}
+              style={{ backgroundColor: label.color || "var(--muted)" }}
+              title={tooltip}
+            >
+              {hasWorkflow && (
+                <Zap className="w-2.5 h-2.5 text-white/70 shrink-0" />
+              )}
+              {label.name}
+              {!isViewOnly && (
+                <button
+                  onClick={() => handleRemove(label.id)}
+                  disabled={!!pendingAction}
+                  className="opacity-0 group-hover/chip:opacity-100 transition-opacity -mr-0.5 hover:text-white"
+                  title={`Remove ${label.name}`}
+                >
+                  {pendingAction === label.id ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <X className="w-3 h-3" />
+                  )}
+                </button>
+              )}
+            </span>
+          );
+        })}
 
         {/* Add label button */}
         {!isViewOnly && (
@@ -172,20 +245,29 @@ export function LabelEditor({
                       {search ? "No matching labels" : "All labels applied"}
                     </p>
                   ) : (
-                    available.map((label) => (
-                      <button
-                        key={label.id}
-                        onClick={() => handleAdd(label)}
-                        disabled={!!pendingAction}
-                        className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-accent transition-colors"
-                      >
-                        <div
-                          className="w-3 h-3 rounded-full shrink-0"
-                          style={{ backgroundColor: label.color }}
-                        />
-                        <span className="truncate">{label.name}</span>
-                      </button>
-                    ))
+                    available.map((label) => {
+                      const hasWorkflow = workflowLabelSet.has(label.id);
+                      const tooltip = ruleDescriptionMap.get(label.id);
+
+                      return (
+                        <button
+                          key={label.id}
+                          onClick={() => handleAdd(label)}
+                          disabled={!!pendingAction}
+                          className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-accent transition-colors"
+                          title={tooltip}
+                        >
+                          <div
+                            className="w-3 h-3 rounded-full shrink-0"
+                            style={{ backgroundColor: label.color }}
+                          />
+                          <span className="truncate flex-1">{label.name}</span>
+                          {hasWorkflow && (
+                            <Zap className="w-3 h-3 text-muted-foreground/60 shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })
                   )}
                 </div>
               </div>

@@ -340,3 +340,32 @@ export type HubComment = {
   updated_at: string
 }
 
+export type WorkflowTriggerType = 'label_added' | 'label_removed' | 'label_changed'
+export type WorkflowActionType = 'set_status'
+
+export type HubWorkflowRule = {
+  id: string
+  mapping_id: string
+  trigger_type: WorkflowTriggerType
+  trigger_label_id: string
+  trigger_from_label_id: string | null
+  action_type: WorkflowActionType
+  action_config: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export type HubWorkflowLog = {
+  id: string
+  hub_id: string
+  issue_linear_id: string
+  rule_id: string
+  trigger_label_id: string
+  action_type: string
+  action_config: Record<string, unknown>
+  result: 'success' | 'failure'
+  error_message: string | null
+  triggered_by: string
+  created_at: string
+}
+

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withHubAuth, type HubAuthError } from "@/lib/hub-auth";
 import { getWorkspaceToken } from "@/lib/workspace";
+import { supabaseAdmin, type HubWorkflowLog } from "@/lib/supabase";
 
 type HistoryNode = {
   id: string;
@@ -19,13 +20,19 @@ type HistoryNode = {
 type HistoryEntry = {
   id: string;
   createdAt: string;
-  type: "state" | "priority" | "label";
+  type: "state" | "priority" | "label" | "workflow";
   fromState?: { name: string; color: string; type: string };
   toState?: { name: string; color: string; type: string };
   fromPriority?: number;
   toPriority?: number;
   addedLabels?: Array<{ name: string; color: string }>;
   removedLabels?: Array<{ name: string; color: string }>;
+  // Workflow-specific fields
+  workflowActionType?: string;
+  workflowActionConfig?: Record<string, unknown>;
+  workflowResult?: "success" | "failure";
+  workflowError?: string | null;
+  workflowTriggerLabelId?: string;
 };
 
 const PRIORITY_LABELS: Record<number, string> = {
@@ -53,49 +60,56 @@ export async function GET(
 
     const token = await getWorkspaceToken();
 
-    const query = `
-      query IssueHistory($issueId: String!) {
-        issue(id: $issueId) {
-          history(first: 50) {
-            nodes {
-              id
-              createdAt
-              fromState { name color type }
-              toState { name color type }
-              fromPriority
-              toPriority
-              addedLabels { name color }
-              removedLabels { name color }
-              fromAssignee { id }
-              toAssignee { id }
+    // Fetch Linear history and workflow logs in parallel
+    const [linearResponse, workflowLogsResult] = await Promise.all([
+      fetch("https://api.linear.app/graphql", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: token.trim(),
+        },
+        body: JSON.stringify({
+          query: `
+            query IssueHistory($issueId: String!) {
+              issue(id: $issueId) {
+                history(first: 50) {
+                  nodes {
+                    id
+                    createdAt
+                    fromState { name color type }
+                    toState { name color type }
+                    fromPriority
+                    toPriority
+                    addedLabels { name color }
+                    removedLabels { name color }
+                    fromAssignee { id }
+                    toAssignee { id }
+                  }
+                }
+              }
             }
-          }
-        }
-      }
-    `;
-
-    const response = await fetch("https://api.linear.app/graphql", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: token.trim(),
-      },
-      body: JSON.stringify({
-        query,
-        variables: { issueId: linearId },
+          `,
+          variables: { issueId: linearId },
+        }),
       }),
-    });
+      supabaseAdmin
+        .from("hub_workflow_logs")
+        .select("*")
+        .eq("hub_id", hubId)
+        .eq("issue_linear_id", linearId)
+        .order("created_at", { ascending: true }),
+    ]);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Linear API error (HTTP):", response.status, errorText);
+    if (!linearResponse.ok) {
+      const errorText = await linearResponse.text();
+      console.error("Linear API error (HTTP):", linearResponse.status, errorText);
       return NextResponse.json(
         { error: "Failed to fetch issue history" },
         { status: 502 }
       );
     }
 
-    const result = (await response.json()) as {
+    const result = (await linearResponse.json()) as {
       data?: {
         issue?: {
           history: {
@@ -114,57 +128,65 @@ export async function GET(
       );
     }
 
-    if (!result.data?.issue) {
-      // Issue not found in Linear — return empty history instead of 502
-      return NextResponse.json({ history: [], priorityLabels: PRIORITY_LABELS });
-    }
-
-    // Filter: only keep state, priority, and label changes.
-    // Exclude assignee changes (client privacy).
+    // Build entries from Linear history
     const entries: HistoryEntry[] = [];
 
-    for (const node of result.data.issue.history.nodes) {
-      // State change
-      if (node.fromState || node.toState) {
-        entries.push({
-          id: node.id,
-          createdAt: node.createdAt,
-          type: "state",
-          fromState: node.fromState ?? undefined,
-          toState: node.toState ?? undefined,
-        });
-        continue;
-      }
+    if (result.data?.issue) {
+      for (const node of result.data.issue.history.nodes) {
+        // State change
+        if (node.fromState || node.toState) {
+          entries.push({
+            id: node.id,
+            createdAt: node.createdAt,
+            type: "state",
+            fromState: node.fromState ?? undefined,
+            toState: node.toState ?? undefined,
+          });
+          continue;
+        }
 
-      // Priority change
-      if (node.fromPriority != null || node.toPriority != null) {
-        // Skip if both are the same (no real change)
-        if (node.fromPriority === node.toPriority) continue;
-        entries.push({
-          id: node.id,
-          createdAt: node.createdAt,
-          type: "priority",
-          fromPriority: node.fromPriority ?? undefined,
-          toPriority: node.toPriority ?? undefined,
-        });
-        continue;
-      }
+        // Priority change
+        if (node.fromPriority != null || node.toPriority != null) {
+          if (node.fromPriority === node.toPriority) continue;
+          entries.push({
+            id: node.id,
+            createdAt: node.createdAt,
+            type: "priority",
+            fromPriority: node.fromPriority ?? undefined,
+            toPriority: node.toPriority ?? undefined,
+          });
+          continue;
+        }
 
-      // Label changes
-      const added = node.addedLabels ?? [];
-      const removed = node.removedLabels ?? [];
-      if (added.length > 0 || removed.length > 0) {
-        entries.push({
-          id: node.id,
-          createdAt: node.createdAt,
-          type: "label",
-          addedLabels: added.length > 0 ? added : undefined,
-          removedLabels: removed.length > 0 ? removed : undefined,
-        });
-        continue;
+        // Label changes
+        const added = node.addedLabels ?? [];
+        const removed = node.removedLabels ?? [];
+        if (added.length > 0 || removed.length > 0) {
+          entries.push({
+            id: node.id,
+            createdAt: node.createdAt,
+            type: "label",
+            addedLabels: added.length > 0 ? added : undefined,
+            removedLabels: removed.length > 0 ? removed : undefined,
+          });
+          continue;
+        }
       }
+    }
 
-      // Skip everything else (assignee changes, etc.)
+    // Merge workflow log entries into the timeline
+    const workflowLogs = (workflowLogsResult.data ?? []) as HubWorkflowLog[];
+    for (const log of workflowLogs) {
+      entries.push({
+        id: `wf-${log.id}`,
+        createdAt: log.created_at,
+        type: "workflow",
+        workflowActionType: log.action_type,
+        workflowActionConfig: log.action_config,
+        workflowResult: log.result,
+        workflowError: log.error_message,
+        workflowTriggerLabelId: log.trigger_label_id,
+      });
     }
 
     // Sort chronologically (oldest first)
