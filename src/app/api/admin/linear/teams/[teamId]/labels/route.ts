@@ -52,9 +52,18 @@ export async function GET(
     };
 
     if (result.errors || !result.data?.team) {
-      console.error("Linear labels query error:", result.errors);
+      console.error("Linear labels query error:", {
+        errors: result.errors,
+        hasData: !!result.data,
+        hasTeam: !!result.data?.team,
+        teamId,
+        httpStatus: res.status,
+      });
       return NextResponse.json(
-        { error: "Failed to fetch labels from Linear" },
+        {
+          error: "Failed to fetch labels from Linear",
+          detail: result.errors?.[0]?.message,
+        },
         { status: 502 }
       );
     }
