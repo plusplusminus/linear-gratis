@@ -122,7 +122,7 @@ export function WorkflowRules({ hubId, mappingId, teamId, visibleLabelIds }: Wor
     setTriggerType(rule.trigger_type);
     setTriggerLabelId(rule.trigger_label_id);
     setTriggerFromLabelId(rule.trigger_from_label_id ?? "");
-    setTargetStateId((rule.action_config.target_state_id as string) ?? "");
+    setTargetStateId((rule.action_config.stateId as string) ?? "");
     setShowForm(true);
     fetchOptions();
   }
@@ -147,7 +147,7 @@ export function WorkflowRules({ hubId, mappingId, teamId, visibleLabelIds }: Wor
         trigger_from_label_id:
           triggerType === "label_changed" ? triggerFromLabelId : null,
         action_type: actionType,
-        action_config: { target_state_id: targetStateId },
+        action_config: { stateId: targetStateId },
       };
 
       const res = await fetch(`/api/admin/hubs/${hubId}/workflow-rules`, {
@@ -419,7 +419,7 @@ function RuleRow({
   }
 
   function actionDescription(): string {
-    const stateId = rule.action_config.target_state_id as string | undefined;
+    const stateId = rule.action_config.stateId as string | undefined;
     if (!stateId) return "Set status";
     const name = optionsLoaded ? getStateName(stateId) : "...";
     return `Set status to "${name}"`;
