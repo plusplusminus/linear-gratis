@@ -166,7 +166,7 @@ const CYCLES_QUERY = `
       filter: { team: { id: { eq: $teamId } } }
       first: ${PAGE_SIZE}
       after: $after
-      orderBy: startsAt
+      orderBy: createdAt
     ) {
       pageInfo {
         hasNextPage
