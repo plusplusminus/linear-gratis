@@ -138,7 +138,14 @@ export function TeamTabs({
     <div className="flex flex-col flex-1 min-h-0">
       {/* Tab bar */}
       <div className="flex items-center gap-0 border-b border-border px-6 shrink-0">
-        {TABS.map((tab) => {
+        {TABS.filter((tab) => {
+          if (tab.key === "issues") return true;
+          if (tab.key === "projects") return projects.length > 0;
+          if (tab.key === "cycles") return (cycleDetails?.length ?? 0) > 0;
+          if (tab.key === "initiatives") return initiatives.length > 0;
+          if (tab.key === "milestones") return milestones.length > 0;
+          return true;
+        }).map((tab) => {
           const isActive = activeTab === tab.key;
           const count =
             tab.key === "issues"
