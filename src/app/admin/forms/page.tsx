@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useFetch } from "@/hooks/use-fetch";
 import { cn } from "@/lib/utils";
 import { Plus, Loader2 } from "lucide-react";
-import type { FormTemplate, FormField } from "@/lib/supabase";
+import type { FormTemplate } from "@/lib/supabase";
 
-type FormWithFields = FormTemplate & { fields: FormField[] };
+type FormListItem = FormTemplate & { field_count: number };
 
 const TYPE_BADGE: Record<string, { bg: string; text: string; label: string }> = {
   bug: { bg: "var(--badge-orange-bg)", text: "var(--badge-orange-text)", label: "Bug" },
@@ -15,7 +15,7 @@ const TYPE_BADGE: Record<string, { bg: string; text: string; label: string }> = 
 };
 
 export default function FormsIndexPage() {
-  const { data: forms, loading, error } = useFetch<FormWithFields[]>("/api/admin/forms");
+  const { data: forms, loading, error } = useFetch<FormListItem[]>("/api/admin/forms");
 
   return (
     <div className="p-6 max-w-4xl">
@@ -79,7 +79,7 @@ export default function FormsIndexPage() {
                   </span>
                 </span>
                 <span className="text-sm text-muted-foreground tabular-nums">
-                  {form.fields?.length ?? 0}
+                  {form.field_count}
                 </span>
                 <span>
                   <span
