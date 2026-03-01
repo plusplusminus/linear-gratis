@@ -231,7 +231,10 @@ export async function logWorkflowExecution(
       rule_id: result.ruleId,
       trigger_label_id: rule?.trigger_label_id ?? "unknown",
       action_type: result.action,
-      action_config: rule?.action_config ?? {},
+      action_config: {
+        ...(rule?.action_config ?? {}),
+        ...(result.details ?? {}),
+      },
       result: result.success ? "success" : "failure",
       error_message: result.error ?? null,
       triggered_by: triggeredBy,
