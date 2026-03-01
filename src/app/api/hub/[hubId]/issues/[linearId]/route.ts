@@ -6,8 +6,14 @@ import {
   fetchHubTeamLabels,
   getHubVisibleLabelIds,
 } from "@/lib/hub-read";
-import { supabaseAdmin } from "@/lib/supabase";
+import { supabaseAdmin, type HubWorkflowRule } from "@/lib/supabase";
 import { updateIssueLabels } from "@/lib/linear-push";
+import {
+  buildLabelChangeContext,
+  evaluateWorkflowRules,
+  executeWorkflowActions,
+  type WorkflowExecutionResult,
+} from "@/lib/hub-workflows";
 
 export async function GET(
   _request: Request,
@@ -136,7 +142,46 @@ export async function POST(
       ? updatedLabels.filter((l) => allowedLabelIds.includes(l.id))
       : updatedLabels;
 
-    return NextResponse.json({ labels: visibleLabels });
+    // -- Workflow evaluation (fire-and-forget, never blocks the response) -----
+    let workflowResults: WorkflowExecutionResult[] = [];
+    try {
+      // Look up the hub_team_mapping for this issue's team
+      const { data: mapping } = await supabaseAdmin
+        .from("hub_team_mappings")
+        .select("id")
+        .eq("hub_id", hubId)
+        .eq("linear_team_id", issueTeamId)
+        .eq("is_active", true)
+        .single();
+
+      if (mapping) {
+        // Fetch workflow rules for this mapping
+        const { data: rules } = await supabaseAdmin
+          .from("hub_workflow_rules")
+          .select("*")
+          .eq("mapping_id", mapping.id);
+
+        if (rules && rules.length > 0) {
+          const context = buildLabelChangeContext(currentLabelIds, newLabelIds);
+          const actions = evaluateWorkflowRules(
+            context,
+            rules as HubWorkflowRule[]
+          );
+
+          if (actions.length > 0) {
+            // Fire-and-forget: execute but don't let failures affect the response
+            workflowResults = await executeWorkflowActions(actions, linearId);
+          }
+        }
+      }
+    } catch (workflowError) {
+      console.error(
+        "[hub-workflows] Workflow evaluation failed (non-blocking):",
+        workflowError
+      );
+    }
+
+    return NextResponse.json({ labels: visibleLabels, workflowResults });
   } catch (error) {
     console.error("POST /api/hub/[hubId]/issues/[linearId] labels error:", error);
     return NextResponse.json(
