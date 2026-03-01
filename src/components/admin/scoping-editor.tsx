@@ -248,18 +248,16 @@ function MappingCard({
             teamId={mapping.linear_team_id}
             value={labelIds}
             onChange={setLabelIds}
+            label="Visible labels"
+            description="Only these labels will be shown on issues in the client hub. Leave empty to show all."
           />
-          <div>
-            <p className="text-xs font-medium text-muted-foreground mb-1.5">
-              Hidden labels
-              <span className="ml-1 font-normal">— issues with these labels are excluded from client view</span>
-            </p>
-            <LabelPicker
-              teamId={mapping.linear_team_id}
-              value={hiddenLabelIds}
-              onChange={setHiddenLabelIds}
-            />
-          </div>
+          <LabelPicker
+            teamId={mapping.linear_team_id}
+            value={hiddenLabelIds}
+            onChange={setHiddenLabelIds}
+            label="Hidden labels"
+            description="Issues with any of these labels will be entirely excluded from the client hub."
+          />
           <InitiativePicker
             value={initiativeIds}
             onChange={setInitiativeIds}

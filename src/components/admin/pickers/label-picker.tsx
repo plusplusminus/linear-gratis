@@ -14,9 +14,11 @@ interface LabelPickerProps {
   teamId: string | null;
   value: string[];
   onChange: (ids: string[]) => void;
+  label?: string;
+  description?: string;
 }
 
-export function LabelPicker({ teamId, value, onChange }: LabelPickerProps) {
+export function LabelPicker({ teamId, value, onChange, label = "Labels", description }: LabelPickerProps) {
   const { data, loading, error, refetch } = useFetch<LinearLabel[]>(
     teamId ? `/api/admin/linear/teams/${teamId}/labels` : null,
     { enabled: !!teamId }
@@ -34,7 +36,7 @@ export function LabelPicker({ teamId, value, onChange }: LabelPickerProps) {
     return (
       <div className="border border-border rounded-lg bg-card">
         <div className="px-3 py-2 border-b border-border bg-muted/30">
-          <p className="text-xs font-medium text-foreground">Labels</p>
+          <p className="text-xs font-medium text-foreground">{label}</p>
         </div>
         <div className="px-3 py-4 text-center">
           <p className="text-xs text-muted-foreground">
@@ -68,7 +70,8 @@ export function LabelPicker({ teamId, value, onChange }: LabelPickerProps) {
 
   return (
     <PickerShell
-      label="Labels"
+      label={label}
+      description={description}
       loading={loading}
       error={error}
       onRetry={refetch}

@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 
 interface PickerShellProps {
   label: string;
+  description?: string;
   loading: boolean;
   error: string | null;
   onRetry?: () => void;
@@ -17,6 +18,7 @@ interface PickerShellProps {
 
 export function PickerShell({
   label,
+  description,
   loading,
   error,
   onRetry,
@@ -31,6 +33,9 @@ export function PickerShell({
     <div className="border border-border rounded-lg overflow-hidden bg-card">
       <div className="px-3 py-2 border-b border-border bg-muted/30">
         <p className="text-xs font-medium text-foreground">{label}</p>
+        {description && (
+          <p className="text-[10px] text-muted-foreground mt-0.5">{description}</p>
+        )}
       </div>
 
       <div className="px-2 py-1.5 border-b border-border">
