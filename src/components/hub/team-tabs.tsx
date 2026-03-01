@@ -9,15 +9,17 @@ import {
   Calendar,
   CircleDot,
   CircleOff,
+  IterationCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProjectIssueList } from "./project-issue-list";
 
-type Tab = "issues" | "projects" | "initiatives" | "milestones";
+type Tab = "issues" | "projects" | "cycles" | "initiatives" | "milestones";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "issues", label: "Issues" },
   { key: "projects", label: "Projects" },
+  { key: "cycles", label: "Cycles" },
   { key: "initiatives", label: "Initiatives" },
   { key: "milestones", label: "Milestones" },
 ];
@@ -54,6 +56,18 @@ type Milestone = {
   projectColor?: string;
 };
 
+type CycleDetail = {
+  id: string;
+  name: string | null;
+  number: number;
+  startsAt: string | null;
+  endsAt: string | null;
+  isCurrent: boolean;
+  isUpcoming: boolean;
+  displayName?: string;
+  stats?: { total: number; completed: number };
+};
+
 type Issue = {
   id: string;
   identifier: string;
@@ -74,6 +88,7 @@ export function TeamTabs({
   states,
   labels,
   cycles,
+  cycleDetails,
   projects,
   initiatives,
   milestones,
@@ -86,6 +101,7 @@ export function TeamTabs({
   states: Array<{ id: string; name: string; color: string; type: string }>;
   labels: Array<{ id: string; name: string; color: string }>;
   cycles?: Array<{ id: string; name: string; number: number }>;
+  cycleDetails?: CycleDetail[];
   projects: Project[];
   initiatives: Initiative[];
   milestones: Milestone[];
@@ -130,9 +146,11 @@ export function TeamTabs({
               ? issues.length
               : tab.key === "projects"
                 ? projects.length
-                : tab.key === "initiatives"
-                  ? initiatives.length
-                  : milestones.length;
+                : tab.key === "cycles"
+                  ? (cycleDetails?.length ?? 0)
+                  : tab.key === "initiatives"
+                    ? initiatives.length
+                    : milestones.length;
 
           return (
             <button
@@ -198,6 +216,20 @@ export function TeamTabs({
                 />
               ))}
             </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "cycles" && (
+        <div className="p-6 max-w-4xl overflow-y-auto">
+          {!cycleDetails || cycleDetails.length === 0 ? (
+            <EmptySection message="This team doesn't use cycles" />
+          ) : (
+            <CyclesTabContent
+              cycles={cycleDetails}
+              hubSlug={hubSlug}
+              teamKey={teamKey}
+            />
           )}
         </div>
       )}
@@ -387,6 +419,134 @@ function MilestoneRow({
         </span>
       )}
     </div>
+  );
+}
+
+function CyclesTabContent({
+  cycles,
+  hubSlug,
+  teamKey,
+}: {
+  cycles: CycleDetail[];
+  hubSlug: string;
+  teamKey: string;
+}) {
+  const currentCycles = cycles.filter((c) => c.isCurrent);
+  const upcomingCycles = cycles.filter((c) => c.isUpcoming);
+  const completedCycles = cycles.filter(
+    (c) => !c.isCurrent && !c.isUpcoming
+  );
+
+  function renderSection(title: string, items: CycleDetail[]) {
+    if (items.length === 0) return null;
+    return (
+      <div>
+        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+          {title}
+        </h3>
+        <div className="space-y-1.5">
+          {items.map((cycle) => (
+            <CycleCard
+              key={cycle.id}
+              cycle={cycle}
+              href={`/hub/${hubSlug}/${teamKey}/cycles/${cycle.id}`}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {renderSection("Active", currentCycles)}
+      {renderSection("Upcoming", upcomingCycles)}
+      {renderSection("Completed", completedCycles)}
+    </div>
+  );
+}
+
+function CycleCard({
+  cycle,
+  href,
+}: {
+  cycle: CycleDetail;
+  href: string;
+}) {
+  const total = cycle.stats?.total ?? 0;
+  const completed = cycle.stats?.completed ?? 0;
+  const progressPct = total > 0 ? Math.round((completed / total) * 100) : 0;
+  const cycleName =
+    cycle.displayName || cycle.name || `Cycle ${cycle.number}`;
+  const dateRange =
+    cycle.startsAt && cycle.endsAt
+      ? `${formatDate(cycle.startsAt)} – ${formatDate(cycle.endsAt)}`
+      : null;
+
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "flex items-center gap-3 border rounded-lg px-4 py-3 bg-card hover:bg-accent/50 transition-colors group",
+        cycle.isCurrent
+          ? "border-l-2 border-l-primary/60 border-t-border border-r-border border-b-border bg-primary/[0.02]"
+          : "border-border"
+      )}
+    >
+      <IterationCw
+        className={cn(
+          "w-3.5 h-3.5 shrink-0",
+          cycle.isCurrent ? "text-primary/70" : "text-muted-foreground"
+        )}
+      />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-medium group-hover:text-primary transition-colors truncate">
+            {cycleName}
+          </p>
+          {cycle.isCurrent && (
+            <span className="text-[10px] font-medium text-primary/80 px-1.5 py-0.5 rounded bg-primary/10 shrink-0">
+              Current
+            </span>
+          )}
+          {cycle.isUpcoming && (
+            <span className="text-[10px] font-medium text-muted-foreground px-1.5 py-0.5 rounded bg-muted shrink-0">
+              Upcoming
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3 mt-0.5">
+          {dateRange && (
+            <span className="text-[10px] text-muted-foreground">
+              {dateRange}
+            </span>
+          )}
+          {total > 0 && (
+            <span className="text-[10px] text-muted-foreground tabular-nums">
+              {completed} / {total} issues
+            </span>
+          )}
+        </div>
+      </div>
+      {total > 0 && (
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all"
+              style={{
+                width: `${progressPct}%`,
+                backgroundColor: cycle.isCurrent
+                  ? "var(--primary)"
+                  : "var(--muted-foreground)",
+              }}
+            />
+          </div>
+          <span className="text-[10px] tabular-nums text-muted-foreground w-7 text-right">
+            {progressPct}%
+          </span>
+        </div>
+      )}
+    </Link>
   );
 }
 

@@ -593,6 +593,52 @@ export async function fetchHubRoadmapIssues(
 }
 
 /**
+ * Fetch issues belonging to a specific cycle, scoped to the hub.
+ */
+export async function fetchHubCycleIssues(
+  hubId: string,
+  cycleLinearId: string
+): Promise<RoadmapIssue[]> {
+  const mappings = await getHubMappings(hubId);
+  if (mappings.length === 0) return [];
+
+  const teamIds = mappings.map((m) => m.linear_team_id);
+
+  const { data, error } = await supabaseAdmin
+    .from("synced_issues")
+    .select("linear_id, data, created_at, updated_at, team_id")
+    .eq("user_id", WORKSPACE_USER_ID)
+    .in("team_id", teamIds)
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    console.error("fetchHubCycleIssues error:", error);
+    throw error;
+  }
+
+  return (data || []).reduce<RoadmapIssue[]>((acc, row) => {
+    const r = row as { linear_id: string; data: Record<string, unknown>; created_at: string; updated_at: string; team_id: string };
+    const d = r.data;
+    const cycle = d.cycle as Record<string, unknown> | undefined;
+    if (!cycle || cycle.id !== cycleLinearId) return acc;
+    const issue = stripAssignee({
+      ...mapRowToLinearIssue(r),
+      dueDate: (d.dueDate as string) ?? undefined,
+      project: d.project
+        ? {
+            id: (d.project as Record<string, unknown>).id as string ?? "",
+            name: (d.project as Record<string, unknown>).name as string ?? "",
+            color: (d.project as Record<string, unknown>).color as string | undefined,
+          }
+        : undefined,
+    });
+    if (isIssueHidden(issue, mappings, r.team_id)) return acc;
+    acc.push(filterLabelsByTeam(issue, mappings, r.team_id));
+    return acc;
+  }, []);
+}
+
+/**
  * Fetch comments for an issue, verifying the issue belongs to the hub's scope.
  * Merges synced Linear comments with hub_comments (client-authored).
  */
@@ -1022,7 +1068,7 @@ export async function fetchHubCycles(
       row as { linear_id: string; data: CycleData; created_at: string; updated_at: string }
     );
     const displayName = displayNameMap.get(row.linear_id);
-    return displayName ? { ...cycle, displayName } : cycle;
+    return { ...cycle, displayName };
   });
 }
 

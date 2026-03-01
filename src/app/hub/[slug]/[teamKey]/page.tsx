@@ -6,6 +6,7 @@ import {
   fetchHubRoadmapIssues,
   fetchHubMetadata,
   fetchHubCycles,
+  fetchHubCycleStats,
 } from "@/lib/hub-read";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
@@ -56,6 +57,24 @@ export default async function TeamDashboardPage({
       if (!b.targetDate) return -1;
       return a.targetDate.localeCompare(b.targetDate);
     });
+
+  // Fetch cycle stats
+  const cycleIds = allCycles.map((c) => c.id);
+  const cycleStats = cycleIds.length > 0
+    ? await fetchHubCycleStats(hub.id, cycleIds)
+    : {};
+
+  const cycleDetails = allCycles.map((c) => ({
+    id: c.id,
+    name: c.name,
+    number: c.number,
+    startsAt: c.startsAt,
+    endsAt: c.endsAt,
+    isCurrent: c.isCurrent,
+    isUpcoming: c.isUpcoming,
+    displayName: c.displayName,
+    stats: cycleStats[c.id],
+  }));
 
   // Fetch issues and metadata for the Issues tab
   const projectIdList = projects.map((p) => p.id);
@@ -119,6 +138,7 @@ export default async function TeamDashboardPage({
         states={metadata.states}
         labels={metadata.labels}
         cycles={metadata.cycles}
+        cycleDetails={cycleDetails}
         projects={projects}
         initiatives={initiatives}
         milestones={milestones}
