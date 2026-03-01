@@ -131,6 +131,7 @@ export function FormBuilder({ form }: FormBuilderProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const isNew = !form;
+  const isGlobal = !form?.hub_id;
 
   // Form settings
   const [name, setName] = useState(form?.name ?? "");
@@ -168,12 +169,12 @@ export function FormBuilder({ form }: FormBuilderProps) {
   const [newFieldType, setNewFieldType] = useState<FormFieldType>("text");
   const [newFieldLabel, setNewFieldLabel] = useState("");
 
-  // Fetch teams
-  const { data: teams } = useFetch<TeamOption[]>("/api/admin/linear/teams");
-
-  // Fetch projects when team changes
+  // Fetch teams/projects only for hub-specific forms (routing is set at hub level for global forms)
+  const { data: teams } = useFetch<TeamOption[]>(
+    !isGlobal ? "/api/admin/linear/teams" : null
+  );
   const { data: projects } = useFetch<ProjectOption[]>(
-    targetTeamId
+    !isGlobal && targetTeamId
       ? `/api/admin/linear/teams/${targetTeamId}/projects`
       : null
   );
@@ -237,14 +238,20 @@ export function FormBuilder({ form }: FormBuilderProps) {
           is_active: isActive,
           confirmation_message: confirmationMessage.trim(),
           error_message: errorMessage.trim(),
-          target_team_id: targetTeamId || null,
-          target_project_id: targetProjectId || null,
-          target_cycle_id: targetCycleId || null,
-          target_label_ids: targetLabelIds
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean),
-          target_priority: targetPriority ? parseInt(targetPriority, 10) : null,
+          ...(isGlobal
+            ? {}
+            : {
+                target_team_id: targetTeamId || null,
+                target_project_id: targetProjectId || null,
+                target_cycle_id: targetCycleId || null,
+                target_label_ids: targetLabelIds
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean),
+                target_priority: targetPriority
+                  ? parseInt(targetPriority, 10)
+                  : null,
+              }),
           fields: fields.map((f) => ({
             id: f.id.startsWith("new-") ? undefined : f.id,
             field_key: f.field_key || makeFieldKey(f.label),
@@ -419,107 +426,109 @@ export function FormBuilder({ form }: FormBuilderProps) {
           </div>
         </section>
 
-        {/* Section 2: Linear Routing */}
-        <section className="border border-border rounded-lg bg-card">
-          <div className="px-4 py-3 border-b border-border">
-            <h2 className="text-sm font-semibold">Linear Routing</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Where submitted issues are created in Linear
-            </p>
-          </div>
-          <div className="p-4 space-y-4">
-            <div>
-              <label htmlFor="target-team" className="block text-sm font-medium mb-1.5">
-                Target Team
-              </label>
-              <select
-                id="target-team"
-                value={targetTeamId}
-                onChange={(e) => setTargetTeamId(e.target.value)}
-                className={inputClass}
-              >
-                <option value="">Select a team...</option>
-                {(teams ?? []).map((t) => (
-                  <option key={t.linear_id} value={t.linear_id}>
-                    {t.name} ({t.key})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="target-project" className="block text-sm font-medium mb-1.5">
-                Target Project
-              </label>
-              <select
-                id="target-project"
-                value={targetProjectId}
-                onChange={(e) => setTargetProjectId(e.target.value)}
-                disabled={!targetTeamId}
-                className={cn(inputClass, !targetTeamId && "opacity-50")}
-              >
-                <option value="">
-                  {targetTeamId ? "Select a project..." : "Select a team first"}
-                </option>
-                {(projects ?? []).map((p) => (
-                  <option key={p.linear_id} value={p.linear_id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="target-cycle" className="block text-sm font-medium mb-1.5">
-                Target Cycle
-              </label>
-              <input
-                id="target-cycle"
-                type="text"
-                value={targetCycleId}
-                onChange={(e) => setTargetCycleId(e.target.value)}
-                placeholder="Cycle ID (optional)"
-                className={inputClass}
-              />
-            </div>
-
-            <div>
-              <label htmlFor="target-labels" className="block text-sm font-medium mb-1.5">
-                Default Labels
-              </label>
-              <input
-                id="target-labels"
-                type="text"
-                value={targetLabelIds}
-                onChange={(e) => setTargetLabelIds(e.target.value)}
-                placeholder="Comma-separated label IDs"
-                className={inputClass}
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Labels automatically applied to created issues
+        {/* Section 2: Linear Routing — only shown for hub-specific forms */}
+        {!isGlobal && (
+          <section className="border border-border rounded-lg bg-card">
+            <div className="px-4 py-3 border-b border-border">
+              <h2 className="text-sm font-semibold">Linear Routing</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Where submitted issues are created in Linear
               </p>
             </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label htmlFor="target-team" className="block text-sm font-medium mb-1.5">
+                  Target Team
+                </label>
+                <select
+                  id="target-team"
+                  value={targetTeamId}
+                  onChange={(e) => setTargetTeamId(e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="">Select a team...</option>
+                  {(teams ?? []).map((t) => (
+                    <option key={t.linear_id} value={t.linear_id}>
+                      {t.name} ({t.key})
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div>
-              <label htmlFor="target-priority" className="block text-sm font-medium mb-1.5">
-                Default Priority
-              </label>
-              <select
-                id="target-priority"
-                value={targetPriority}
-                onChange={(e) => setTargetPriority(e.target.value)}
-                className={inputClass}
-              >
-                <option value="">Inherit from Linear</option>
-                {PRIORITY_OPTIONS.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
+              <div>
+                <label htmlFor="target-project" className="block text-sm font-medium mb-1.5">
+                  Target Project
+                </label>
+                <select
+                  id="target-project"
+                  value={targetProjectId}
+                  onChange={(e) => setTargetProjectId(e.target.value)}
+                  disabled={!targetTeamId}
+                  className={cn(inputClass, !targetTeamId && "opacity-50")}
+                >
+                  <option value="">
+                    {targetTeamId ? "Select a project..." : "Select a team first"}
                   </option>
-                ))}
-              </select>
+                  {(projects ?? []).map((p) => (
+                    <option key={p.linear_id} value={p.linear_id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="target-cycle" className="block text-sm font-medium mb-1.5">
+                  Target Cycle
+                </label>
+                <input
+                  id="target-cycle"
+                  type="text"
+                  value={targetCycleId}
+                  onChange={(e) => setTargetCycleId(e.target.value)}
+                  placeholder="Cycle ID (optional)"
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="target-labels" className="block text-sm font-medium mb-1.5">
+                  Default Labels
+                </label>
+                <input
+                  id="target-labels"
+                  type="text"
+                  value={targetLabelIds}
+                  onChange={(e) => setTargetLabelIds(e.target.value)}
+                  placeholder="Comma-separated label IDs"
+                  className={inputClass}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Labels automatically applied to created issues
+                </p>
+              </div>
+
+              <div>
+                <label htmlFor="target-priority" className="block text-sm font-medium mb-1.5">
+                  Default Priority
+                </label>
+                <select
+                  id="target-priority"
+                  value={targetPriority}
+                  onChange={(e) => setTargetPriority(e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="">Inherit from Linear</option>
+                  {PRIORITY_OPTIONS.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* Section 3: Fields */}
         <section className="border border-border rounded-lg bg-card">
