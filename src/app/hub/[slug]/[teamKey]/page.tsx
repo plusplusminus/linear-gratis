@@ -81,7 +81,6 @@ export default async function TeamDashboardPage({
 
         {/* Team header */}
         <div className="flex items-center gap-3 mb-4">
-          <TeamBadge name={team.name} color={team.color} icon={team.icon} />
           <div className="flex-1">
             <h1 className="text-lg font-semibold">{team.name}</h1>
             <span className="text-[10px] font-mono text-muted-foreground">
@@ -118,30 +117,3 @@ export default async function TeamDashboardPage({
   );
 }
 
-// -- Sub-components ──────────────────────────────────────────────────────────
-
-function TeamBadge({
-  name,
-  color,
-  icon,
-}: {
-  name: string;
-  color?: string;
-  icon?: string;
-}) {
-  if (icon) {
-    return (
-      <div className="w-8 h-8 rounded-md flex items-center justify-center text-base bg-muted">
-        {icon}
-      </div>
-    );
-  }
-  return (
-    <div
-      className="w-8 h-8 rounded-md flex items-center justify-center text-xs font-semibold text-white/90"
-      style={{ backgroundColor: color || "var(--muted-foreground)" }}
-    >
-      {name.charAt(0).toUpperCase()}
-    </div>
-  );
-}

@@ -24,16 +24,12 @@ interface HubSettingsFormProps {
     name: string;
     slug: string;
     is_active: boolean;
-    logo_url: string | null;
-    primary_color: string | null;
-    accent_color: string | null;
-    footer_text: string | null;
     request_forms_enabled: boolean;
   };
   mappings: TeamMapping[];
 }
 
-type Tab = "general" | "scoping" | "branding" | "domain" | "danger";
+type Tab = "general" | "scoping" | "domain" | "danger";
 
 export function HubSettingsForm({ hub, mappings }: HubSettingsFormProps) {
   const router = useRouter();
@@ -45,22 +41,6 @@ export function HubSettingsForm({ hub, mappings }: HubSettingsFormProps) {
   const [requestFormsEnabled, setRequestFormsEnabled] = useState(hub.request_forms_enabled);
   const [dirty, setDirty] = useState(false);
 
-  // Branding state
-  const [logoUrl, setLogoUrl] = useState(hub.logo_url ?? "");
-  const [primaryColor, setPrimaryColor] = useState(hub.primary_color ?? "");
-  const [accentColor, setAccentColor] = useState(hub.accent_color ?? "");
-  const [footerText, setFooterText] = useState(hub.footer_text ?? "");
-  const [brandingDirty, setBrandingDirty] = useState(false);
-
-  useEffect(() => {
-    setBrandingDirty(
-      logoUrl !== (hub.logo_url ?? "") ||
-      primaryColor !== (hub.primary_color ?? "") ||
-      accentColor !== (hub.accent_color ?? "") ||
-      footerText !== (hub.footer_text ?? "")
-    );
-  }, [logoUrl, primaryColor, accentColor, footerText, hub.logo_url, hub.primary_color, hub.accent_color, hub.footer_text]);
-
   useEffect(() => {
     setDirty(
       name !== hub.name ||
@@ -71,13 +51,13 @@ export function HubSettingsForm({ hub, mappings }: HubSettingsFormProps) {
   // Warn on navigation with unsaved changes
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
-      if (dirty || brandingDirty) {
+      if (dirty) {
         e.preventDefault();
       }
     };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
-  }, [dirty, brandingDirty]);
+  }, [dirty]);
 
   const saveGeneral = useCallback(() => {
     startTransition(async () => {
@@ -102,32 +82,6 @@ export function HubSettingsForm({ hub, mappings }: HubSettingsFormProps) {
       }
     });
   }, [hub.id, name, requestFormsEnabled, router]);
-
-  const saveBranding = useCallback(() => {
-    startTransition(async () => {
-      try {
-        const res = await fetch(`/api/admin/hubs/${hub.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            logo_url: logoUrl.trim() || null,
-            primary_color: primaryColor.trim() || null,
-            accent_color: accentColor.trim() || null,
-            footer_text: footerText.trim() || null,
-          }),
-        });
-        if (!res.ok) {
-          const err = (await res.json()) as { error?: string };
-          throw new Error(err.error ?? "Failed to save");
-        }
-        toast.success("Branding saved");
-        setBrandingDirty(false);
-        router.refresh();
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed to save");
-      }
-    });
-  }, [hub.id, logoUrl, primaryColor, accentColor, footerText, router]);
 
   const deactivateHub = useCallback(() => {
     if (!confirm(`Are you sure you want to ${hub.is_active ? "deactivate" : "reactivate"} "${hub.name}"?`)) {
@@ -230,7 +184,6 @@ export function HubSettingsForm({ hub, mappings }: HubSettingsFormProps) {
   const tabs: { key: Tab; label: string }[] = [
     { key: "general", label: "General" },
     { key: "scoping", label: "Teams & Scoping" },
-    { key: "branding", label: "Branding" },
     { key: "domain", label: "Custom Domain" },
     { key: "danger", label: "Danger Zone" },
   ];
@@ -326,141 +279,6 @@ export function HubSettingsForm({ hub, mappings }: HubSettingsFormProps) {
       {/* Scoping tab */}
       {tab === "scoping" && (
         <ScopingEditor hubId={hub.id} mappings={mappings} />
-      )}
-
-      {/* Branding tab */}
-      {tab === "branding" && (
-        <div className="space-y-6">
-          {/* Live preview */}
-          <div className="rounded-lg border border-border p-4">
-            <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wider">Preview</p>
-            <div className="flex items-center gap-3 p-3 rounded-md bg-sidebar border border-border">
-              {logoUrl ? (
-                <img
-                  src={logoUrl}
-                  alt="Logo preview"
-                  className="h-6 w-auto object-contain"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                />
-              ) : (
-                <div className="w-6 h-6 rounded bg-muted" />
-              )}
-              <span className="text-sm font-semibold">{hub.name}</span>
-              <div className="ml-auto flex items-center gap-2">
-                {primaryColor && (
-                  <div
-                    className="w-4 h-4 rounded-full border border-border"
-                    style={{ backgroundColor: primaryColor }}
-                  />
-                )}
-                {accentColor && (
-                  <div
-                    className="w-4 h-4 rounded-full border border-border"
-                    style={{ backgroundColor: accentColor }}
-                  />
-                )}
-              </div>
-            </div>
-            {footerText && (
-              <p className="text-[10px] text-muted-foreground mt-2 text-center">{footerText}</p>
-            )}
-          </div>
-
-          <div>
-            <label htmlFor="logo-url" className="block text-sm font-medium mb-1.5">
-              Logo URL
-            </label>
-            <input
-              id="logo-url"
-              type="url"
-              value={logoUrl}
-              onChange={(e) => setLogoUrl(e.target.value)}
-              placeholder="https://example.com/logo.svg"
-              className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Displayed in the sidebar header and login page.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="primary-color" className="block text-sm font-medium mb-1.5">
-                Primary Color
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="color"
-                  value={primaryColor || "#6366f1"}
-                  onChange={(e) => setPrimaryColor(e.target.value)}
-                  className="w-8 h-8 rounded border border-border cursor-pointer bg-transparent"
-                />
-                <input
-                  id="primary-color"
-                  type="text"
-                  value={primaryColor}
-                  onChange={(e) => setPrimaryColor(e.target.value)}
-                  placeholder="#6366f1"
-                  className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent font-mono"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="accent-color" className="block text-sm font-medium mb-1.5">
-                Accent Color
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="color"
-                  value={accentColor || "#8b5cf6"}
-                  onChange={(e) => setAccentColor(e.target.value)}
-                  className="w-8 h-8 rounded border border-border cursor-pointer bg-transparent"
-                />
-                <input
-                  id="accent-color"
-                  type="text"
-                  value={accentColor}
-                  onChange={(e) => setAccentColor(e.target.value)}
-                  placeholder="#8b5cf6"
-                  className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent font-mono"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor="footer-text" className="block text-sm font-medium mb-1.5">
-              Footer Text
-            </label>
-            <input
-              id="footer-text"
-              type="text"
-              value={footerText}
-              onChange={(e) => setFooterText(e.target.value)}
-              placeholder="Powered by Acme Corp"
-              className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
-            />
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={saveBranding}
-              disabled={!brandingDirty || isPending}
-              className={cn(
-                "px-4 py-2 text-sm font-medium rounded-md transition-colors",
-                brandingDirty
-                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                  : "bg-muted text-muted-foreground cursor-not-allowed"
-              )}
-            >
-              {isPending ? "Saving..." : "Save Branding"}
-            </button>
-            {brandingDirty && (
-              <span className="text-xs text-muted-foreground">Unsaved changes</span>
-            )}
-          </div>
-        </div>
       )}
 
       {/* Custom domain tab */}

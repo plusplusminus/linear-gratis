@@ -17,19 +17,11 @@ export type HubTeam = {
   icon?: string;
 };
 
-export type HubBranding = {
-  logoUrl: string | null;
-  primaryColor: string | null;
-  accentColor: string | null;
-  footerText: string | null;
-};
-
 export type HubContextValue = {
   hubId: string;
   hubSlug: string;
   hubName: string;
   teams: HubTeam[];
-  branding: HubBranding;
   userId: string;
   email: string;
   firstName: string | null;
@@ -52,14 +44,12 @@ export function HubProvider({
   hubSlug,
   hubName,
   teams,
-  branding,
   children,
 }: {
   hubId: string;
   hubSlug: string;
   hubName: string;
   teams: HubTeam[];
-  branding: HubBranding;
   children: ReactNode;
 }) {
   const [authState, setAuthState] = useState<{
@@ -120,7 +110,6 @@ export function HubProvider({
         hubSlug,
         hubName,
         teams,
-        branding,
         ...authState,
       }}
     >

@@ -284,10 +284,6 @@ export type ClientHub = {
   is_active: boolean
   created_by: string
   workos_org_id: string | null
-  logo_url: string | null
-  primary_color: string | null
-  accent_color: string | null
-  footer_text: string | null
   created_at: string
   updated_at: string
 }

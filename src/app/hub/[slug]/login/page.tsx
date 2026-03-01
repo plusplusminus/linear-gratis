@@ -45,13 +45,6 @@ export default async function HubLoginPage({
     return (
       <div className="flex min-h-screen items-center justify-center bg-neutral-950">
         <div className="w-full max-w-sm rounded-lg border border-neutral-800 bg-neutral-900 p-8 text-center">
-          {hub.logo_url && (
-            <img
-              src={hub.logo_url}
-              alt={hub.name}
-              className="h-8 w-auto mx-auto mb-4 object-contain"
-            />
-          )}
           <h1 className="text-lg font-medium text-white">Portal not configured</h1>
           <p className="mt-2 text-sm text-neutral-400">
             Client login is not yet set up for this hub. Contact your project

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { resolveHubBySlug, getHubMembership } from "@/lib/hub-auth";
 import { isPPMAdmin } from "@/lib/ppm-admin";
 import { fetchHubTeams } from "@/lib/hub-read";
-import { HubProvider, type HubTeam, type HubBranding } from "@/contexts/hub-context";
+import { HubProvider, type HubTeam } from "@/contexts/hub-context";
 import { HubShell } from "@/components/hub/hub-shell";
 
 export default async function HubLayout({
@@ -77,20 +77,12 @@ export default async function HubLayout({
     icon: t.icon,
   }));
 
-  const branding: HubBranding = {
-    logoUrl: hub.logo_url ?? null,
-    primaryColor: hub.primary_color ?? null,
-    accentColor: hub.accent_color ?? null,
-    footerText: hub.footer_text ?? null,
-  };
-
   return (
     <HubProvider
       hubId={hub.id}
       hubSlug={hub.slug}
       hubName={hub.name}
       teams={teams}
-      branding={branding}
     >
       <HubShell>{children}</HubShell>
     </HubProvider>

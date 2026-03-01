@@ -21,7 +21,7 @@ export function HubSidebar() {
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [projects, setProjects] = useState<SidebarProject[]>([]);
   const pathname = usePathname();
-  const { hubId, hubSlug, hubName, teams, branding, requestFormsEnabled } = useHub();
+  const { hubId, hubSlug, hubName, teams, requestFormsEnabled } = useHub();
   const canInteract = useCanInteract();
 
   const showRequestButton = requestFormsEnabled && canInteract;
@@ -62,25 +62,9 @@ export function HubSidebar() {
       {/* Header */}
       <div className="flex items-center justify-between h-12 px-3 border-b border-border shrink-0">
         {!collapsed && (
-          <div className="flex items-center gap-2 min-w-0">
-            {branding.logoUrl && (
-              <img
-                src={branding.logoUrl}
-                alt={hubName}
-                className="h-5 w-auto shrink-0 object-contain"
-              />
-            )}
-            <span className="text-sm font-semibold text-foreground truncate">
-              {hubName}
-            </span>
-          </div>
-        )}
-        {collapsed && branding.logoUrl && (
-          <img
-            src={branding.logoUrl}
-            alt={hubName}
-            className="h-5 w-5 object-contain"
-          />
+          <span className="text-sm font-semibold text-foreground truncate">
+            {hubName}
+          </span>
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}
@@ -108,7 +92,7 @@ export function HubSidebar() {
                 : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
             )}
             style={isOverview ? {
-              backgroundColor: branding.primaryColor ? `${branding.primaryColor}1a` : "var(--accent)",
+              backgroundColor: "var(--accent)",
             } : undefined}
             title={collapsed ? "Overview" : undefined}
           >
@@ -142,17 +126,13 @@ export function HubSidebar() {
                     : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
                 )}
                 style={isActive ? {
-                  backgroundColor: branding.primaryColor ? `${branding.primaryColor}1a` : "var(--accent)",
+                  backgroundColor: "var(--accent)",
                 } : undefined}
                 title={collapsed ? team.name : undefined}
               >
-                <TeamIcon
-                  name={team.name}
-                  color={team.color}
-                  icon={team.icon}
-                  active={isActive}
-                />
-                {!collapsed && (
+                {collapsed ? (
+                  <span className="text-xs font-medium shrink-0">{team.name.charAt(0).toUpperCase()}</span>
+                ) : (
                   <span className="flex-1 truncate">{team.name}</span>
                 )}
               </Link>
@@ -189,47 +169,3 @@ export function HubSidebar() {
   );
 }
 
-function TeamIcon({
-  name,
-  color,
-  icon,
-  active,
-}: {
-  name: string;
-  color?: string;
-  icon?: string;
-  active: boolean;
-}) {
-  // If the team has an emoji icon from Linear, show it
-  if (icon) {
-    return (
-      <div
-        className={cn(
-          "w-5 h-5 rounded flex items-center justify-center text-xs shrink-0",
-          active ? "bg-accent" : ""
-        )}
-      >
-        {icon}
-      </div>
-    );
-  }
-
-  // Otherwise show a colored initial
-  const initial = name.charAt(0).toUpperCase();
-  return (
-    <div
-      className={cn(
-        "w-5 h-5 rounded flex items-center justify-center text-[10px] font-semibold shrink-0 transition-colors",
-        active
-          ? "text-primary-foreground"
-          : "text-white/90"
-      )}
-      style={{
-        backgroundColor: color || (active ? "var(--primary)" : "var(--muted-foreground)"),
-        opacity: active ? 1 : 0.7,
-      }}
-    >
-      {initial}
-    </div>
-  );
-}

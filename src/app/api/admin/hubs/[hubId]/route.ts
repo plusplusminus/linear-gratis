@@ -56,10 +56,6 @@ export async function PATCH(
       name?: string;
       is_active?: boolean;
       request_forms_enabled?: boolean;
-      logo_url?: string | null;
-      primary_color?: string | null;
-      accent_color?: string | null;
-      footer_text?: string | null;
     };
 
     const updates: Record<string, unknown> = {};
@@ -89,16 +85,6 @@ export async function PATCH(
         );
       }
       updates.request_forms_enabled = body.request_forms_enabled;
-    }
-
-    // Branding fields — nullable strings
-    const brandingFields = ["logo_url", "primary_color", "accent_color", "footer_text"] as const;
-    for (const field of brandingFields) {
-      if (body[field] !== undefined) {
-        updates[field] = typeof body[field] === "string" && body[field].trim()
-          ? body[field].trim()
-          : null;
-      }
     }
 
     if (Object.keys(updates).length === 0) {

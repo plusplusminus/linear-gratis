@@ -26,7 +26,7 @@ function useRelativeTime(timestamp: number) {
 }
 
 export function HubTopBar() {
-  const { firstName, email, role, isLoading, branding } = useHub();
+  const { firstName, email, role, isLoading } = useHub();
   const router = useRouter();
   const [lastRefreshedAt, setLastRefreshedAt] = useState(Date.now);
   const [refreshing, setRefreshing] = useState(false);
@@ -45,7 +45,6 @@ export function HubTopBar() {
   return (
     <header
       className="flex items-center justify-between h-12 px-4 border-b border-border bg-background shrink-0"
-      style={branding.primaryColor ? { borderBottomColor: `${branding.primaryColor}33` } : undefined}
     >
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <button

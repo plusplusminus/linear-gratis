@@ -45,8 +45,6 @@ export default async function HubLandingPage({
                 key={team.id}
                 name={team.name}
                 teamKey={team.key}
-                color={team.color}
-                icon={team.icon}
                 projectCount={teamStats?.projectCount ?? 0}
                 openIssueCount={teamStats?.openIssueCount ?? 0}
                 lastActivity={teamStats?.lastActivity ?? null}
@@ -63,8 +61,6 @@ export default async function HubLandingPage({
 function TeamCard({
   name,
   teamKey,
-  color,
-  icon,
   projectCount,
   openIssueCount,
   lastActivity,
@@ -72,8 +68,6 @@ function TeamCard({
 }: {
   name: string;
   teamKey: string;
-  color?: string;
-  icon?: string;
   projectCount: number;
   openIssueCount: number;
   lastActivity: string | null;
@@ -85,16 +79,13 @@ function TeamCard({
       className="border border-border rounded-lg p-4 bg-card hover:bg-accent/50 hover:border-border/80 transition-colors group"
     >
       {/* Team header */}
-      <div className="flex items-center gap-3 mb-3">
-        <TeamColorBadge name={name} color={color} icon={icon} />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium group-hover:text-primary transition-colors truncate">
-            {name}
-          </p>
-          <span className="text-[10px] font-mono text-muted-foreground">
-            {teamKey}
-          </span>
-        </div>
+      <div className="mb-3">
+        <p className="text-sm font-medium group-hover:text-primary transition-colors truncate">
+          {name}
+        </p>
+        <span className="text-[10px] font-mono text-muted-foreground">
+          {teamKey}
+        </span>
       </div>
 
       {/* Stats */}
@@ -122,32 +113,6 @@ function TeamCard({
         )}
       </div>
     </Link>
-  );
-}
-
-function TeamColorBadge({
-  name,
-  color,
-  icon,
-}: {
-  name: string;
-  color?: string;
-  icon?: string;
-}) {
-  if (icon) {
-    return (
-      <div className="w-8 h-8 rounded-md flex items-center justify-center text-base bg-muted shrink-0">
-        {icon}
-      </div>
-    );
-  }
-  return (
-    <div
-      className="w-8 h-8 rounded-md flex items-center justify-center text-xs font-semibold text-white/90 shrink-0"
-      style={{ backgroundColor: color || "var(--muted-foreground)" }}
-    >
-      {name.charAt(0).toUpperCase()}
-    </div>
   );
 }
 
