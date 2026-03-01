@@ -3,7 +3,6 @@ import { createIssueInLinear } from "./linear-push";
 import {
   fetchFormWithFields,
   fetchHubFormConfig,
-  resolveFormRouting,
 } from "./form-read";
 
 // -- Types ────────────────────────────────────────────────────────────────────
@@ -117,13 +116,22 @@ export async function processFormSubmission(
   if (!form) throw new Error("Form not found");
   if (!form.is_active) throw new Error("Form is not active");
 
-  // 2. Fetch hub config + resolve routing
-  const hubConfig = await fetchHubFormConfig(hubId, formId);
-  const routing = resolveFormRouting(form, hubConfig);
+  // 2. Resolve team from hub's team mapping + fetch hub form config for labels/messages
+  const { data: teamMapping, error: tmErr } = await supabaseAdmin
+    .from("hub_team_mappings")
+    .select("linear_team_id")
+    .eq("hub_id", hubId)
+    .eq("is_active", true)
+    .limit(1)
+    .single();
 
-  if (!routing.teamId) {
-    throw new Error("No target team configured for this form");
+  if (tmErr || !teamMapping?.linear_team_id) {
+    throw new Error("No team mapping found for this hub");
   }
+
+  const teamId = teamMapping.linear_team_id;
+  const hubConfig = await fetchHubFormConfig(hubId, formId);
+  const labelIds = hubConfig?.target_label_ids ?? form.target_label_ids ?? [];
 
   // 3. Extract Linear-mapped field values
   const titleField = form.fields.find((f) => f.linear_field === "title");
@@ -140,37 +148,13 @@ export async function processFormSubmission(
     }
   }
 
-  // Priority from hidden field or routing default
+  // Priority from hidden field (if any)
   const priorityField = form.fields.find(
     (f) => f.linear_field === "priority"
   );
   const priority = priorityField
     ? Number(fieldValues[priorityField.field_key])
-    : routing.priority;
-
-  // Label IDs from field or routing
-  const labelField = form.fields.find(
-    (f) => f.linear_field === "label_ids"
-  );
-  const labelIds = labelField
-    ? (fieldValues[labelField.field_key] as string[] | undefined) ?? routing.labelIds
-    : routing.labelIds;
-
-  // Project ID from field or routing
-  const projectField = form.fields.find(
-    (f) => f.linear_field === "project_id"
-  );
-  const projectId = projectField
-    ? (fieldValues[projectField.field_key] as string | undefined) ?? routing.projectId
-    : routing.projectId;
-
-  // Cycle ID from field or routing
-  const cycleField = form.fields.find(
-    (f) => f.linear_field === "cycle_id"
-  );
-  const cycleId = cycleField
-    ? (fieldValues[cycleField.field_key] as string | undefined) ?? routing.cycleId
-    : routing.cycleId;
+    : undefined;
 
   // 4. Build description
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -211,13 +195,11 @@ export async function processFormSubmission(
   // 6. Create issue in Linear
   try {
     const issue = await createIssueInLinear({
-      teamId: routing.teamId,
+      teamId,
       title,
       description: description || undefined,
       priority: priority ?? undefined,
       labelIds: labelIds.length > 0 ? labelIds : undefined,
-      projectId: projectId ?? undefined,
-      cycleId: cycleId ?? undefined,
     });
 
     // 7a. Success — update row
@@ -292,15 +274,26 @@ export async function retrySubmission(
   const form = await fetchFormWithFields(submission.form_id);
   if (!form) throw new Error("Form no longer exists");
 
+  // Resolve team from hub mapping
+  const { data: teamMapping, error: tmErr } = await supabaseAdmin
+    .from("hub_team_mappings")
+    .select("linear_team_id")
+    .eq("hub_id", submission.hub_id)
+    .eq("is_active", true)
+    .limit(1)
+    .single();
+
+  if (tmErr || !teamMapping?.linear_team_id) {
+    throw new Error("No team mapping found for this hub");
+  }
+
+  const teamId = teamMapping.linear_team_id;
+
   const hubConfig = await fetchHubFormConfig(
     submission.hub_id,
     submission.form_id
   );
-  const routing = resolveFormRouting(form, hubConfig);
-
-  if (!routing.teamId) {
-    throw new Error("No target team configured for this form");
-  }
+  const labelIds = hubConfig?.target_label_ids ?? form.target_label_ids ?? [];
 
   // Rebuild description from saved field values
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -315,39 +308,22 @@ export async function retrySubmission(
     attachmentUrls
   );
 
-  // Extract mapped values from saved field_values
+  // Priority from hidden field (if any)
   const priorityField = form.fields.find((f) => f.linear_field === "priority");
   const priority = priorityField
     ? Number(submission.field_values[priorityField.field_key])
-    : routing.priority;
-
-  const labelField = form.fields.find((f) => f.linear_field === "label_ids");
-  const labelIds = labelField
-    ? (submission.field_values[labelField.field_key] as string[] | undefined) ?? routing.labelIds
-    : routing.labelIds;
-
-  const projectField = form.fields.find((f) => f.linear_field === "project_id");
-  const projectId = projectField
-    ? (submission.field_values[projectField.field_key] as string | undefined) ?? routing.projectId
-    : routing.projectId;
-
-  const cycleField = form.fields.find((f) => f.linear_field === "cycle_id");
-  const cycleId = cycleField
-    ? (submission.field_values[cycleField.field_key] as string | undefined) ?? routing.cycleId
-    : routing.cycleId;
+    : undefined;
 
   const confirmationMessage =
     hubConfig?.confirmation_message ?? form.confirmation_message;
 
   try {
     const issue = await createIssueInLinear({
-      teamId: routing.teamId,
+      teamId,
       title: submission.derived_title,
       description: description || undefined,
       priority: priority ?? undefined,
       labelIds: labelIds.length > 0 ? labelIds : undefined,
-      projectId: projectId ?? undefined,
-      cycleId: cycleId ?? undefined,
     });
 
     await supabaseAdmin

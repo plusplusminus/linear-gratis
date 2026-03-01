@@ -446,15 +446,6 @@ const TYPE_BADGE: Record<string, { bg: string; text: string; label: string }> = 
   custom: { bg: "var(--badge-gray-bg)", text: "var(--badge-gray-text)", label: "Custom" },
 };
 
-const PRIORITY_OPTIONS = [
-  { value: "", label: "Inherit default" },
-  { value: "0", label: "No priority" },
-  { value: "1", label: "Urgent" },
-  { value: "2", label: "High" },
-  { value: "3", label: "Medium" },
-  { value: "4", label: "Low" },
-];
-
 const inputClass =
   "w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent";
 
@@ -484,11 +475,7 @@ function HubFormsTab({ hubId }: { hubId: string }) {
         if (gf.hub_config) {
           map[gf.id] = {
             is_enabled: gf.hub_config.is_enabled,
-            target_team_id: gf.hub_config.target_team_id,
-            target_project_id: gf.hub_config.target_project_id,
-            target_cycle_id: gf.hub_config.target_cycle_id,
             target_label_ids: gf.hub_config.target_label_ids,
-            target_priority: gf.hub_config.target_priority,
             confirmation_message: gf.hub_config.confirmation_message,
           };
         }
@@ -552,14 +539,7 @@ function HubFormsTab({ hubId }: { hubId: string }) {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              target_team_id: ovr.target_team_id || null,
-              target_project_id: ovr.target_project_id || null,
-              target_cycle_id: ovr.target_cycle_id || null,
               target_label_ids: ovr.target_label_ids ?? null,
-              target_priority:
-                ovr.target_priority !== undefined && ovr.target_priority !== null
-                  ? ovr.target_priority
-                  : null,
               confirmation_message: ovr.confirmation_message || null,
             }),
           }
@@ -678,88 +658,30 @@ function HubFormsTab({ hubId }: { hubId: string }) {
                     {isExpanded && (
                       <div className="px-4 pb-4 space-y-3 border-t border-border/50 bg-muted/20">
                         <p className="text-xs text-muted-foreground pt-3">
-                          Override routing for this hub. Leave blank to use form defaults.
+                          Customize this form for the hub. Issues are routed to the hub&apos;s team automatically.
                         </p>
 
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-xs font-medium mb-1">
-                              Team Override
-                            </label>
-                            <input
-                              type="text"
-                              value={ovr.target_team_id ?? ""}
-                              onChange={(e) =>
-                                updateOverride(form.id, {
-                                  target_team_id: e.target.value || null,
-                                })
-                              }
-                              placeholder="Team ID"
-                              className={inputClass}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">
-                              Project Override
-                            </label>
-                            <input
-                              type="text"
-                              value={ovr.target_project_id ?? ""}
-                              onChange={(e) =>
-                                updateOverride(form.id, {
-                                  target_project_id: e.target.value || null,
-                                })
-                              }
-                              placeholder="Project ID"
-                              className={inputClass}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-xs font-medium mb-1">
-                              Cycle Override
-                            </label>
-                            <input
-                              type="text"
-                              value={ovr.target_cycle_id ?? ""}
-                              onChange={(e) =>
-                                updateOverride(form.id, {
-                                  target_cycle_id: e.target.value || null,
-                                })
-                              }
-                              placeholder="Cycle ID"
-                              className={inputClass}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">
-                              Priority Override
-                            </label>
-                            <select
-                              value={
-                                ovr.target_priority !== undefined &&
-                                ovr.target_priority !== null
-                                  ? String(ovr.target_priority)
-                                  : ""
-                              }
-                              onChange={(e) =>
-                                updateOverride(form.id, {
-                                  target_priority: e.target.value
-                                    ? parseInt(e.target.value, 10)
-                                    : null,
-                                })
-                              }
-                              className={inputClass}
-                            >
-                              {PRIORITY_OPTIONS.map((p) => (
-                                <option key={p.value} value={p.value}>
-                                  {p.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
+                        <div>
+                          <label className="block text-xs font-medium mb-1">
+                            Auto-apply Labels
+                          </label>
+                          <input
+                            type="text"
+                            value={(ovr.target_label_ids ?? []).join(", ")}
+                            onChange={(e) =>
+                              updateOverride(form.id, {
+                                target_label_ids: e.target.value
+                                  .split(",")
+                                  .map((s) => s.trim())
+                                  .filter(Boolean),
+                              })
+                            }
+                            placeholder="Comma-separated label IDs (optional)"
+                            className={inputClass}
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Labels automatically added to issues created from this form
+                          </p>
                         </div>
 
                         <div>
