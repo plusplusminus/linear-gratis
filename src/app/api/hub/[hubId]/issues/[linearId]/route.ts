@@ -67,21 +67,19 @@ export async function GET(
 
         if (rules && rules.length > 0) {
           workflowRules = rules.map((r) => {
-            const config = r.action_config as Record<string, unknown>;
-            const stateName = (config.stateName as string) || "a new status";
             let description: string;
             switch (r.trigger_type) {
               case "label_added":
-                description = `Adding this label sets status to ${stateName}`;
+                description = "Adding this label will update the issue status";
                 break;
               case "label_removed":
-                description = `Removing this label sets status to ${stateName}`;
+                description = "Removing this label will update the issue status";
                 break;
               case "label_changed":
-                description = `Swapping to this label sets status to ${stateName}`;
+                description = "Swapping to this label will update the issue status";
                 break;
               default:
-                description = `Automation: sets status to ${stateName}`;
+                description = "This label has an automation rule attached";
             }
             return {
               labelId: r.trigger_label_id,
