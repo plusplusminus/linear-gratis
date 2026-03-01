@@ -7,11 +7,13 @@ import {
   fetchAllTeams,
   fetchAllProjects,
   fetchAllInitiatives,
+  fetchAllCycles,
   fetchCommentsForIssue,
   mapIssueToRow,
   mapTeamToRow,
   mapProjectToRow,
   mapInitiativeToRow,
+  mapCycleToRow,
   mapCommentToRow,
   batchUpsert,
 } from "@/lib/initial-sync";
@@ -26,6 +28,7 @@ type HubReconcileResult = {
   commentsUpserted: number;
   teamsUpserted: number;
   projectsUpserted: number;
+  cyclesUpserted: number;
   initiativesUpserted: number;
   errors: number;
 };
@@ -50,6 +53,7 @@ export async function POST() {
         comments: result.commentsUpserted,
         teams: result.teamsUpserted,
         projects: result.projectsUpserted,
+        cycles: result.cyclesUpserted,
         initiatives: result.initiativesUpserted,
       },
       errorsCount: result.errors,
@@ -98,6 +102,7 @@ export async function GET(request: NextRequest) {
         comments: result.commentsUpserted,
         teams: result.teamsUpserted,
         projects: result.projectsUpserted,
+        cycles: result.cyclesUpserted,
         initiatives: result.initiativesUpserted,
       },
       errorsCount: result.errors,
@@ -129,6 +134,7 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
     commentsUpserted: 0,
     teamsUpserted: 0,
     projectsUpserted: 0,
+    cyclesUpserted: 0,
     initiativesUpserted: 0,
     errors: 0,
   };
@@ -198,6 +204,16 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
       }
       result.projectsUpserted += projects.length;
 
+      const cycles = await fetchAllCycles(apiToken, mapping.linear_team_id);
+      if (cycles.length > 0) {
+        await batchUpsert(
+          "synced_cycles",
+          cycles.map((c) => mapCycleToRow(c, WORKSPACE_USER_ID)),
+          "user_id,linear_id"
+        );
+      }
+      result.cyclesUpserted += cycles.length;
+
       const issues = await fetchAllIssues(apiToken, mapping.linear_team_id);
       if (issues.length > 0) {
         await batchUpsert(
@@ -240,7 +256,7 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
   console.log(
     `Reconcile complete: ${result.hubsReconciled} hubs, ${result.teamsReconciled} teams, ` +
       `${result.issuesUpserted} issues, ${result.commentsUpserted} comments, ` +
-      `${result.projectsUpserted} projects, ` +
+      `${result.projectsUpserted} projects, ${result.cyclesUpserted} cycles, ` +
       `${result.initiativesUpserted} initiatives, ${result.errors} errors`
   );
 
