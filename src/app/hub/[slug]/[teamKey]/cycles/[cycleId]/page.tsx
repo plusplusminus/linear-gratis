@@ -32,8 +32,7 @@ export default async function CycleDetailPage({
     fetchHubMetadata(hub.id, { teamId: team.id }),
   ]);
 
-  const cycleName =
-    cycle.displayName || cycle.name || `Cycle ${cycle.number}`;
+  const cycleName = cycle.name || `Cycle ${cycle.number}`;
 
   const completedCount = issues.filter(
     (i) => i.state.type === "completed" || i.state.type === "cancelled"

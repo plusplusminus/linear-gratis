@@ -37,7 +37,6 @@ type Cycle = {
   progress: number;
   isCurrent: boolean;
   isUpcoming: boolean;
-  displayName?: string;
   team?: { id?: string; name?: string; key?: string };
 };
 
@@ -52,7 +51,7 @@ function CycleCard({
   const completed = stats?.completed ?? 0;
   const progressPct = total > 0 ? Math.round((completed / total) * 100) : 0;
   const cycleName =
-    cycle.displayName || cycle.name || `Cycle ${cycle.number}`;
+    cycle.name || `Cycle ${cycle.number}`;
   const dateRange = formatDateRange(cycle.startsAt, cycle.endsAt);
 
   return (

@@ -1040,36 +1040,23 @@ export async function fetchHubCycles(
 
   const targetTeamIds = options?.teamId ? [options.teamId] : teamIds;
 
-  const [cyclesResult, displayNamesResult] = await Promise.all([
-    supabaseAdmin
-      .from("synced_cycles")
-      .select("linear_id, data, created_at, updated_at")
-      .eq("user_id", WORKSPACE_USER_ID)
-      .in("team_id", targetTeamIds)
-      .order("starts_at", { ascending: false }),
-    supabaseAdmin
-      .from("cycle_display_names")
-      .select("cycle_linear_id, display_name")
-      .eq("hub_id", hubId),
-  ]);
+  const { data, error } = await supabaseAdmin
+    .from("synced_cycles")
+    .select("linear_id, data, created_at, updated_at")
+    .eq("user_id", WORKSPACE_USER_ID)
+    .in("team_id", targetTeamIds)
+    .order("starts_at", { ascending: false });
 
-  if (cyclesResult.error) {
-    console.error("fetchHubCycles error:", cyclesResult.error);
-    throw cyclesResult.error;
+  if (error) {
+    console.error("fetchHubCycles error:", error);
+    throw error;
   }
 
-  const displayNameMap = new Map<string, string>();
-  for (const dn of displayNamesResult.data || []) {
-    displayNameMap.set(dn.cycle_linear_id, dn.display_name);
-  }
-
-  return (cyclesResult.data || []).map((row) => {
-    const cycle = mapRowToCycle(
+  return (data || []).map((row) =>
+    mapRowToCycle(
       row as { linear_id: string; data: CycleData; created_at: string; updated_at: string }
-    );
-    const displayName = displayNameMap.get(row.linear_id);
-    return { ...cycle, displayName };
-  });
+    )
+  );
 }
 
 export async function fetchHubCycleStats(

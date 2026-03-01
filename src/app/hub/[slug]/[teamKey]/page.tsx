@@ -72,7 +72,6 @@ export default async function TeamDashboardPage({
     endsAt: c.endsAt,
     isCurrent: c.isCurrent,
     isUpcoming: c.isUpcoming,
-    displayName: c.displayName,
     stats: cycleStats[c.id],
   }));
 
