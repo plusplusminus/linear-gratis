@@ -27,7 +27,7 @@ type CommentData = {
   id?: string;
   body?: string;
   user?: { id?: string; name?: string };
-  parentId?: string;
+  parent?: { id?: string };
   createdAt?: string;
   updatedAt?: string;
 };
@@ -141,7 +141,7 @@ export function mapRowToComment(row: {
     id: d.id ?? row.linear_id,
     linearId: row.linear_id,
     body: d.body ?? "",
-    parentId: d.parentId ?? undefined,
+    parentId: d.parent?.id ?? undefined,
     createdAt: d.createdAt ?? row.created_at,
     updatedAt: d.updatedAt ?? row.updated_at,
     user: {
