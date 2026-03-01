@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { TeamPicker, ProjectPicker, LabelPicker, InitiativePicker } from "./pickers";
 import { Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { WorkflowRules } from "./workflow-rules";
 
 interface TeamMapping {
   id: string;
@@ -128,6 +129,7 @@ export function ScopingEditor({ hubId, mappings }: ScopingEditorProps) {
         return (
           <MappingCard
             key={mapping.id}
+            hubId={hubId}
             mapping={mapping}
             expanded={isExpanded}
             onToggle={() =>
@@ -185,6 +187,7 @@ export function ScopingEditor({ hubId, mappings }: ScopingEditorProps) {
 }
 
 function MappingCard({
+  hubId,
   mapping,
   expanded,
   onToggle,
@@ -192,6 +195,7 @@ function MappingCard({
   onRemove,
   isPending,
 }: {
+  hubId: string;
   mapping: TeamMapping;
   expanded: boolean;
   onToggle: () => void;
@@ -262,6 +266,15 @@ function MappingCard({
             value={initiativeIds}
             onChange={setInitiativeIds}
           />
+
+          {/* Workflow Rules */}
+          <div className="border-t border-border pt-4 mt-4">
+            <WorkflowRules
+              hubId={hubId}
+              mappingId={mapping.id}
+              teamId={mapping.linear_team_id}
+            />
+          </div>
 
           {hasChanges && (
             <div className="flex items-center gap-2 pt-2">
