@@ -485,8 +485,9 @@ function CommentThread({
   onReply?: (parentId: string, authorName: string) => void;
 }) {
   const replies = comment.children ?? [];
-  // The parentId for replies should be the Linear comment ID of this thread's root
-  const parentLinearId = comment.linearId ?? comment.id;
+  // If this comment is itself a reply (orphaned into root), reply to its real parent.
+  // Linear only allows parentId to reference root-level comments.
+  const parentLinearId = comment.parentId ?? comment.linearId ?? comment.id;
   return (
     <div>
       <CommentBubble
