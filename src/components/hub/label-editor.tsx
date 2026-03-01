@@ -30,6 +30,7 @@ export function LabelEditor({
   workflowLabelIds = [],
   workflowRules = [],
   onLabelsChange,
+  onStatusChange,
 }: {
   issueLabels: Label[];
   hubLabels: Label[];
@@ -39,6 +40,7 @@ export function LabelEditor({
   workflowLabelIds?: string[];
   workflowRules?: WorkflowRule[];
   onLabelsChange: (labels: Label[]) => void;
+  onStatusChange?: (state: { id: string; name: string }) => void;
 }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -87,11 +89,15 @@ export function LabelEditor({
   function showWorkflowFeedback(results: WorkflowExecutionResult[]) {
     for (const result of results) {
       if (result.success && result.action === "set_status") {
+        const stateId = result.details?.stateId as string | undefined;
         const stateName =
           (result.details?.stateName as string) || "updated";
         toast.success(`Status updated to ${stateName}`, {
           duration: 3500,
         });
+        if (stateId && onStatusChange) {
+          onStatusChange({ id: stateId, name: stateName });
+        }
       } else if (!result.success) {
         toast.error("Workflow action failed", {
           description: result.error || "An automation could not be applied",

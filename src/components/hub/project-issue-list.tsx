@@ -522,6 +522,11 @@ export function ProjectIssueList({
         hubId={hubId}
         isViewOnly={isViewOnly}
         onClose={() => setSelectedIssueId(null)}
+        onIssueUpdate={(id, patch) => {
+          setIssues((prev) =>
+            prev.map((i) => (i.id === id ? { ...i, ...patch } : i))
+          );
+        }}
       />
 
       {/* Issue creation modal */}

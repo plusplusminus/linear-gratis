@@ -84,11 +84,13 @@ export function IssueDetailPanel({
   hubId,
   isViewOnly,
   onClose,
+  onIssueUpdate,
 }: {
   issueId: string | null;
   hubId: string;
   isViewOnly?: boolean;
   onClose: () => void;
+  onIssueUpdate?: (issueId: string, patch: Record<string, unknown>) => void;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -284,9 +286,14 @@ export function IssueDetailPanel({
                   isViewOnly={isViewOnly}
                   workflowLabelIds={workflowLabelIds}
                   workflowRules={workflowRules}
-                  onLabelsChange={(labels) =>
-                    setIssue((prev) => (prev ? { ...prev, labels } : prev))
-                  }
+                  onLabelsChange={(labels) => {
+                    setIssue((prev) => (prev ? { ...prev, labels } : prev));
+                    if (issueId) onIssueUpdate?.(issueId, { labels });
+                  }}
+                  onStatusChange={(state) => {
+                    setIssue((prev) => (prev ? { ...prev, state: { ...prev.state, ...state } } : prev));
+                    if (issueId) onIssueUpdate?.(issueId, { state });
+                  }}
                 />
               )}
 
