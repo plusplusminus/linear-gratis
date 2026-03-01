@@ -12,6 +12,7 @@ import {
   buildLabelChangeContext,
   evaluateWorkflowRules,
   executeWorkflowActions,
+  logWorkflowExecution,
   type WorkflowExecutionResult,
 } from "@/lib/hub-workflows";
 
@@ -42,10 +43,65 @@ export async function GET(
     // Fetch label definitions from Linear, scoped to the issue's team
     const hubLabels = await fetchHubTeamLabels(hubId, issue.teamId);
 
+    // Fetch workflow rules to expose which labels have automation attached
+    let workflowLabelIds: string[] = [];
+    let workflowRules: Array<{
+      labelId: string;
+      triggerType: string;
+      description: string;
+    }> = [];
+    try {
+      const { data: mapping } = await supabaseAdmin
+        .from("hub_team_mappings")
+        .select("id")
+        .eq("hub_id", hubId)
+        .eq("linear_team_id", issue.teamId)
+        .eq("is_active", true)
+        .single();
+
+      if (mapping) {
+        const { data: rules } = await supabaseAdmin
+          .from("hub_workflow_rules")
+          .select("trigger_label_id, trigger_type, action_type, action_config")
+          .eq("mapping_id", mapping.id);
+
+        if (rules && rules.length > 0) {
+          workflowRules = rules.map((r) => {
+            const config = r.action_config as Record<string, unknown>;
+            const stateName = (config.stateName as string) || "a new status";
+            let description: string;
+            switch (r.trigger_type) {
+              case "label_added":
+                description = `Adding this label sets status to ${stateName}`;
+                break;
+              case "label_removed":
+                description = `Removing this label sets status to ${stateName}`;
+                break;
+              case "label_changed":
+                description = `Swapping to this label sets status to ${stateName}`;
+                break;
+              default:
+                description = `Automation: sets status to ${stateName}`;
+            }
+            return {
+              labelId: r.trigger_label_id,
+              triggerType: r.trigger_type,
+              description,
+            };
+          });
+          workflowLabelIds = [...new Set(workflowRules.map((r) => r.labelId))];
+        }
+      }
+    } catch (err) {
+      console.error("[hub-workflows] Failed to fetch workflow rules for GET:", err);
+    }
+
     return NextResponse.json({
       issue,
       comments,
       hubLabels,
+      workflowLabelIds,
+      workflowRules,
     });
   } catch (error) {
     console.error("GET /api/hub/[hubId]/issues/[linearId] error:", error);
@@ -162,15 +218,24 @@ export async function POST(
           .eq("mapping_id", mapping.id);
 
         if (rules && rules.length > 0) {
+          const typedRules = rules as HubWorkflowRule[];
           const context = buildLabelChangeContext(currentLabelIds, newLabelIds);
-          const actions = evaluateWorkflowRules(
-            context,
-            rules as HubWorkflowRule[]
-          );
+          const actions = evaluateWorkflowRules(context, typedRules);
 
           if (actions.length > 0) {
             // Fire-and-forget: execute but don't let failures affect the response
             workflowResults = await executeWorkflowActions(actions, linearId);
+
+            // Log workflow execution for the activity trail
+            logWorkflowExecution(
+              hubId,
+              linearId,
+              workflowResults,
+              auth.user.id,
+              typedRules
+            ).catch((logErr) =>
+              console.error("[hub-workflows] Failed to log execution:", logErr)
+            );
           }
         }
       }

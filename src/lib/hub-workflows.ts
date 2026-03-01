@@ -1,5 +1,5 @@
 import { getWorkspaceToken } from "./workspace";
-import type { HubWorkflowRule, WorkflowActionType } from "./supabase";
+import { supabaseAdmin, type HubWorkflowRule, type WorkflowActionType } from "./supabase";
 
 const LINEAR_API = "https://api.linear.app/graphql";
 
@@ -205,4 +205,44 @@ export async function executeWorkflowActions(
   }
 
   return results;
+}
+
+// -- Logging -----------------------------------------------------------------
+
+/**
+ * Persist workflow execution results to hub_workflow_logs for the activity trail.
+ */
+export async function logWorkflowExecution(
+  hubId: string,
+  issueLinearId: string,
+  results: WorkflowExecutionResult[],
+  triggeredBy: string,
+  rules: HubWorkflowRule[]
+): Promise<void> {
+  if (results.length === 0) return;
+
+  const ruleMap = new Map(rules.map((r) => [r.id, r]));
+
+  const rows = results.map((result) => {
+    const rule = ruleMap.get(result.ruleId);
+    return {
+      hub_id: hubId,
+      issue_linear_id: issueLinearId,
+      rule_id: result.ruleId,
+      trigger_label_id: rule?.trigger_label_id ?? "unknown",
+      action_type: result.action,
+      action_config: rule?.action_config ?? {},
+      result: result.success ? "success" : "failure",
+      error_message: result.error ?? null,
+      triggered_by: triggeredBy,
+    };
+  });
+
+  const { error } = await supabaseAdmin
+    .from("hub_workflow_logs")
+    .insert(rows);
+
+  if (error) {
+    console.error("[hub-workflows] Failed to write workflow logs:", error);
+  }
 }

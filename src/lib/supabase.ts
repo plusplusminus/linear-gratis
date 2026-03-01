@@ -355,3 +355,17 @@ export type HubWorkflowRule = {
   updated_at: string
 }
 
+export type HubWorkflowLog = {
+  id: string
+  hub_id: string
+  issue_linear_id: string
+  rule_id: string
+  trigger_label_id: string
+  action_type: string
+  action_config: Record<string, unknown>
+  result: 'success' | 'failure'
+  error_message: string | null
+  triggered_by: string
+  created_at: string
+}
+

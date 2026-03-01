@@ -30,6 +30,7 @@ import {
   Tag,
   Reply,
   IterationCw,
+  Zap,
 } from "lucide-react";
 
 type IssueDetail = {
@@ -64,13 +65,18 @@ type Comment = {
 type HistoryEntry = {
   id: string;
   createdAt: string;
-  type: "state" | "priority" | "label";
+  type: "state" | "priority" | "label" | "workflow";
   fromState?: { name: string; color: string; type: string };
   toState?: { name: string; color: string; type: string };
   fromPriority?: number;
   toPriority?: number;
   addedLabels?: Array<{ name: string; color: string }>;
   removedLabels?: Array<{ name: string; color: string }>;
+  workflowActionType?: string;
+  workflowActionConfig?: Record<string, unknown>;
+  workflowResult?: "success" | "failure";
+  workflowError?: string | null;
+  workflowTriggerLabelId?: string;
 };
 
 export function IssueDetailPanel({
@@ -90,6 +96,8 @@ export function IssueDetailPanel({
   const [comments, setComments] = useState<Comment[]>([]);
   const [replyingTo, setReplyingTo] = useState<{ parentId: string; authorName: string } | null>(null);
   const [hubLabels, setHubLabels] = useState<Array<{ id: string; name: string; color: string }>>([]);
+  const [workflowLabelIds, setWorkflowLabelIds] = useState<string[]>([]);
+  const [workflowRules, setWorkflowRules] = useState<Array<{ labelId: string; triggerType: string; description: string }>>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
@@ -108,6 +116,8 @@ export function IssueDetailPanel({
     setIssue(null);
     setComments([]);
     setHubLabels([]);
+    setWorkflowLabelIds([]);
+    setWorkflowRules([]);
     setHistory([]);
     setDescExpanded(false);
     onClose();
@@ -147,10 +157,14 @@ export function IssueDetailPanel({
             issue: IssueDetail;
             comments: Comment[];
             hubLabels: Array<{ id: string; name: string; color: string }>;
+            workflowLabelIds?: string[];
+            workflowRules?: Array<{ labelId: string; triggerType: string; description: string }>;
           };
           setIssue(data.issue);
           setComments(data.comments);
           setHubLabels(data.hubLabels ?? []);
+          setWorkflowLabelIds(data.workflowLabelIds ?? []);
+          setWorkflowRules(data.workflowRules ?? []);
         }
 
         if (!cancelled && historyRes.ok) {
@@ -268,6 +282,8 @@ export function IssueDetailPanel({
                   hubId={hubId}
                   issueId={issue.id}
                   isViewOnly={isViewOnly}
+                  workflowLabelIds={workflowLabelIds}
+                  workflowRules={workflowRules}
                   onLabelsChange={(labels) =>
                     setIssue((prev) => (prev ? { ...prev, labels } : prev))
                   }
@@ -584,15 +600,25 @@ const PRIORITY_LABELS: Record<number, string> = {
 };
 
 function HistoryItem({ entry }: { entry: HistoryEntry }) {
+  const isWorkflow = entry.type === "workflow";
+
   return (
     <div className="flex items-start gap-3 py-2 group">
-      {/* Timeline dot */}
+      {/* Timeline dot / icon */}
       <div className="flex flex-col items-center pt-0.5 shrink-0">
-        <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40" />
+        {isWorkflow ? (
+          <Zap className="w-3 h-3 text-amber-500" />
+        ) : (
+          <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40" />
+        )}
       </div>
 
       {/* Content */}
       <div className="flex-1 min-w-0">
+        {entry.type === "workflow" && (
+          <WorkflowHistoryContent entry={entry} />
+        )}
+
         {entry.type === "state" && (
           <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
             <span>Status changed</span>
@@ -683,6 +709,57 @@ function HistoryItem({ entry }: { entry: HistoryEntry }) {
           <RelativeTime dateStr={entry.createdAt} />
         </span>
       </div>
+    </div>
+  );
+}
+
+function WorkflowHistoryContent({ entry }: { entry: HistoryEntry }) {
+  const actionConfig = entry.workflowActionConfig ?? {};
+  const stateName = (actionConfig.stateName as string) ?? (actionConfig.stateId as string) ?? "unknown";
+  const isFailed = entry.workflowResult === "failure";
+
+  if (entry.workflowActionType === "set_status") {
+    return (
+      <div className="flex flex-col gap-0.5">
+        <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1 py-0 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400">
+            <Zap className="w-2.5 h-2.5" />
+            Automation
+          </span>
+          <span>Status set to</span>
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted text-[10px] text-foreground">
+            {stateName}
+          </span>
+          {isFailed && (
+            <span className="inline-flex items-center gap-0.5 text-[10px] text-destructive">
+              <AlertCircle className="w-3 h-3" />
+              Failed
+            </span>
+          )}
+        </div>
+        {isFailed && entry.workflowError && (
+          <span className="text-[10px] text-destructive/70 truncate">
+            {entry.workflowError}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  // Fallback for unknown action types
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
+      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1 py-0 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400">
+        <Zap className="w-2.5 h-2.5" />
+        Automation
+      </span>
+      <span>{entry.workflowActionType}</span>
+      {isFailed && (
+        <span className="inline-flex items-center gap-0.5 text-[10px] text-destructive">
+          <AlertCircle className="w-3 h-3" />
+          Failed
+        </span>
+      )}
     </div>
   );
 }
