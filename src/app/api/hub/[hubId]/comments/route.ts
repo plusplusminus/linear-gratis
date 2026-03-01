@@ -19,9 +19,10 @@ export async function POST(
     }
 
     const { user } = auth;
-    const { issueLinearId, body } = (await request.json()) as {
+    const { issueLinearId, body, parentId } = (await request.json()) as {
       issueLinearId?: string;
       body?: string;
+      parentId?: string;
     };
 
     if (!issueLinearId || !body?.trim()) {
@@ -45,9 +46,10 @@ export async function POST(
         author_name: authorName,
         author_email: user.email,
         body: body.trim(),
+        parent_comment_id: parentId ?? null,
         push_status: "pending",
       })
-      .select("id, author_name, author_email, body, push_status, created_at, updated_at")
+      .select("id, author_name, author_email, body, parent_comment_id, push_status, created_at, updated_at")
       .single();
 
     if (insertError || !comment) {
@@ -64,7 +66,8 @@ export async function POST(
     try {
       const linearCommentId = await pushCommentToLinear(
         issueLinearId,
-        linearBody
+        linearBody,
+        parentId
       );
 
       await supabaseAdmin

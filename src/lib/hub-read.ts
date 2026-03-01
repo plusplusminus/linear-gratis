@@ -27,6 +27,7 @@ type CommentData = {
   id?: string;
   body?: string;
   user?: { id?: string; name?: string };
+  parentId?: string;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -138,7 +139,9 @@ export function mapRowToComment(row: {
   const d = row.data;
   return {
     id: d.id ?? row.linear_id,
+    linearId: row.linear_id,
     body: d.body ?? "",
+    parentId: d.parentId ?? undefined,
     createdAt: d.createdAt ?? row.created_at,
     updatedAt: d.updatedAt ?? row.updated_at,
     user: {
@@ -593,21 +596,24 @@ export async function fetchHubComments(
       .order("created_at", { ascending: true }),
     supabaseAdmin
       .from("hub_comments")
-      .select("id, author_name, author_email, body, push_status, push_error, created_at, updated_at")
+      .select("id, linear_comment_id, parent_comment_id, author_name, author_email, body, push_status, push_error, created_at, updated_at")
       .eq("hub_id", hubId)
       .eq("issue_linear_id", issueLinearId)
       .order("created_at", { ascending: true }),
   ]);
 
-  const linearComments = (linearResult.data || []).map((row) =>
-    mapRowToComment(
+  const linearComments = (linearResult.data || []).map((row) => {
+    const mapped = mapRowToComment(
       row as { linear_id: string; data: Record<string, unknown>; created_at: string; updated_at: string }
-    )
-  );
+    );
+    return mapped;
+  });
 
   const hubComments = (hubResult.data || []).map((row) => ({
     id: row.id,
+    linearId: row.linear_comment_id as string | undefined,
     body: row.body,
+    parentId: row.parent_comment_id as string | undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     push_status: row.push_status as string | undefined,
@@ -620,11 +626,45 @@ export async function fetchHubComments(
   }));
 
   // Merge and sort by createdAt
-  const all = [...linearComments, ...hubComments].sort(
+  type FlatComment = {
+    id: string;
+    linearId?: string;
+    body: string;
+    parentId?: string;
+    createdAt: string;
+    updatedAt: string;
+    user: { id: string; name: string };
+    isHubComment?: boolean;
+    push_status?: string;
+    push_error?: string;
+  };
+  const all: FlatComment[] = [...linearComments, ...hubComments].sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   );
 
-  return all;
+  // Build threaded structure: group children under parents by Linear comment ID
+  type ThreadedComment = FlatComment & { children: FlatComment[] };
+  const byLinearId = new Map<string, ThreadedComment>();
+  const roots: ThreadedComment[] = [];
+
+  for (const c of all) {
+    const tc: ThreadedComment = { ...c, children: [] };
+    if (c.linearId) byLinearId.set(c.linearId, tc);
+
+    if (!c.parentId) {
+      roots.push(tc);
+    } else {
+      const parent = byLinearId.get(c.parentId);
+      if (parent) {
+        parent.children.push(tc);
+      } else {
+        // Orphan — treat as top-level
+        roots.push(tc);
+      }
+    }
+  }
+
+  return roots;
 }
 
 /**

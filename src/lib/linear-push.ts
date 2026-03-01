@@ -3,8 +3,8 @@ import { getWorkspaceToken } from "./workspace";
 const LINEAR_API = "https://api.linear.app/graphql";
 
 const COMMENT_CREATE_MUTATION = `
-  mutation CommentCreate($issueId: String!, $body: String!) {
-    commentCreate(input: { issueId: $issueId, body: $body }) {
+  mutation CommentCreate($issueId: String!, $body: String!, $parentId: String) {
+    commentCreate(input: { issueId: $issueId, body: $body, parentId: $parentId }) {
       success
       comment {
         id
@@ -19,7 +19,8 @@ const COMMENT_CREATE_MUTATION = `
  */
 export async function pushCommentToLinear(
   issueLinearId: string,
-  body: string
+  body: string,
+  parentId?: string
 ): Promise<string> {
   const token = await getWorkspaceToken();
 
@@ -31,7 +32,7 @@ export async function pushCommentToLinear(
     },
     body: JSON.stringify({
       query: COMMENT_CREATE_MUTATION,
-      variables: { issueId: issueLinearId, body },
+      variables: { issueId: issueLinearId, body, parentId: parentId ?? null },
     }),
   });
 
