@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useFetch } from "@/hooks/use-fetch";
 import { ScopingEditor } from "./scoping-editor";
+import { LabelPicker } from "./pickers/label-picker";
 import { AlertTriangle, Globe, Loader2, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 import type { FormTemplate, FormField, HubFormConfig } from "@/lib/supabase";
 
@@ -289,7 +290,7 @@ export function HubSettingsForm({ hub, mappings }: HubSettingsFormProps) {
 
       {/* Forms tab */}
       {tab === "forms" && (
-        <HubFormsTab hubId={hub.id} />
+        <HubFormsTab hubId={hub.id} teamId={mappings[0]?.linear_team_id ?? null} />
       )}
 
       {/* Custom domain tab */}
@@ -454,7 +455,7 @@ type HubFormsApiResponse = {
   hub_forms: FormTemplate[];
 };
 
-function HubFormsTab({ hubId }: { hubId: string }) {
+function HubFormsTab({ hubId, teamId }: { hubId: string; teamId: string | null }) {
   const [isPending, startTransition] = useTransition();
   const { data: globalForms, loading: formsLoading } =
     useFetch<FormWithFields[]>("/api/admin/forms");
@@ -661,28 +662,17 @@ function HubFormsTab({ hubId }: { hubId: string }) {
                           Customize this form for the hub. Issues are routed to the hub&apos;s team automatically.
                         </p>
 
-                        <div>
-                          <label className="block text-xs font-medium mb-1">
-                            Auto-apply Labels
-                          </label>
-                          <input
-                            type="text"
-                            value={(ovr.target_label_ids ?? []).join(", ")}
-                            onChange={(e) =>
-                              updateOverride(form.id, {
-                                target_label_ids: e.target.value
-                                  .split(",")
-                                  .map((s) => s.trim())
-                                  .filter(Boolean),
-                              })
-                            }
-                            placeholder="Comma-separated label IDs (optional)"
-                            className={inputClass}
-                          />
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Labels automatically added to issues created from this form
-                          </p>
-                        </div>
+                        <LabelPicker
+                          teamId={teamId}
+                          value={ovr.target_label_ids ?? []}
+                          onChange={(ids) =>
+                            updateOverride(form.id, {
+                              target_label_ids: ids,
+                            })
+                          }
+                          label="Auto-apply Labels"
+                          description="Labels automatically added to issues created from this form"
+                        />
 
                         <div>
                           <label className="block text-xs font-medium mb-1">
