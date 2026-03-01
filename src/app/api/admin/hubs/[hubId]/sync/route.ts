@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withAdminAuth } from "@/lib/admin-auth";
 import { supabaseAdmin, type HubTeamMapping } from "@/lib/supabase";
 import { runHubSync } from "@/lib/initial-sync";
+import { startSyncRun, completeSyncRun } from "@/lib/sync-logger";
 
 // POST: Trigger initial sync for a hub
 export async function POST(
@@ -52,7 +53,30 @@ export async function POST(
       );
     }
 
+    const startedAt = Date.now();
+    const runId = await startSyncRun({ runType: "hub_sync", trigger: "manual", hubId });
+
     const result = await runHubSync(hubId, mappings as HubTeamMapping[]);
+
+    const totalIssues = result.teamResults?.reduce((sum, r) => sum + (r.issueCount ?? 0), 0) ?? 0;
+    const totalComments = result.teamResults?.reduce((sum, r) => sum + (r.commentCount ?? 0), 0) ?? 0;
+    const totalProjects = result.teamResults?.reduce((sum, r) => sum + (r.projectCount ?? 0), 0) ?? 0;
+    const totalCycles = result.teamResults?.reduce((sum, r) => sum + (r.cycleCount ?? 0), 0) ?? 0;
+
+    await completeSyncRun({
+      runId,
+      status: result.success ? "completed" : "failed",
+      entitiesProcessed: {
+        issues: totalIssues,
+        comments: totalComments,
+        projects: totalProjects,
+        cycles: totalCycles,
+        teams: result.teamCount ?? 0,
+        initiatives: result.initiativeCount ?? 0,
+      },
+      errorsCount: result.success ? 0 : 1,
+      startedAt,
+    });
 
     return NextResponse.json({
       success: result.success,

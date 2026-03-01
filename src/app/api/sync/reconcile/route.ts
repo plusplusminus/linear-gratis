@@ -15,6 +15,7 @@ import {
   mapCommentToRow,
   batchUpsert,
 } from "@/lib/initial-sync";
+import { startSyncRun, completeSyncRun, pruneSyncLogs } from "@/lib/sync-logger";
 
 const WORKSPACE_USER_ID = "workspace";
 
@@ -36,9 +37,25 @@ export async function POST() {
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
-    const { user } = auth;
+    const startedAt = Date.now();
+    const runId = await startSyncRun({ runType: "reconcile", trigger: "manual" });
 
     const result = await reconcileAllHubs();
+
+    await completeSyncRun({
+      runId,
+      status: result.errors > 0 ? "failed" : "completed",
+      entitiesProcessed: {
+        issues: result.issuesUpserted,
+        comments: result.commentsUpserted,
+        teams: result.teamsUpserted,
+        projects: result.projectsUpserted,
+        initiatives: result.initiativesUpserted,
+      },
+      errorsCount: result.errors,
+      startedAt,
+    });
+
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     console.error("POST /api/sync/reconcile error:", error);
@@ -68,7 +85,28 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, message: "No active hubs" });
     }
 
+    const startedAt = Date.now();
+    const runId = await startSyncRun({ runType: "reconcile", trigger: "cron" });
+
     const result = await reconcileAllHubs();
+
+    await completeSyncRun({
+      runId,
+      status: result.errors > 0 ? "failed" : "completed",
+      entitiesProcessed: {
+        issues: result.issuesUpserted,
+        comments: result.commentsUpserted,
+        teams: result.teamsUpserted,
+        projects: result.projectsUpserted,
+        initiatives: result.initiativesUpserted,
+      },
+      errorsCount: result.errors,
+      startedAt,
+    });
+
+    // Prune old logs (fire-and-forget, piggybacks on cron)
+    void pruneSyncLogs();
+
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     console.error("GET /api/sync/reconcile error:", error);

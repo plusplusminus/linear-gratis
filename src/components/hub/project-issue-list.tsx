@@ -408,39 +408,22 @@ export function ProjectIssueList({
       {showFilters && (
         <div className="px-6 py-2 border-b border-border flex flex-wrap gap-3 shrink-0">
           {/* Status filter */}
-          <FilterGroup label="Status">
-            {states.map((s) => (
-              <FilterChip
-                key={s.name}
-                label={s.name}
-                color={s.color}
-                active={filters.statuses.includes(s.name)}
-                onClick={() => {
-                  const next = filters.statuses.includes(s.name)
-                    ? filters.statuses.filter((x) => x !== s.name)
-                    : [...filters.statuses, s.name];
-                  updateFilters({ ...filters, statuses: next });
-                }}
-              />
-            ))}
-          </FilterGroup>
+          <CheckboxFilterDropdown
+            items={states.map((s) => ({ id: s.name, name: s.name, color: s.color }))}
+            selected={filters.statuses}
+            onChange={(next) => updateFilters({ ...filters, statuses: next })}
+            label="Status"
+            icon={<CircleDot className="w-3 h-3" />}
+          />
 
           {/* Priority filter */}
-          <FilterGroup label="Priority">
-            {[1, 2, 3, 4, 0].map((p) => (
-              <FilterChip
-                key={p}
-                label={priorityLabel(p)}
-                active={filters.priorities.includes(p)}
-                onClick={() => {
-                  const next = filters.priorities.includes(p)
-                    ? filters.priorities.filter((x) => x !== p)
-                    : [...filters.priorities, p];
-                  updateFilters({ ...filters, priorities: next });
-                }}
-              />
-            ))}
-          </FilterGroup>
+          <CheckboxFilterDropdown
+            items={[1, 2, 3, 4, 0].map((p) => ({ id: String(p), name: priorityLabel(p) }))}
+            selected={filters.priorities.map(String)}
+            onChange={(next) => updateFilters({ ...filters, priorities: next.map(Number) })}
+            label="Priority"
+            icon={<SignalHigh className="w-3 h-3" />}
+          />
 
           {/* Project filter (team-level view only) */}
           {projects && projects.length > 0 && (
@@ -777,54 +760,6 @@ function PriorityIcon({ priority }: { priority: number }) {
   }
 }
 
-function FilterGroup({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-[10px] text-muted-foreground font-medium">
-        {label}:
-      </span>
-      <div className="flex flex-wrap gap-1">{children}</div>
-    </div>
-  );
-}
-
-function FilterChip({
-  label,
-  color,
-  active,
-  onClick,
-}: {
-  label: string;
-  color?: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] transition-colors",
-        active
-          ? "bg-accent text-foreground ring-1 ring-ring"
-          : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
-      )}
-    >
-      {color && (
-        <div
-          className="w-2 h-2 rounded-full shrink-0"
-          style={{ backgroundColor: color }}
-        />
-      )}
-      {label}
-    </button>
-  );
-}
 
 function priorityLabel(p: number): string {
   switch (p) {

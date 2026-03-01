@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Settings,
+  Activity,
 } from "lucide-react";
 
 export function AdminSidebar() {
@@ -118,6 +119,19 @@ export function AdminSidebar() {
         >
           <Plus className="w-4 h-4 shrink-0" />
           {!collapsed && <span>Create Hub</span>}
+        </Link>
+        <Link
+          href="/admin/sync"
+          className={cn(
+            "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-colors",
+            pathname === "/admin/sync"
+              ? "bg-accent text-foreground"
+              : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+          )}
+          title={collapsed ? "Sync Monitor" : undefined}
+        >
+          <Activity className="w-4 h-4 shrink-0" />
+          {!collapsed && <span>Sync Monitor</span>}
         </Link>
         <Link
           href="/admin/settings"

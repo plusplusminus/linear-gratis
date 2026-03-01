@@ -5,6 +5,7 @@ import {
   verifyWebhookSignature,
   routeWebhookEvent,
 } from "@/lib/webhook-handlers";
+import { logSyncEvent } from "@/lib/sync-logger";
 
 type WebhookPayload = {
   action: "create" | "update" | "remove";
@@ -93,19 +94,46 @@ export async function POST(request: NextRequest) {
 
     // Discard events from teams not configured in any hub
     const teamId = extractTeamId(payload);
+    const entityId = (payload.data?.id as string) ?? "unknown";
+
     if (teamId) {
       const configured = await isTeamConfigured(teamId);
       if (!configured) {
+        void logSyncEvent({
+          eventType: payload.type,
+          action: payload.action,
+          entityId,
+          teamId,
+          status: "skipped",
+        });
         return NextResponse.json({ success: true });
       }
     }
     // teamId === null → org-level entity (Initiative) — always process
 
     // Route the event
+    const start = Date.now();
     try {
       await routeWebhookEvent(payload, WORKSPACE_USER_ID);
+      void logSyncEvent({
+        eventType: payload.type,
+        action: payload.action,
+        entityId,
+        teamId,
+        status: "success",
+        processingTimeMs: Date.now() - start,
+      });
     } catch (error) {
       console.error("Webhook handler error:", error);
+      void logSyncEvent({
+        eventType: payload.type,
+        action: payload.action,
+        entityId,
+        teamId,
+        status: "error",
+        errorMessage: error instanceof Error ? error.message : String(error),
+        processingTimeMs: Date.now() - start,
+      });
     }
 
     return NextResponse.json({ success: true });
