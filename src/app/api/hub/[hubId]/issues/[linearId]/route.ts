@@ -224,6 +224,30 @@ export async function POST(
             // Fire-and-forget: execute but don't let failures affect the response
             workflowResults = await executeWorkflowActions(actions, linearId);
 
+            // Optimistically update local synced_issues with the new status
+            for (const result of workflowResults) {
+              if (result.success && result.action === "set_status" && result.details) {
+                const { stateId, stateName } = result.details as { stateId?: string; stateName?: string };
+                if (stateId) {
+                  supabaseAdmin
+                    .from("synced_issues")
+                    .update({
+                      data: {
+                        ...issueData,
+                        labels: updatedLabels,
+                        state: { id: stateId, name: stateName ?? stateId },
+                      },
+                      updated_at: new Date().toISOString(),
+                    })
+                    .eq("user_id", "workspace")
+                    .eq("linear_id", linearId)
+                    .then(({ error: updateErr }) => {
+                      if (updateErr) console.error("[hub-workflows] Failed to optimistically update status:", updateErr);
+                    });
+                }
+              }
+            }
+
             // Log workflow execution for the activity trail
             logWorkflowExecution(
               hubId,
