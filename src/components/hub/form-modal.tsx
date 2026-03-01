@@ -31,21 +31,26 @@ type SubmitState = "idle" | "submitting" | "success" | "error";
 export function FormModal({
   formId,
   hubId,
+  teamId: contextTeamId,
+  projectId: contextProjectId,
   onClose,
   onSubmitted,
 }: {
   formId: string;
   hubId: string;
+  teamId: string | null;
+  projectId: string | null;
   onClose: () => void;
   onSubmitted: () => void;
 }) {
-  const { email, firstName, lastName } = useHub();
+  const { email, firstName, lastName, teams } = useHub();
 
   const [form, setForm] = useState<FormData | null>(null);
   const [loading, setLoading] = useState(true);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [attachmentPaths, setAttachmentPaths] = useState<Record<string, string>>({});
   const [uploadingFields, setUploadingFields] = useState<Set<string>>(new Set());
+  const [selectedTeamId, setSelectedTeamId] = useState<string>(contextTeamId ?? "");
   const [submitState, setSubmitState] = useState<SubmitState>("idle");
   const [responseMessage, setResponseMessage] = useState("");
   const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
@@ -144,9 +149,14 @@ export function FormModal({
     [hubId, setFieldValue]
   );
 
+  const needsTeamPicker = !contextTeamId && teams.length > 1;
+
   const validate = useCallback((): boolean => {
     if (!form) return false;
     const errors = new Set<string>();
+    if (needsTeamPicker && !selectedTeamId) {
+      errors.add("__team__");
+    }
     for (const field of form.fields) {
       if (field.is_hidden) continue;
       if (field.is_required) {
@@ -158,11 +168,13 @@ export function FormModal({
     }
     setValidationErrors(errors);
     return errors.size === 0;
-  }, [form, fieldValues]);
+  }, [form, fieldValues, needsTeamPicker, selectedTeamId]);
 
   const handleSubmit = useCallback(async () => {
     if (!validate()) return;
     setSubmitState("submitting");
+
+    const resolvedTeamId = contextTeamId || selectedTeamId || (teams.length === 1 ? teams[0].id : null);
 
     try {
       const res = await fetch(`/api/hub/${hubId}/submissions`, {
@@ -172,6 +184,8 @@ export function FormModal({
           formId,
           fieldValues,
           attachmentPaths: Object.values(attachmentPaths),
+          teamId: resolvedTeamId,
+          projectId: contextProjectId,
         }),
       });
 
@@ -193,7 +207,7 @@ export function FormModal({
       setResponseMessage(form?.error_message || "Something went wrong");
       setSubmitState("error");
     }
-  }, [validate, hubId, formId, fieldValues, attachmentPaths, form, onSubmitted]);
+  }, [validate, hubId, formId, fieldValues, attachmentPaths, form, onSubmitted, contextTeamId, selectedTeamId, teams, contextProjectId]);
 
   const renderField = (field: FormField) => {
     if (field.is_hidden) return null;
@@ -416,6 +430,33 @@ export function FormModal({
                   )}
                 </div>
               </div>
+
+              {/* Team picker — only when hub has multiple teams and no team in URL context */}
+              {needsTeamPicker && (
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                    Team
+                  </label>
+                  <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
+                    <SelectTrigger
+                      className="w-full"
+                      aria-invalid={validationErrors.has("__team__") || undefined}
+                    >
+                      <SelectValue placeholder="Select a team..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teams.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {validationErrors.has("__team__") && (
+                    <p className="text-xs text-destructive mt-1">Please select a team</p>
+                  )}
+                </div>
+              )}
 
               {/* Dynamic fields */}
               {form.fields

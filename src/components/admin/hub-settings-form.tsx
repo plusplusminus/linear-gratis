@@ -290,7 +290,7 @@ export function HubSettingsForm({ hub, mappings }: HubSettingsFormProps) {
 
       {/* Forms tab */}
       {tab === "forms" && (
-        <HubFormsTab hubId={hub.id} teamId={mappings[0]?.linear_team_id ?? null} />
+        <HubFormsTab hubId={hub.id} teamMappings={mappings} />
       )}
 
       {/* Custom domain tab */}
@@ -455,7 +455,7 @@ type HubFormsApiResponse = {
   hub_forms: FormTemplate[];
 };
 
-function HubFormsTab({ hubId, teamId }: { hubId: string; teamId: string | null }) {
+function HubFormsTab({ hubId, teamMappings }: { hubId: string; teamMappings: TeamMapping[] }) {
   const [isPending, startTransition] = useTransition();
   const { data: globalForms, loading: formsLoading } =
     useFetch<FormWithFields[]>("/api/admin/forms");
@@ -663,7 +663,7 @@ function HubFormsTab({ hubId, teamId }: { hubId: string; teamId: string | null }
                         </p>
 
                         <LabelPicker
-                          teamId={teamId}
+                          teamId={teamMappings[0]?.linear_team_id ?? null}
                           value={ovr.target_label_ids ?? []}
                           onChange={(ids) =>
                             updateOverride(form.id, {

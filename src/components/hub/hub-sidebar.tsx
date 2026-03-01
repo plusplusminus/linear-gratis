@@ -66,6 +66,14 @@ export function HubSidebar() {
     /\/hub\/[^/]+\/([^/]+)/
   )?.[1];
 
+  // Derive team + project context from URL for form routing
+  const activeTeam = activeTeamKey
+    ? teams.find((t) => t.key === activeTeamKey)
+    : null;
+  const activeProjectId = pathname.match(
+    /\/projects\/([^/]+)/
+  )?.[1] ?? null;
+
   return (
     <aside
       className={cn(
@@ -194,6 +202,8 @@ export function HubSidebar() {
         <FormModal
           formId={activeFormId}
           hubId={hubId}
+          teamId={activeTeam?.id ?? null}
+          projectId={activeProjectId}
           onClose={() => setActiveFormId(null)}
           onSubmitted={() => {}}
         />

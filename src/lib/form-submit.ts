@@ -109,27 +109,47 @@ export async function processFormSubmission(
   hubId: string,
   fieldValues: Record<string, unknown>,
   attachmentPaths: string[],
-  user: SubmissionUser
+  user: SubmissionUser,
+  clientTeamId?: string,
+  clientProjectId?: string,
 ): Promise<SubmissionResult> {
   // 1. Fetch form + fields
   const form = await fetchFormWithFields(formId);
   if (!form) throw new Error("Form not found");
   if (!form.is_active) throw new Error("Form is not active");
 
-  // 2. Resolve team from hub's team mapping + fetch hub form config for labels/messages
-  const { data: teamMapping, error: tmErr } = await supabaseAdmin
-    .from("hub_team_mappings")
-    .select("linear_team_id")
-    .eq("hub_id", hubId)
-    .eq("is_active", true)
-    .limit(1)
-    .single();
+  // 2. Resolve team — prefer client-provided (from URL context), fall back to hub mapping
+  let teamId = clientTeamId;
+  if (!teamId) {
+    const { data: teamMapping } = await supabaseAdmin
+      .from("hub_team_mappings")
+      .select("linear_team_id")
+      .eq("hub_id", hubId)
+      .eq("is_active", true)
+      .limit(1)
+      .single();
 
-  if (tmErr || !teamMapping?.linear_team_id) {
-    throw new Error("No team mapping found for this hub");
+    teamId = teamMapping?.linear_team_id;
   }
 
-  const teamId = teamMapping.linear_team_id;
+  if (!teamId) {
+    throw new Error("No team specified and no team mapping found for this hub");
+  }
+
+  // Validate the team belongs to this hub
+  const { data: validTeam } = await supabaseAdmin
+    .from("hub_team_mappings")
+    .select("id")
+    .eq("hub_id", hubId)
+    .eq("linear_team_id", teamId)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (!validTeam) {
+    throw new Error("Selected team is not associated with this hub");
+  }
+
+  const projectId = clientProjectId ?? null;
   const hubConfig = await fetchHubFormConfig(hubId, formId);
   const labelIds = hubConfig?.target_label_ids ?? form.target_label_ids ?? [];
 
@@ -200,6 +220,7 @@ export async function processFormSubmission(
       description: description || undefined,
       priority: priority ?? undefined,
       labelIds: labelIds.length > 0 ? labelIds : undefined,
+      projectId: projectId ?? undefined,
     });
 
     // 7a. Success — update row

@@ -31,6 +31,8 @@ export async function POST(
       formId?: string;
       fieldValues?: Record<string, unknown>;
       attachmentPaths?: string[];
+      teamId?: string;
+      projectId?: string;
     };
 
     if (!body.formId) {
@@ -57,7 +59,9 @@ export async function POST(
         email: user.email,
         name:
           [user.firstName, user.lastName].filter(Boolean).join(" ") || undefined,
-      }
+      },
+      body.teamId,
+      body.projectId,
     );
 
     return NextResponse.json(result, { status: 201 });
