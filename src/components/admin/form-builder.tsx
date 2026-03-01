@@ -11,6 +11,22 @@ import {
   X,
   Plus,
   GripVertical,
+  Bug,
+  Lightbulb,
+  FileText,
+  Calendar,
+  MessageSquare,
+  HelpCircle,
+  Wrench,
+  Flag,
+  Star,
+  Zap,
+  Shield,
+  Users,
+  Mail,
+  Phone,
+  Megaphone,
+  type LucideIcon,
 } from "lucide-react";
 import type {
   FormTemplate,
@@ -23,7 +39,26 @@ type FormWithFields = FormTemplate & { fields: FormField[] };
 
 interface FormBuilderProps {
   form: FormWithFields | null;
+  hubId?: string;
 }
+
+export const BUTTON_ICONS: Record<string, LucideIcon> = {
+  bug: Bug,
+  lightbulb: Lightbulb,
+  "file-text": FileText,
+  calendar: Calendar,
+  "message-square": MessageSquare,
+  "help-circle": HelpCircle,
+  wrench: Wrench,
+  flag: Flag,
+  star: Star,
+  zap: Zap,
+  shield: Shield,
+  users: Users,
+  mail: Mail,
+  phone: Phone,
+  megaphone: Megaphone,
+};
 
 interface FieldDraft {
   id: string;
@@ -127,11 +162,11 @@ function fieldFromApi(f: FormField): FieldDraft {
 const inputClass =
   "w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent";
 
-export function FormBuilder({ form }: FormBuilderProps) {
+export function FormBuilder({ form, hubId }: FormBuilderProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const isNew = !form;
-  const isGlobal = !form?.hub_id;
+  const isGlobal = !hubId && !form?.hub_id;
 
   // Form settings
   const [name, setName] = useState(form?.name ?? "");
@@ -144,6 +179,8 @@ export function FormBuilder({ form }: FormBuilderProps) {
     form?.error_message ?? "Something went wrong. Please try again."
   );
   const [isActive, setIsActive] = useState(form?.is_active ?? false);
+  const [buttonLabel, setButtonLabel] = useState(form?.button_label ?? "");
+  const [buttonIcon, setButtonIcon] = useState(form?.button_icon ?? "");
 
   // Linear routing
   const [targetTeamId, setTargetTeamId] = useState(form?.target_team_id ?? "");
@@ -236,6 +273,8 @@ export function FormBuilder({ form }: FormBuilderProps) {
           type,
           description: description.trim() || null,
           is_active: isActive,
+          button_label: buttonLabel.trim() || null,
+          button_icon: buttonIcon || null,
           confirmation_message: confirmationMessage.trim(),
           error_message: errorMessage.trim(),
           ...(isGlobal
@@ -270,7 +309,9 @@ export function FormBuilder({ form }: FormBuilderProps) {
         };
 
         const url = isNew
-          ? "/api/admin/forms"
+          ? hubId
+            ? `/api/admin/hubs/${hubId}/forms`
+            : "/api/admin/forms"
           : `/api/admin/forms/${form.id}`;
         const method = isNew ? "POST" : "PATCH";
 
@@ -289,7 +330,11 @@ export function FormBuilder({ form }: FormBuilderProps) {
         toast.success(isNew ? "Form created" : "Form saved");
 
         if (isNew) {
-          router.replace(`/admin/forms/${saved.id}`);
+          if (hubId) {
+            router.replace(`/admin/hubs/${hubId}/settings?tab=forms`);
+          } else {
+            router.replace(`/admin/forms/${saved.id}`);
+          }
         }
         router.refresh();
       } catch (e) {
@@ -297,9 +342,10 @@ export function FormBuilder({ form }: FormBuilderProps) {
       }
     });
   }, [
-    name, type, description, isActive, confirmationMessage, errorMessage,
+    name, type, description, isActive, buttonLabel, buttonIcon,
+    confirmationMessage, errorMessage,
     targetTeamId, targetProjectId, targetCycleId, targetLabelIds, targetPriority,
-    fields, isNew, form, router,
+    fields, isNew, form, router, hubId,
   ]);
 
   return (
@@ -426,7 +472,61 @@ export function FormBuilder({ form }: FormBuilderProps) {
           </div>
         </section>
 
-        {/* Section 2: Linear Routing — only shown for hub-specific forms */}
+        {/* Section 2: Button Settings */}
+        <section className="border border-border rounded-lg bg-card">
+          <div className="px-4 py-3 border-b border-border">
+            <h2 className="text-sm font-semibold">Button Settings</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Customize how the form button appears in the hub sidebar
+            </p>
+          </div>
+          <div className="p-4 space-y-4">
+            <div>
+              <label htmlFor="button-label" className="block text-sm font-medium mb-1.5">
+                Button Label
+              </label>
+              <input
+                id="button-label"
+                type="text"
+                value={buttonLabel}
+                onChange={(e) => setButtonLabel(e.target.value)}
+                placeholder="Leave blank to use form name"
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1.5">
+                Button Icon
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(BUTTON_ICONS).map(([key, Icon]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setButtonIcon(buttonIcon === key ? "" : key)}
+                    className={cn(
+                      "p-2 rounded-md border transition-colors",
+                      buttonIcon === key
+                        ? "border-primary bg-primary/10 text-primary ring-1 ring-primary"
+                        : "border-border text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                    )}
+                    title={key}
+                  >
+                    <Icon className="w-4 h-4" />
+                  </button>
+                ))}
+              </div>
+              {buttonIcon && (
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  Selected: {buttonIcon}
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* Section 3: Linear Routing — only shown for hub-specific forms */}
         {!isGlobal && (
           <section className="border border-border rounded-lg bg-card">
             <div className="px-4 py-3 border-b border-border">
@@ -530,7 +630,7 @@ export function FormBuilder({ form }: FormBuilderProps) {
           </section>
         )}
 
-        {/* Section 3: Fields */}
+        {/* Section 4: Fields */}
         <section className="border border-border rounded-lg bg-card">
           <div className="px-4 py-3 border-b border-border">
             <h2 className="text-sm font-semibold">Fields</h2>

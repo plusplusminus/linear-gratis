@@ -69,6 +69,8 @@ export async function PATCH(
       type?: string;
       description?: string;
       is_active?: boolean;
+      button_label?: string | null;
+      button_icon?: string | null;
       target_team_id?: string | null;
       target_project_id?: string | null;
       target_cycle_id?: string | null;
@@ -104,6 +106,10 @@ export async function PATCH(
     if (body.description !== undefined)
       updates.description = body.description?.trim() || null;
     if (body.is_active !== undefined) updates.is_active = body.is_active;
+    if (body.button_label !== undefined)
+      updates.button_label = body.button_label?.trim() || null;
+    if (body.button_icon !== undefined)
+      updates.button_icon = body.button_icon || null;
     if (body.target_team_id !== undefined)
       updates.target_team_id = body.target_team_id || null;
     if (body.target_project_id !== undefined)

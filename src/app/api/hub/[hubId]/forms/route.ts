@@ -29,6 +29,8 @@ export async function GET(
       name: f.name,
       type: f.type,
       description: f.description,
+      button_label: f.button_label,
+      button_icon: f.button_icon,
       display_order: f.display_order,
     }));
 

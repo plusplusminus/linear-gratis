@@ -385,6 +385,8 @@ export type FormTemplate = {
   target_cycle_id: string | null
   target_label_ids: string[]
   target_priority: number | null
+  button_label: string | null
+  button_icon: string | null
   confirmation_message: string
   error_message: string
   display_order: number

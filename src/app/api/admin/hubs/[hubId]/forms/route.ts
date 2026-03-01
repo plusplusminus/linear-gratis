@@ -84,6 +84,8 @@ export async function POST(
       type?: string;
       name?: string;
       description?: string;
+      button_label?: string;
+      button_icon?: string;
       target_team_id?: string;
       target_project_id?: string;
       target_cycle_id?: string;
@@ -114,6 +116,8 @@ export async function POST(
         type: body.type,
         name: body.name.trim(),
         description: body.description?.trim() || null,
+        button_label: body.button_label?.trim() || null,
+        button_icon: body.button_icon || null,
         target_team_id: body.target_team_id || null,
         target_project_id: body.target_project_id || null,
         target_cycle_id: body.target_cycle_id || null,

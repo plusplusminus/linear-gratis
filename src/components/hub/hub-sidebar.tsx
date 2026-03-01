@@ -16,19 +16,52 @@ import {
   Lightbulb,
   FileText,
   ClipboardList,
+  Calendar,
+  MessageSquare,
+  HelpCircle,
+  Wrench,
+  Flag,
+  Star,
+  Zap,
+  Shield,
+  Users,
+  Mail,
+  Phone,
+  Megaphone,
+  type LucideIcon,
 } from "lucide-react";
 
 type SidebarForm = {
   id: string;
   name: string;
   type: "bug" | "feature" | "custom";
+  button_label: string | null;
+  button_icon: string | null;
 };
 
-const formTypeIcons = {
+const formTypeIcons: Record<string, LucideIcon> = {
   bug: Bug,
   feature: Lightbulb,
   custom: FileText,
-} as const;
+};
+
+const buttonIconMap: Record<string, LucideIcon> = {
+  bug: Bug,
+  lightbulb: Lightbulb,
+  "file-text": FileText,
+  calendar: Calendar,
+  "message-square": MessageSquare,
+  "help-circle": HelpCircle,
+  wrench: Wrench,
+  flag: Flag,
+  star: Star,
+  zap: Zap,
+  shield: Shield,
+  users: Users,
+  mail: Mail,
+  phone: Phone,
+  megaphone: Megaphone,
+};
 
 export function HubSidebar() {
   const [collapsed, setCollapsed] = useState(false);
@@ -167,7 +200,10 @@ export function HubSidebar() {
       {canInteract && (
         <div className="px-1.5 py-2 border-t border-border shrink-0 space-y-0.5">
           {forms.map((form) => {
-            const Icon = formTypeIcons[form.type] || FileText;
+            const Icon = (form.button_icon && buttonIconMap[form.button_icon])
+              || formTypeIcons[form.type]
+              || FileText;
+            const label = form.button_label || form.name;
             return (
               <button
                 key={form.id}
@@ -176,10 +212,10 @@ export function HubSidebar() {
                   "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-colors w-full",
                   "text-muted-foreground hover:text-foreground hover:bg-accent/50"
                 )}
-                title={collapsed ? form.name : undefined}
+                title={collapsed ? label : undefined}
               >
                 <Icon className="w-4 h-4 shrink-0" />
-                {!collapsed && <span className="truncate">{form.name}</span>}
+                {!collapsed && <span className="truncate">{label}</span>}
               </button>
             );
           })}
