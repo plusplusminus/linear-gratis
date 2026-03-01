@@ -17,8 +17,6 @@ import {
   mapCommentToRow,
   batchUpsert,
 } from "@/lib/initial-sync";
-import { startSyncRun, completeSyncRun } from "@/lib/sync-logger";
-
 const WORKSPACE_USER_ID = "workspace";
 
 // POST: Manual reconciliation for a specific hub
@@ -63,8 +61,6 @@ export async function POST(
     }
 
     const apiToken = await getWorkspaceToken();
-    const startedAt = Date.now();
-    const runId = await startSyncRun({ runType: "reconcile", trigger: "manual", hubId });
 
     const result = {
       hubId,
@@ -166,21 +162,6 @@ export async function POST(
         result.errors++;
       }
     }
-
-    await completeSyncRun({
-      runId,
-      status: result.errors > 0 ? "failed" : "completed",
-      entitiesProcessed: {
-        issues: result.issuesUpserted,
-        comments: result.commentsUpserted,
-        teams: result.teamsUpserted,
-        projects: result.projectsUpserted,
-        cycles: result.cyclesUpserted,
-        initiatives: result.initiativesUpserted,
-      },
-      errorsCount: result.errors,
-      startedAt,
-    });
 
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
