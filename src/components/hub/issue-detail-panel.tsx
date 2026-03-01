@@ -29,6 +29,7 @@ import {
   ArrowRight,
   Tag,
   Reply,
+  IterationCw,
 } from "lucide-react";
 
 type IssueDetail = {
@@ -40,6 +41,7 @@ type IssueDetail = {
   priorityLabel: string;
   state: { id: string; name: string; color: string; type: string };
   labels: Array<{ id: string; name: string; color: string }>;
+  cycle?: { id: string; name: string; number: number };
   dueDate?: string;
   createdAt: string;
   updatedAt: string;
@@ -240,6 +242,12 @@ export function IssueDetailPanel({
                 </h2>
                 {issue.dueDate && (
                   <DueDateBadge dueDate={issue.dueDate} />
+                )}
+                {issue.cycle && (
+                  <span className="inline-flex items-center gap-1.5 mt-1.5 text-[11px] text-muted-foreground">
+                    <IterationCw className="w-3 h-3" />
+                    {issue.cycle.name || `Cycle ${issue.cycle.number}`}
+                  </span>
                 )}
               </div>
               <button

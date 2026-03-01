@@ -62,6 +62,7 @@ type Issue = {
   priorityLabel: string;
   state: { id: string; name: string; color: string; type: string };
   labels: Array<{ id: string; name: string; color: string }>;
+  cycle?: { id: string; name: string; number: number };
   dueDate?: string;
   createdAt: string;
   updatedAt: string;
@@ -72,6 +73,7 @@ export function TeamTabs({
   issues,
   states,
   labels,
+  cycles,
   projects,
   initiatives,
   milestones,
@@ -83,6 +85,7 @@ export function TeamTabs({
   issues: Issue[];
   states: Array<{ id: string; name: string; color: string; type: string }>;
   labels: Array<{ id: string; name: string; color: string }>;
+  cycles?: Array<{ id: string; name: string; number: number }>;
   projects: Project[];
   initiatives: Initiative[];
   milestones: Milestone[];
@@ -110,6 +113,7 @@ export function TeamTabs({
       params.delete("label");
       params.delete("view");
       params.delete("project");
+      params.delete("cycle");
     }
     const qs = params.toString();
     router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
@@ -167,6 +171,7 @@ export function TeamTabs({
           issues={issues}
           states={states}
           labels={labels}
+          cycles={cycles}
           projects={projects.map((p) => ({
             id: p.id,
             name: p.name,

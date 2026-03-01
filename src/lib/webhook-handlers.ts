@@ -74,6 +74,18 @@ type LinearInitiativeData = {
   updatedAt?: string;
 };
 
+type LinearCycleData = {
+  id: string;
+  name?: string;
+  number?: number;
+  startsAt?: string;
+  endsAt?: string;
+  teamId?: string;
+  team?: { id: string };
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 // -- Issue mapping (pure, exported for testing) ------------------------------
 
 export function mapIssueWebhookToRow(
@@ -200,6 +212,40 @@ export async function handleCommentEvent(
   }
 }
 
+// -- Cycle mapping (pure, exported for testing) ------------------------------
+
+export function mapCycleWebhookToRow(
+  action: string,
+  data: Record<string, unknown>,
+  userId: string
+): Record<string, unknown> {
+  const cycle = data as unknown as LinearCycleData;
+
+  const row: Record<string, unknown> = {
+    linear_id: cycle.id,
+    user_id: userId,
+    synced_at: new Date().toISOString(),
+    data,
+  };
+
+  if (cycle.name !== undefined) row.name = cycle.name;
+  if (cycle.number !== undefined) row.number = cycle.number;
+  // Linear webhooks send teamId as top-level string OR nested object
+  const teamId = cycle.team?.id ?? cycle.teamId;
+  if (teamId) row.team_id = teamId;
+  if (cycle.startsAt !== undefined) row.starts_at = cycle.startsAt;
+  if (cycle.endsAt !== undefined) row.ends_at = cycle.endsAt;
+
+  if (action === "create") {
+    row.created_at = cycle.createdAt || new Date().toISOString();
+    row.updated_at = cycle.updatedAt || new Date().toISOString();
+  } else {
+    row.updated_at = cycle.updatedAt || new Date().toISOString();
+  }
+
+  return row;
+}
+
 // -- Project mapping (pure, exported for testing) ----------------------------
 
 export function mapProjectWebhookToRow(
@@ -291,6 +337,36 @@ export async function handleProjectEvent(
   }
 }
 
+// -- Cycle event handler -----------------------------------------------------
+
+export async function handleCycleEvent(
+  action: string,
+  data: Record<string, unknown>,
+  userId: string
+): Promise<void> {
+  const cycle = data as unknown as LinearCycleData;
+
+  if (action === "remove") {
+    await supabaseAdmin
+      .from("synced_cycles")
+      .delete()
+      .eq("user_id", userId)
+      .eq("linear_id", cycle.id);
+    return;
+  }
+
+  const row = mapCycleWebhookToRow(action, data, userId);
+
+  const { error } = await supabaseAdmin.from("synced_cycles").upsert(row, {
+    onConflict: "user_id,linear_id",
+  });
+
+  if (error) {
+    console.error("Failed to upsert synced_cycle:", error);
+    throw error;
+  }
+}
+
 // -- Initiative event handler ------------------------------------------------
 
 export async function handleInitiativeEvent(
@@ -341,6 +417,9 @@ export async function routeWebhookEvent(
       break;
     case "Initiative":
       await handleInitiativeEvent(action, data, userId);
+      break;
+    case "Cycle":
+      await handleCycleEvent(action, data, userId);
       break;
     default:
       console.log(`Ignoring unhandled webhook event type: ${type}`);

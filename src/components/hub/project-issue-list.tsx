@@ -25,6 +25,7 @@ import {
   Check,
   FolderKanban,
   Tag,
+  IterationCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCanInteract } from "@/hooks/use-can-interact";
@@ -40,6 +41,7 @@ type Issue = {
   priorityLabel: string;
   state: { id: string; name: string; color: string; type: string };
   labels: Array<{ id: string; name: string; color: string }>;
+  cycle?: { id: string; name: string; number: number };
   dueDate?: string;
   createdAt: string;
   updatedAt: string;
@@ -54,6 +56,7 @@ type FilterState = {
   priorities: number[];
   labelIds: string[];
   projectIds: string[];
+  cycleIds: string[];
 };
 
 type ViewMode = "list" | "kanban";
@@ -74,6 +77,7 @@ export function ProjectIssueList({
   issues: initialIssues,
   states,
   labels,
+  cycles,
   hubId,
   teamId,
   projectId,
@@ -82,6 +86,7 @@ export function ProjectIssueList({
   issues: Issue[];
   states: Array<{ id: string; name: string; color: string; type: string }>;
   labels: Array<{ id: string; name: string; color: string }>;
+  cycles?: Array<{ id: string; name: string; number: number }>;
   hubSlug: string;
   teamKey: string;
   teamId: string;
@@ -104,6 +109,7 @@ export function ProjectIssueList({
     priorities: searchParams.getAll("priority").map(Number).filter((n) => !isNaN(n)),
     labelIds: searchParams.getAll("label"),
     projectIds: searchParams.getAll("project"),
+    cycleIds: searchParams.getAll("cycle"),
   }));
 
   const [viewMode, setViewMode] = useState<ViewMode>(
@@ -120,7 +126,8 @@ export function ProjectIssueList({
     filters.statuses.length > 0 ||
       filters.priorities.length > 0 ||
       filters.labelIds.length > 0 ||
-      filters.projectIds.length > 0
+      filters.projectIds.length > 0 ||
+      filters.cycleIds.length > 0
   );
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
 
@@ -136,6 +143,7 @@ export function ProjectIssueList({
     next.priorities.forEach((p) => newParams.append("priority", String(p)));
     next.labelIds.forEach((l) => newParams.append("label", l));
     next.projectIds.forEach((id) => newParams.append("project", id));
+    next.cycleIds.forEach((id) => newParams.append("cycle", id));
     if (view !== "list") newParams.set("view", view);
     const qs = newParams.toString();
     router.replace(qs ? `?${qs}` : "?", { scroll: false });
@@ -182,6 +190,11 @@ export function ProjectIssueList({
       if (
         filters.projectIds.length > 0 &&
         (!issue.project || !filters.projectIds.includes(issue.project.id))
+      )
+        return false;
+      if (
+        filters.cycleIds.length > 0 &&
+        (!issue.cycle || !filters.cycleIds.includes(issue.cycle.id))
       )
         return false;
       return true;
@@ -239,10 +252,11 @@ export function ProjectIssueList({
     filters.statuses.length > 0 ||
     filters.priorities.length > 0 ||
     filters.labelIds.length > 0 ||
-    filters.projectIds.length > 0;
+    filters.projectIds.length > 0 ||
+    filters.cycleIds.length > 0;
 
   const activeFilterCount =
-    filters.statuses.length + filters.priorities.length + filters.labelIds.length + filters.projectIds.length;
+    filters.statuses.length + filters.priorities.length + filters.labelIds.length + filters.projectIds.length + filters.cycleIds.length;
 
   function toggleGroup(name: string) {
     setCollapsedGroups((prev) => {
@@ -314,7 +328,7 @@ export function ProjectIssueList({
         {hasActiveFilters && (
           <button
             onClick={() =>
-              updateFilters({ search: "", statuses: [], priorities: [], labelIds: [], projectIds: [] })
+              updateFilters({ search: "", statuses: [], priorities: [], labelIds: [], projectIds: [], cycleIds: [] })
             }
             className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
           >
@@ -447,6 +461,17 @@ export function ProjectIssueList({
               onChange={(next) => updateFilters({ ...filters, labelIds: next })}
               label="Label"
               icon={<Tag className="w-3 h-3" />}
+            />
+          )}
+
+          {/* Cycle filter */}
+          {cycles && cycles.length > 0 && (
+            <CheckboxFilterDropdown
+              items={cycles.map((c) => ({ id: c.id, name: c.name || `Cycle ${c.number}` }))}
+              selected={filters.cycleIds}
+              onChange={(next) => updateFilters({ ...filters, cycleIds: next })}
+              label="Cycle"
+              icon={<IterationCw className="w-3 h-3" />}
             />
           )}
         </div>
@@ -670,6 +695,12 @@ function IssueRow({
             style={{ backgroundColor: issue.project.color || "var(--muted-foreground)" }}
           />
           {issue.project.name}
+        </span>
+      )}
+      {issue.cycle && (
+        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-muted-foreground bg-muted/50 border border-border/50 shrink-0">
+          <IterationCw className="w-2.5 h-2.5" />
+          {issue.cycle.name || `Cycle ${issue.cycle.number}`}
         </span>
       )}
       {issue.labels.length > 0 && (

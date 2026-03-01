@@ -113,6 +113,7 @@ export default async function ProjectViewPage({
         issues={issues}
         states={metadata.states}
         labels={metadata.labels}
+        cycles={metadata.cycles}
         hubSlug={slug}
         teamKey={teamKey}
         teamId={team.id}
