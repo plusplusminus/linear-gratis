@@ -50,7 +50,11 @@ export function FormModal({
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [attachmentPaths, setAttachmentPaths] = useState<Record<string, string>>({});
   const [uploadingFields, setUploadingFields] = useState<Set<string>>(new Set());
-  const [selectedTeamId, setSelectedTeamId] = useState<string>(contextTeamId ?? "");
+  const [selectedTeamId, setSelectedTeamId] = useState<string>(
+    contextTeamId ?? (teams.length === 1 ? teams[0].id : "")
+  );
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(contextProjectId ?? "");
+  const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([]);
   const [submitState, setSubmitState] = useState<SubmitState>("idle");
   const [responseMessage, setResponseMessage] = useState("");
   const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
@@ -58,6 +62,27 @@ export function FormModal({
 
   const displayName =
     [firstName, lastName].filter(Boolean).join(" ") || email;
+
+  // Fetch projects for selected team
+  useEffect(() => {
+    if (!selectedTeamId) {
+      setProjects([]);
+      return;
+    }
+    let cancelled = false;
+    async function loadProjects() {
+      try {
+        const res = await fetch(`/api/hub/${hubId}/projects`);
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as Array<{ id: string; name: string }>;
+        if (!cancelled) setProjects(data);
+      } catch {
+        // Non-critical
+      }
+    }
+    loadProjects();
+    return () => { cancelled = true; };
+  }, [hubId, selectedTeamId]);
 
   // Fetch form data
   useEffect(() => {
@@ -174,8 +199,6 @@ export function FormModal({
     if (!validate()) return;
     setSubmitState("submitting");
 
-    const resolvedTeamId = contextTeamId || selectedTeamId || (teams.length === 1 ? teams[0].id : null);
-
     try {
       const res = await fetch(`/api/hub/${hubId}/submissions`, {
         method: "POST",
@@ -184,8 +207,8 @@ export function FormModal({
           formId,
           fieldValues,
           attachmentPaths: Object.values(attachmentPaths),
-          teamId: resolvedTeamId,
-          projectId: contextProjectId,
+          teamId: selectedTeamId || null,
+          projectId: selectedProjectId && selectedProjectId !== "__none__" ? selectedProjectId : null,
         }),
       });
 
@@ -207,7 +230,7 @@ export function FormModal({
       setResponseMessage(form?.error_message || "Something went wrong");
       setSubmitState("error");
     }
-  }, [validate, hubId, formId, fieldValues, attachmentPaths, form, onSubmitted, contextTeamId, selectedTeamId, teams, contextProjectId]);
+  }, [validate, hubId, formId, fieldValues, attachmentPaths, form, onSubmitted, selectedTeamId, selectedProjectId]);
 
   const renderField = (field: FormField) => {
     if (field.is_hidden) return null;
@@ -431,30 +454,65 @@ export function FormModal({
                 </div>
               </div>
 
-              {/* Team picker — only when hub has multiple teams and no team in URL context */}
-              {needsTeamPicker && (
+              {/* Team — picker if multiple teams, read-only if derived from URL */}
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                  Team
+                </label>
+                {needsTeamPicker ? (
+                  <>
+                    <Select
+                      value={selectedTeamId}
+                      onValueChange={(v) => {
+                        setSelectedTeamId(v);
+                        setSelectedProjectId("");
+                      }}
+                    >
+                      <SelectTrigger
+                        className="w-full"
+                        aria-invalid={validationErrors.has("__team__") || undefined}
+                      >
+                        <SelectValue placeholder="Select a team..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {teams.map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            {t.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {validationErrors.has("__team__") && (
+                      <p className="text-xs text-destructive mt-1">Please select a team</p>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-sm text-foreground">
+                    {teams.find((t) => t.id === selectedTeamId)?.name ?? selectedTeamId}
+                  </div>
+                )}
+              </div>
+
+              {/* Project — optional picker, pre-filled from URL context */}
+              {selectedTeamId && (
                 <div>
                   <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                    Team
+                    Project
+                    <span className="text-muted-foreground/60 font-normal ml-1">(optional)</span>
                   </label>
-                  <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
-                    <SelectTrigger
-                      className="w-full"
-                      aria-invalid={validationErrors.has("__team__") || undefined}
-                    >
-                      <SelectValue placeholder="Select a team..." />
+                  <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="No project" />
                     </SelectTrigger>
                     <SelectContent>
-                      {teams.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.name}
+                      <SelectItem value="__none__">No project</SelectItem>
+                      {projects.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  {validationErrors.has("__team__") && (
-                    <p className="text-xs text-destructive mt-1">Please select a team</p>
-                  )}
                 </div>
               )}
 
