@@ -57,6 +57,7 @@ type Comment = {
   updatedAt: string;
   user: { id: string; name: string };
   isHubComment?: boolean;
+  isTeamComment?: boolean;
   push_status?: string;
   push_error?: string;
   children?: Comment[];
@@ -546,6 +547,7 @@ function CommentBubble({
   onReply?: () => void;
 }) {
   const isHub = comment.isHubComment;
+  const isTeam = comment.isTeamComment;
   const isFailed = comment.push_status === "failed";
   const isPending = comment.push_status === "pending";
 
@@ -565,6 +567,11 @@ function CommentBubble({
         {isHub && (
           <span className="text-[9px] font-medium px-1 py-0 rounded bg-primary/10 text-primary">
             Client
+          </span>
+        )}
+        {isTeam && !isHub && (
+          <span className="text-[9px] font-medium px-1 py-0 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400">
+            Team
           </span>
         )}
         <span className="text-[10px] text-muted-foreground">

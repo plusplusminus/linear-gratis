@@ -154,6 +154,28 @@ export function mapRowToLinearIssue(row: {
   };
 }
 
+const CLIENT_FACING_PREFIX = /^@heyclient[\s\n]?/i;
+
+/**
+ * Check if a comment body is client-facing (starts with @heyclient).
+ */
+export function isClientFacing(body: string): boolean {
+  return CLIENT_FACING_PREFIX.test(body.trimStart());
+}
+
+/**
+ * Strip the @heyclient prefix from a comment body.
+ * Removes the prefix plus one optional trailing space or newline.
+ */
+export function stripClientPrefix(body: string): string {
+  const trimmed = body.trimStart();
+  const leadingWhitespace = body.slice(0, body.length - trimmed.length);
+  const stripped = trimmed.replace(CLIENT_FACING_PREFIX, "");
+  // If stripping leaves an empty body, return empty
+  if (!stripped.trim()) return "";
+  return leadingWhitespace + stripped;
+}
+
 export function mapRowToComment(row: {
   linear_id: string;
   data: CommentData;
@@ -677,12 +699,49 @@ export async function fetchHubComments(
       .order("created_at", { ascending: true }),
   ]);
 
-  const linearComments = (linearResult.data || []).map((row) => {
+  const allLinearComments = (linearResult.data || []).map((row) => {
     const mapped = mapRowToComment(
       row as { linear_id: string; data: Record<string, unknown>; created_at: string; updated_at: string }
     );
     return mapped;
   });
+
+  // Filter synced comments: only show @heyclient comments and their thread replies.
+  // Step 1: Identify client-facing root comments (those with @heyclient prefix)
+  const visibleLinearIds = new Set<string>();
+  for (const c of allLinearComments) {
+    if (isClientFacing(c.body)) {
+      visibleLinearIds.add(c.linearId);
+    }
+  }
+
+  // Step 2: Walk replies — if parent is visible, child is visible too (recursive)
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const c of allLinearComments) {
+      if (visibleLinearIds.has(c.linearId)) continue;
+      if (c.parentId && visibleLinearIds.has(c.parentId)) {
+        visibleLinearIds.add(c.linearId);
+        changed = true;
+      }
+    }
+  }
+
+  // Step 3: Filter and strip prefix from client-facing root comments
+  const linearComments = allLinearComments
+    .filter((c) => visibleLinearIds.has(c.linearId))
+    .map((c) => {
+      if (isClientFacing(c.body)) {
+        const stripped = stripClientPrefix(c.body);
+        // Hide comments that are just "@heyclient" with no actual content
+        if (!stripped) return null;
+        return { ...c, body: stripped, isTeamComment: true };
+      }
+      // Thread replies from the team (no prefix) — show as-is
+      return { ...c, isTeamComment: true };
+    })
+    .filter((c): c is NonNullable<typeof c> => c !== null);
 
   const hubComments = (hubResult.data || []).map((row) => ({
     id: row.id,
@@ -698,6 +757,7 @@ export async function fetchHubComments(
       name: row.author_name,
     },
     isHubComment: true,
+    isTeamComment: false,
   }));
 
   // Merge and sort by createdAt
@@ -710,6 +770,7 @@ export async function fetchHubComments(
     updatedAt: string;
     user: { id: string; name: string };
     isHubComment?: boolean;
+    isTeamComment?: boolean;
     push_status?: string;
     push_error?: string;
   };
@@ -733,8 +794,12 @@ export async function fetchHubComments(
       if (parent) {
         parent.children.push(tc);
       } else {
-        // Orphan — treat as top-level
-        roots.push(tc);
+        // Orphan — hide if it's a synced comment (parent was internal/hidden)
+        // Show if it's a hub comment (client authored)
+        if (c.isHubComment) {
+          roots.push(tc);
+        }
+        // Otherwise: orphaned synced reply to a hidden thread — drop it
       }
     }
   }
