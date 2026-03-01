@@ -44,7 +44,7 @@ export async function POST() {
 
     await completeSyncRun({
       runId,
-      status: result.errors > 0 ? "failed" : "completed",
+      status: "completed",
       entitiesProcessed: {
         issues: result.issuesUpserted,
         comments: result.commentsUpserted,
@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
 
     await completeSyncRun({
       runId,
-      status: result.errors > 0 ? "failed" : "completed",
+      status: "completed",
       entitiesProcessed: {
         issues: result.issuesUpserted,
         comments: result.commentsUpserted,
