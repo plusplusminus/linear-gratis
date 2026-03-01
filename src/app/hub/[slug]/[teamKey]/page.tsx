@@ -5,10 +5,11 @@ import {
   fetchHubInitiatives,
   fetchHubRoadmapIssues,
   fetchHubMetadata,
+  fetchHubCycles,
 } from "@/lib/hub-read";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { GanttChart } from "lucide-react";
+import { GanttChart, IterationCw } from "lucide-react";
 import { TeamTabs } from "@/components/hub/team-tabs";
 
 export default async function TeamDashboardPage({
@@ -24,9 +25,10 @@ export default async function TeamDashboardPage({
   const team = teams.find((t) => t.key === teamKey);
   if (!team) notFound();
 
-  const [allProjects, allInitiatives] = await Promise.all([
+  const [allProjects, allInitiatives, allCycles] = await Promise.all([
     fetchHubProjects(hub.id),
     fetchHubInitiatives(hub.id),
+    fetchHubCycles(hub.id, { teamId: team.id }),
   ]);
 
   // Filter projects to this team
@@ -88,15 +90,26 @@ export default async function TeamDashboardPage({
             </span>
           </div>
 
-          {projects.length > 0 && (
-            <Link
-              href={`/hub/${slug}/${teamKey}/roadmap`}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 border border-border transition-colors"
-            >
-              <GanttChart className="w-3.5 h-3.5" />
-              Roadmap
-            </Link>
-          )}
+          <div className="flex items-center gap-2">
+            {allCycles.length > 0 && (
+              <Link
+                href={`/hub/${slug}/${teamKey}/cycles`}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 border border-border transition-colors"
+              >
+                <IterationCw className="w-3.5 h-3.5" />
+                Cycles
+              </Link>
+            )}
+            {projects.length > 0 && (
+              <Link
+                href={`/hub/${slug}/${teamKey}/roadmap`}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 border border-border transition-colors"
+              >
+                <GanttChart className="w-3.5 h-3.5" />
+                Roadmap
+              </Link>
+            )}
+          </div>
         </div>
       </div>
 
@@ -105,6 +118,7 @@ export default async function TeamDashboardPage({
         issues={issues}
         states={metadata.states}
         labels={metadata.labels}
+        cycles={metadata.cycles}
         projects={projects}
         initiatives={initiatives}
         milestones={milestones}

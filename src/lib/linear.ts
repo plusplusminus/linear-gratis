@@ -24,6 +24,11 @@ export type LinearIssue = {
     name: string;
     color: string;
   }>;
+  cycle?: {
+    id: string;
+    name: string;
+    number: number;
+  };
   createdAt: string;
   updatedAt: string;
 };

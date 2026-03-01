@@ -19,6 +19,7 @@ type IssueData = {
   assignee?: { id?: string; name?: string };
   labels?: Array<{ id: string; name: string; color: string }>;
   project?: { id?: string; name?: string; color?: string };
+  cycle?: { id?: string; name?: string; number?: number };
   createdAt?: string;
   updatedAt?: string;
 };
@@ -89,6 +90,24 @@ type InitiativeData = {
   updatedAt?: string;
 };
 
+type CycleData = {
+  id?: string;
+  name?: string;
+  number?: number;
+  description?: string;
+  startsAt?: string;
+  endsAt?: string;
+  completedAt?: string;
+  progress?: number;
+  completedIssueCountHistory?: number[];
+  issueCountHistory?: number[];
+  completedScopeHistory?: number[];
+  scopeHistory?: number[];
+  team?: { id?: string; name?: string; key?: string };
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export function priorityToLabel(priority: number): string {
   switch (priority) {
     case 0: return "No priority";
@@ -125,6 +144,11 @@ export function mapRowToLinearIssue(row: {
       ? { id: d.assignee.id ?? "", name: d.assignee.name ?? "" }
       : undefined,
     labels: Array.isArray(d.labels) ? d.labels : [],
+    cycle: d.cycle ? {
+      id: (d.cycle as Record<string, unknown>).id as string ?? "",
+      name: (d.cycle as Record<string, unknown>).name as string ?? "",
+      number: (d.cycle as Record<string, unknown>).number as number ?? 0,
+    } : undefined,
     createdAt: d.createdAt ?? row.created_at,
     updatedAt: d.updatedAt ?? row.updated_at,
   };
@@ -501,6 +525,11 @@ export async function fetchHubIssueDetail(
   const detailed = stripAssignee({
     ...issue,
     dueDate: (d.dueDate as string) ?? undefined,
+    cycle: d.cycle ? {
+      id: (d.cycle as Record<string, unknown>).id as string ?? "",
+      name: (d.cycle as Record<string, unknown>).name as string ?? "",
+      number: (d.cycle as Record<string, unknown>).number as number ?? 0,
+    } : undefined,
   });
 
   // Exclude entirely if issue carries a hidden label
@@ -916,6 +945,126 @@ export async function getHubVisibleLabelIds(
  * Queries the Linear API for the team's labels and filters to the hub's configured visible set.
  * Returns empty array if no labels are configured for the team.
  */
+export function mapRowToCycle(row: {
+  linear_id: string;
+  data: CycleData;
+  created_at: string;
+  updated_at: string;
+}) {
+  const d = row.data;
+  const now = new Date();
+  const startsAt = d.startsAt ? new Date(d.startsAt) : null;
+  const endsAt = d.endsAt ? new Date(d.endsAt) : null;
+  const isCurrent = startsAt && endsAt ? startsAt <= now && endsAt > now : false;
+  const isUpcoming = startsAt ? startsAt > now : false;
+
+  return {
+    id: d.id ?? row.linear_id,
+    name: d.name ?? null,
+    number: d.number ?? 0,
+    description: d.description ?? undefined,
+    startsAt: d.startsAt ?? null,
+    endsAt: d.endsAt ?? null,
+    completedAt: d.completedAt ?? undefined,
+    progress: d.progress ?? 0,
+    isCurrent,
+    isUpcoming,
+    completedIssueCountHistory: d.completedIssueCountHistory ?? [],
+    issueCountHistory: d.issueCountHistory ?? [],
+    completedScopeHistory: d.completedScopeHistory ?? [],
+    scopeHistory: d.scopeHistory ?? [],
+    team: d.team ?? undefined,
+    createdAt: d.createdAt ?? row.created_at,
+    updatedAt: d.updatedAt ?? row.updated_at,
+  };
+}
+
+export async function fetchHubCycles(
+  hubId: string,
+  options?: { teamId?: string }
+) {
+  const mappings = await getHubMappings(hubId);
+  if (mappings.length === 0) return [];
+
+  const teamIds = mappings.map((m) => m.linear_team_id);
+
+  if (options?.teamId && !teamIds.includes(options.teamId)) {
+    return [];
+  }
+
+  const targetTeamIds = options?.teamId ? [options.teamId] : teamIds;
+
+  const [cyclesResult, displayNamesResult] = await Promise.all([
+    supabaseAdmin
+      .from("synced_cycles")
+      .select("linear_id, data, created_at, updated_at")
+      .eq("user_id", WORKSPACE_USER_ID)
+      .in("team_id", targetTeamIds)
+      .order("starts_at", { ascending: false }),
+    supabaseAdmin
+      .from("cycle_display_names")
+      .select("cycle_linear_id, display_name")
+      .eq("hub_id", hubId),
+  ]);
+
+  if (cyclesResult.error) {
+    console.error("fetchHubCycles error:", cyclesResult.error);
+    throw cyclesResult.error;
+  }
+
+  const displayNameMap = new Map<string, string>();
+  for (const dn of displayNamesResult.data || []) {
+    displayNameMap.set(dn.cycle_linear_id, dn.display_name);
+  }
+
+  return (cyclesResult.data || []).map((row) => {
+    const cycle = mapRowToCycle(
+      row as { linear_id: string; data: CycleData; created_at: string; updated_at: string }
+    );
+    const displayName = displayNameMap.get(row.linear_id);
+    return displayName ? { ...cycle, displayName } : cycle;
+  });
+}
+
+export async function fetchHubCycleStats(
+  hubId: string,
+  cycleLinearIds: string[]
+): Promise<Record<string, { total: number; completed: number }>> {
+  if (cycleLinearIds.length === 0) return {};
+
+  const { data, error } = await supabaseAdmin
+    .from("synced_issues")
+    .select("data")
+    .eq("user_id", WORKSPACE_USER_ID)
+    .not("data->cycle", "is", null);
+
+  if (error) {
+    console.error("fetchHubCycleStats error:", error);
+    return {};
+  }
+
+  const stats: Record<string, { total: number; completed: number }> = {};
+  for (const id of cycleLinearIds) {
+    stats[id] = { total: 0, completed: 0 };
+  }
+
+  const completedTypes = new Set(["completed", "cancelled"]);
+
+  for (const row of data || []) {
+    const d = row.data as Record<string, unknown>;
+    const cycle = d.cycle as { id?: string } | undefined;
+    if (!cycle?.id || !stats[cycle.id]) continue;
+
+    stats[cycle.id].total++;
+    const stateType = (d.state as Record<string, unknown> | undefined)?.type as string | undefined;
+    if (stateType && completedTypes.has(stateType)) {
+      stats[cycle.id].completed++;
+    }
+  }
+
+  return stats;
+}
+
 export async function fetchHubTeamLabels(
   hubId: string,
   teamId: string
@@ -964,13 +1113,13 @@ export async function fetchHubMetadata(
   options?: { projectId?: string; teamId?: string }
 ) {
   const mappings = await getHubMappings(hubId);
-  if (mappings.length === 0) return { states: [], labels: [] };
+  if (mappings.length === 0) return { states: [], labels: [], cycles: [] };
 
   const teamIds = mappings.map((m) => m.linear_team_id);
 
   // If a specific teamId is requested, verify it belongs to this hub
   if (options?.teamId && !teamIds.includes(options.teamId)) {
-    return { states: [], labels: [] };
+    return { states: [], labels: [], cycles: [] };
   }
 
   // For labels, scope to the requested team only
@@ -988,10 +1137,11 @@ export async function fetchHubMetadata(
   if (options?.projectId) query = query.eq("project_id", options.projectId);
 
   const { data, error } = await query;
-  if (error || !data) return { states: [], labels: [] };
+  if (error || !data) return { states: [], labels: [], cycles: [] };
 
   const statesMap = new Map<string, { id: string; name: string; color: string; type: string }>();
   const labelsMap = new Map<string, { id: string; name: string; color: string }>();
+  const cyclesMap = new Map<string, { id: string; name: string; number: number }>();
 
   for (const row of data) {
     const d = row.data as Record<string, unknown>;
@@ -1029,11 +1179,20 @@ export async function fetchHubMetadata(
         labelsMap.set(label.id, label);
       }
     }
+    const cycle = d.cycle as { id?: string; name?: string; number?: number } | undefined;
+    if (cycle?.id) {
+      cyclesMap.set(cycle.id, {
+        id: cycle.id,
+        name: cycle.name ?? "",
+        number: cycle.number ?? 0,
+      });
+    }
     // No assignees — intentionally omitted for client hub view
   }
 
   return {
     states: Array.from(statesMap.values()),
     labels: Array.from(labelsMap.values()),
+    cycles: Array.from(cyclesMap.values()),
   };
 }

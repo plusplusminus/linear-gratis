@@ -32,6 +32,7 @@ const ISSUES_QUERY = `
         labels { nodes { id name color } }
         team { id name key }
         project { id name }
+        cycle { id name number }
         createdAt
         updatedAt
       }
@@ -159,6 +160,39 @@ const INITIATIVES_QUERY = `
   }
 `;
 
+const CYCLES_QUERY = `
+  query TeamCycles($teamId: ID!, $after: String) {
+    cycles(
+      filter: { team: { id: { eq: $teamId } } }
+      first: ${PAGE_SIZE}
+      after: $after
+      orderBy: startsAt
+    ) {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      nodes {
+        id
+        name
+        number
+        description
+        startsAt
+        endsAt
+        completedAt
+        progress
+        completedIssueCountHistory
+        issueCountHistory
+        completedScopeHistory
+        scopeHistory
+        team { id name key }
+        createdAt
+        updatedAt
+      }
+    }
+  }
+`;
+
 // -- Types -------------------------------------------------------------------
 
 type LinearGqlIssue = {
@@ -175,6 +209,7 @@ type LinearGqlIssue = {
   labels: { nodes: Array<{ id: string; name: string; color: string }> };
   team?: { id: string; name: string; key: string };
   project?: { id: string; name: string };
+  cycle?: { id: string; name: string; number: number };
   createdAt: string;
   updatedAt: string;
 };
@@ -241,6 +276,24 @@ type LinearGqlInitiative = {
   projects: { nodes: Array<{ id: string; name: string }> };
   subInitiatives: { nodes: Array<{ id: string; name: string }> };
   parentInitiative?: { id: string; name: string };
+  createdAt: string;
+  updatedAt: string;
+};
+
+type LinearGqlCycle = {
+  id: string;
+  name?: string;
+  number: number;
+  description?: string;
+  startsAt: string;
+  endsAt: string;
+  completedAt?: string;
+  progress?: number;
+  completedIssueCountHistory: number[];
+  issueCountHistory: number[];
+  completedScopeHistory: number[];
+  scopeHistory: number[];
+  team: { id: string; name: string; key: string };
   createdAt: string;
   updatedAt: string;
 };
@@ -417,6 +470,28 @@ export async function fetchAllInitiatives(
   return all;
 }
 
+export async function fetchAllCycles(
+  apiToken: string,
+  teamId: string
+): Promise<LinearGqlCycle[]> {
+  const all: LinearGqlCycle[] = [];
+  let cursor: string | undefined;
+  let hasMore = true;
+
+  while (hasMore) {
+    const data = await linearRequest<{
+      cycles: { pageInfo: PageInfo; nodes: LinearGqlCycle[] };
+    }>(apiToken, CYCLES_QUERY, { teamId, after: cursor });
+
+    all.push(...data.cycles.nodes);
+    hasMore = data.cycles.pageInfo.hasNextPage;
+    cursor = data.cycles.pageInfo.endCursor ?? undefined;
+    if (hasMore) await sleep(PAGE_DELAY_MS);
+  }
+
+  return all;
+}
+
 // -- Upsert batching ---------------------------------------------------------
 
 export function mapIssueToRow(issue: LinearGqlIssue, userId: string) {
@@ -521,6 +596,22 @@ export function mapInitiativeToRow(initiative: LinearGqlInitiative, userId: stri
   };
 }
 
+export function mapCycleToRow(cycle: LinearGqlCycle, userId: string) {
+  return {
+    linear_id: cycle.id,
+    user_id: userId,
+    name: cycle.name ?? null,
+    number: cycle.number,
+    team_id: cycle.team.id,
+    starts_at: cycle.startsAt,
+    ends_at: cycle.endsAt,
+    created_at: cycle.createdAt,
+    updated_at: cycle.updatedAt,
+    synced_at: new Date().toISOString(),
+    data: cycle,
+  };
+}
+
 // -- Public API --------------------------------------------------------------
 
 export type SyncResult = {
@@ -530,6 +621,7 @@ export type SyncResult = {
   teamCount: number;
   projectCount: number;
   initiativeCount: number;
+  cycleCount: number;
   error?: string;
 };
 
@@ -565,6 +657,7 @@ export type HubTeamSyncResult = {
   issueCount: number;
   projectCount: number;
   commentCount: number;
+  cycleCount: number;
 };
 
 export type HubSyncResult = {
@@ -632,6 +725,7 @@ export async function runHubSync(
         issueCount: 0,
         projectCount: 0,
         commentCount: 0,
+        cycleCount: 0,
       };
 
       try {
@@ -645,6 +739,17 @@ export async function runHubSync(
           );
         }
         teamResult.projectCount = projects.length;
+
+        // Cycles for this team
+        const cycles = await fetchAllCycles(apiToken, mapping.linear_team_id);
+        if (cycles.length > 0) {
+          await batchUpsert(
+            "synced_cycles",
+            cycles.map((c) => mapCycleToRow(c, WORKSPACE_USER_ID)),
+            "user_id,linear_id"
+          );
+        }
+        teamResult.cycleCount = cycles.length;
 
         // Issues for this team
         const issues = await fetchAllIssues(apiToken, mapping.linear_team_id);

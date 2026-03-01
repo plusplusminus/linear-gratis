@@ -7,14 +7,17 @@ import {
   fetchAllTeams,
   fetchAllProjects,
   fetchAllInitiatives,
+  fetchAllCycles,
   fetchCommentsForIssue,
   mapIssueToRow,
   mapTeamToRow,
   mapProjectToRow,
   mapInitiativeToRow,
+  mapCycleToRow,
   mapCommentToRow,
   batchUpsert,
 } from "@/lib/initial-sync";
+import { startSyncRun, completeSyncRun } from "@/lib/sync-logger";
 
 const WORKSPACE_USER_ID = "workspace";
 
@@ -28,8 +31,6 @@ export async function POST(
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
-    const { user } = auth;
-
     const { hubId } = await params;
 
     // Verify hub exists and is active
@@ -62,12 +63,15 @@ export async function POST(
     }
 
     const apiToken = await getWorkspaceToken();
+    const startedAt = Date.now();
+    const runId = await startSyncRun({ runType: "reconcile", trigger: "manual", hubId });
 
     const result = {
       hubId,
       hubName: hub.name,
       teamsUpserted: 0,
       projectsUpserted: 0,
+      cyclesUpserted: 0,
       issuesUpserted: 0,
       commentsUpserted: 0,
       initiativesUpserted: 0,
@@ -118,6 +122,16 @@ export async function POST(
         }
         result.projectsUpserted += projects.length;
 
+        const cycles = await fetchAllCycles(apiToken, mapping.linear_team_id);
+        if (cycles.length > 0) {
+          await batchUpsert(
+            "synced_cycles",
+            cycles.map((c) => mapCycleToRow(c, WORKSPACE_USER_ID)),
+            "user_id,linear_id"
+          );
+        }
+        result.cyclesUpserted += cycles.length;
+
         const issues = await fetchAllIssues(apiToken, mapping.linear_team_id);
         if (issues.length > 0) {
           await batchUpsert(
@@ -152,6 +166,21 @@ export async function POST(
         result.errors++;
       }
     }
+
+    await completeSyncRun({
+      runId,
+      status: result.errors > 0 ? "failed" : "completed",
+      entitiesProcessed: {
+        issues: result.issuesUpserted,
+        comments: result.commentsUpserted,
+        teams: result.teamsUpserted,
+        projects: result.projectsUpserted,
+        cycles: result.cyclesUpserted,
+        initiatives: result.initiativesUpserted,
+      },
+      errorsCount: result.errors,
+      startedAt,
+    });
 
     return NextResponse.json({ success: true, ...result });
   } catch (error) {

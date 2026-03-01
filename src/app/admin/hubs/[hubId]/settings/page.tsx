@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase";
+import { fetchHubCycles } from "@/lib/hub-read";
 import { HubSettingsForm } from "@/components/admin/hub-settings-form";
+import { CycleNamesEditor } from "@/components/admin/cycle-names-editor";
 
 export default async function HubSettingsPage({
   params,
@@ -16,6 +18,8 @@ export default async function HubSettingsPage({
     .single();
 
   if (!hub) notFound();
+
+  const cycles = await fetchHubCycles(hubId);
 
   const mappings = (hub.hub_team_mappings ?? []) as Array<{
     id: string;
@@ -40,6 +44,26 @@ export default async function HubSettingsPage({
         }}
         mappings={mappings}
       />
+
+      {/* Cycle display name overrides */}
+      <div className="mt-10 max-w-2xl">
+        <h2 className="text-sm font-semibold mb-1">Cycle Display Names</h2>
+        <p className="text-xs text-muted-foreground mb-4">
+          Override how cycle names appear to clients in this hub.
+        </p>
+        <CycleNamesEditor
+          hubId={hub.id}
+          cycles={cycles.map((c) => ({
+            id: c.id,
+            name: c.name ?? null,
+            number: c.number,
+            startsAt: c.startsAt ?? null,
+            endsAt: c.endsAt ?? null,
+            displayName: (c as { displayName?: string }).displayName,
+            team: c.team ? { name: c.team.name } : undefined,
+          }))}
+        />
+      </div>
     </div>
   );
 }
