@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useCallback, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -598,12 +599,12 @@ function HubFormsTab({ hubId }: { hubId: string }) {
       ) : forms.length === 0 ? (
         <div className="text-sm text-muted-foreground text-center py-6">
           No global forms created yet.{" "}
-          <a
+          <Link
             href="/admin/forms/new"
             className="text-primary hover:underline"
           >
             Create one
-          </a>
+          </Link>
         </div>
       ) : (
         <>

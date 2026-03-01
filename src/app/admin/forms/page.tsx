@@ -1,8 +1,6 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useFetch } from "@/hooks/use-fetch";
 import { cn } from "@/lib/utils";
 import { Plus, Loader2 } from "lucide-react";
@@ -17,7 +15,6 @@ const TYPE_BADGE: Record<string, { bg: string; text: string; label: string }> = 
 };
 
 export default function FormsIndexPage() {
-  const router = useRouter();
   const { data: forms, loading, error } = useFetch<FormWithFields[]>("/api/admin/forms");
 
   return (

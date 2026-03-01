@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { withAdminAuth } from "@/lib/admin-auth";
 import { supabaseAdmin } from "@/lib/supabase";
-import { fetchHubForms, fetchAllGlobalForms } from "@/lib/form-read";
+import { fetchAllGlobalForms } from "@/lib/form-read";
 
 /**
  * GET: Hub form configuration — globals with overrides + hub-specific forms.

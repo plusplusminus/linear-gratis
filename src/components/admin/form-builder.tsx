@@ -10,7 +10,6 @@ import {
   ChevronDown,
   X,
   Plus,
-  Loader2,
   GripVertical,
 } from "lucide-react";
 import type {

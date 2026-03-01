@@ -1,5 +1,5 @@
 import { supabaseAdmin, type FormField, type FormSubmission } from "./supabase";
-import { createIssueInLinear, type CreatedIssue } from "./linear-push";
+import { createIssueInLinear } from "./linear-push";
 import {
   fetchFormWithFields,
   fetchHubFormConfig,
