@@ -8,7 +8,7 @@ interface UseFetchOptions {
 
 export function useFetch<T>(url: string | null, options?: UseFetchOptions) {
   const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(!!url && (options?.enabled ?? true));
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
