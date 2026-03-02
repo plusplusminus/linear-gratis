@@ -68,7 +68,7 @@ export function DigestNotification({
       <Preview>{previewText}</Preview>
       <Body style={body}>
         <Container style={container}>
-          <EmailHeader hubName={hubName} subtitle={`${period === 'daily' ? 'Daily' : 'Weekly'} Digest ${dateRange}`} />
+          <EmailHeader hubName={hubName} subtitle={`${period === 'daily' ? 'Daily' : 'Weekly'} Digest · ${dateRange}`} />
 
           <Section style={content}>
             <Section style={statsBar}>
