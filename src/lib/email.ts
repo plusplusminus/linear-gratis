@@ -3,7 +3,9 @@ import { render } from '@react-email/render'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
-const FROM_EMAIL = process.env.FROM_EMAIL || 'notifications@lineargratis.com'
+const FROM_ADDRESS = process.env.FROM_EMAIL || 'notifications@lineargratis.com'
+const FROM_NAME = process.env.FROM_NAME || 'PPM Project Updates'
+const FROM_EMAIL = `${FROM_NAME} <${FROM_ADDRESS}>`
 
 export async function sendEmail(options: {
   to: string | string[]
