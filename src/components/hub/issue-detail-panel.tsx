@@ -31,6 +31,7 @@ import {
   Reply,
   IterationCw,
   Zap,
+  RotateCcw,
 } from "lucide-react";
 
 type IssueDetail = {
@@ -360,7 +361,20 @@ export function IssueDetailPanel({
                       <CommentThread
                         key={comment.id}
                         comment={comment}
+                        hubId={hubId}
                         onReply={isViewOnly ? undefined : (parentId, authorName) => setReplyingTo({ parentId, authorName })}
+                        onRetrySuccess={(commentId, linearCommentId) => {
+                          setComments((prev) => {
+                            const update = (c: Comment): Comment => ({
+                              ...c,
+                              push_status: c.id === commentId ? "pushed" : c.push_status,
+                              push_error: c.id === commentId ? undefined : c.push_error,
+                              linearId: c.id === commentId ? linearCommentId : c.linearId,
+                              children: c.children?.map(update),
+                            });
+                            return prev.map(update);
+                          });
+                        }}
                       />
                     ))}
                   </div>
@@ -512,9 +526,13 @@ function DueDateBadge({ dueDate }: { dueDate: string }) {
 function CommentThread({
   comment,
   onReply,
+  hubId,
+  onRetrySuccess,
 }: {
   comment: Comment;
   onReply?: (parentId: string, authorName: string) => void;
+  hubId: string;
+  onRetrySuccess?: (commentId: string, linearCommentId: string) => void;
 }) {
   const replies = comment.children ?? [];
   // If this comment is itself a reply (orphaned into root), reply to its real parent.
@@ -525,11 +543,13 @@ function CommentThread({
       <CommentBubble
         comment={comment}
         onReply={onReply ? () => onReply(parentLinearId, comment.user.name) : undefined}
+        hubId={hubId}
+        onRetrySuccess={onRetrySuccess}
       />
       {replies.length > 0 && (
         <div className="ml-4 mt-1 border-l-2 border-border pl-3 space-y-1">
           {replies.map((reply) => (
-            <CommentBubble key={reply.id} comment={reply} compact />
+            <CommentBubble key={reply.id} comment={reply} compact hubId={hubId} onRetrySuccess={onRetrySuccess} />
           ))}
         </div>
       )}
@@ -541,15 +561,37 @@ function CommentBubble({
   comment,
   compact,
   onReply,
+  hubId,
+  onRetrySuccess,
 }: {
   comment: Comment;
   compact?: boolean;
   onReply?: () => void;
+  hubId: string;
+  onRetrySuccess?: (commentId: string, linearCommentId: string) => void;
 }) {
   const isHub = comment.isHubComment;
   const isTeam = comment.isTeamComment;
   const isFailed = comment.push_status === "failed";
   const isPending = comment.push_status === "pending";
+  const [retrying, setRetrying] = useState(false);
+
+  const handleRetry = async () => {
+    setRetrying(true);
+    try {
+      const res = await fetch(`/api/hub/${hubId}/comments`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commentId: comment.id }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { linear_comment_id: string };
+        onRetrySuccess?.(comment.id, data.linear_comment_id);
+      }
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   return (
     <div
@@ -580,11 +622,24 @@ function CommentBubble({
         {isPending && (
           <Loader2 className="w-3 h-3 text-muted-foreground animate-spin" />
         )}
-        {isFailed && (
-          <span className="flex items-center gap-0.5 text-[10px] text-destructive" title={comment.push_error ?? "Failed to sync to Linear"}>
-            <AlertCircle className="w-3 h-3" />
-            Not synced
-          </span>
+        {retrying && (
+          <Loader2 className="w-3 h-3 text-muted-foreground animate-spin" />
+        )}
+        {isFailed && !retrying && (
+          <>
+            <span className="flex items-center gap-0.5 text-[10px] text-destructive" title={comment.push_error ?? "Failed to sync to Linear"}>
+              <AlertCircle className="w-3 h-3" />
+              Not synced
+            </span>
+            <button
+              onClick={handleRetry}
+              className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              title="Retry syncing to Linear"
+            >
+              <RotateCcw className="w-3 h-3" />
+              Retry
+            </button>
+          </>
         )}
       </div>
       <div className="prose prose-sm dark:prose-invert max-w-none prose-p:text-[13px] prose-p:leading-relaxed prose-p:my-1">

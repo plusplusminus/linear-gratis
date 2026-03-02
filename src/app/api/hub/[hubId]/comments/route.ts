@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { withHubAuthWrite, type HubAuthError } from "@/lib/hub-auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { pushCommentToLinear } from "@/lib/linear-push";
@@ -111,6 +111,96 @@ export async function POST(
     }
   } catch (error) {
     console.error("POST /api/hub/[hubId]/comments error:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+// PATCH: Retry pushing a failed comment to Linear
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ hubId: string }> }
+) {
+  try {
+    const { hubId } = await params;
+
+    const auth = await withHubAuthWrite(hubId);
+    if ("error" in auth) {
+      return NextResponse.json(
+        { error: (auth as HubAuthError).error },
+        { status: (auth as HubAuthError).status }
+      );
+    }
+
+    const { commentId } = (await request.json()) as { commentId?: string };
+    if (!commentId) {
+      return NextResponse.json(
+        { error: "commentId is required" },
+        { status: 400 }
+      );
+    }
+
+    // Fetch the failed comment
+    const { data: comment, error: fetchError } = await supabaseAdmin
+      .from("hub_comments")
+      .select("*")
+      .eq("id", commentId)
+      .eq("hub_id", hubId)
+      .eq("push_status", "failed")
+      .single();
+
+    if (fetchError || !comment) {
+      return NextResponse.json(
+        { error: "Comment not found or not in failed state" },
+        { status: 404 }
+      );
+    }
+
+    const linearBody = `**${comment.author_name}:** ${comment.body}`;
+
+    try {
+      const linearCommentId = await pushCommentToLinear(
+        comment.issue_linear_id,
+        linearBody,
+        comment.parent_comment_id ?? undefined
+      );
+
+      await supabaseAdmin
+        .from("hub_comments")
+        .update({
+          linear_comment_id: linearCommentId,
+          push_status: "pushed",
+          push_error: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", commentId);
+
+      return NextResponse.json({
+        id: commentId,
+        linear_comment_id: linearCommentId,
+        push_status: "pushed",
+      });
+    } catch (pushError) {
+      const errorMsg =
+        pushError instanceof Error ? pushError.message : "Unknown push error";
+
+      await supabaseAdmin
+        .from("hub_comments")
+        .update({
+          push_error: errorMsg,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", commentId);
+
+      return NextResponse.json(
+        { error: errorMsg, push_status: "failed" },
+        { status: 502 }
+      );
+    }
+  } catch (error) {
+    console.error("PATCH /api/hub/[hubId]/comments error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

@@ -15,6 +15,7 @@ const COMMENT_CREATE_MUTATION = `
 
 /**
  * Push a comment to Linear via GraphQL API.
+ * Retries up to 3 times on rate limit errors with exponential backoff.
  * Returns the Linear comment ID on success, or throws on failure.
  */
 export async function pushCommentToLinear(
@@ -23,42 +24,63 @@ export async function pushCommentToLinear(
   parentId?: string
 ): Promise<string> {
   const token = await getWorkspaceToken();
+  const MAX_RETRIES = 3;
 
-  const res = await fetch(LINEAR_API, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: token.trim(),
-    },
-    body: JSON.stringify({
-      query: COMMENT_CREATE_MUTATION,
-      variables: { issueId: issueLinearId, body, parentId: parentId ?? null },
-    }),
-  });
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const res = await fetch(LINEAR_API, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: token.trim(),
+      },
+      body: JSON.stringify({
+        query: COMMENT_CREATE_MUTATION,
+        variables: { issueId: issueLinearId, body, parentId: parentId ?? null },
+      }),
+    });
 
-  if (!res.ok) {
-    throw new Error(`Linear API ${res.status}: ${await res.text()}`);
-  }
+    // Rate limited — retry with backoff
+    if (res.status === 429 || (res.status === 400 && attempt < MAX_RETRIES)) {
+      const retryAfter = res.headers.get("retry-after");
+      const delayMs = retryAfter
+        ? parseInt(retryAfter, 10) * 1000
+        : 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
+      await new Promise((r) => setTimeout(r, delayMs));
+      continue;
+    }
 
-  const json = (await res.json()) as {
-    data?: {
-      commentCreate?: {
-        success: boolean;
-        comment?: { id: string };
+    if (!res.ok) {
+      throw new Error(`Linear API ${res.status}: ${await res.text()}`);
+    }
+
+    const json = (await res.json()) as {
+      data?: {
+        commentCreate?: {
+          success: boolean;
+          comment?: { id: string };
+        };
       };
+      errors?: Array<{ message: string; extensions?: { code?: string } }>;
     };
-    errors?: Array<{ message: string }>;
-  };
 
-  if (json.errors) {
-    throw new Error(`GraphQL: ${json.errors.map((e) => e.message).join(", ")}`);
+    // Rate limit in GraphQL error response — retry
+    if (json.errors?.some((e) => e.extensions?.code === "RATELIMITED") && attempt < MAX_RETRIES) {
+      await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
+      continue;
+    }
+
+    if (json.errors) {
+      throw new Error(`GraphQL: ${json.errors.map((e) => e.message).join(", ")}`);
+    }
+
+    if (!json.data?.commentCreate?.success || !json.data.commentCreate.comment) {
+      throw new Error("Linear commentCreate returned unsuccessful");
+    }
+
+    return json.data.commentCreate.comment.id;
   }
 
-  if (!json.data?.commentCreate?.success || !json.data.commentCreate.comment) {
-    throw new Error("Linear commentCreate returned unsuccessful");
-  }
-
-  return json.data.commentCreate.comment.id;
+  throw new Error("Linear rate limit: max retries exceeded");
 }
 
 const ISSUE_UPDATE_LABELS_MUTATION = `
