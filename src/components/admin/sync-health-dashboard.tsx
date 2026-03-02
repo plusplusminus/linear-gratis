@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   XCircle,
   RefreshCw,
+  RotateCcw,
   Clock,
   Filter,
   ChevronLeft,
@@ -342,6 +343,7 @@ function EventsTab() {
           <option value="">All types</option>
           <option value="Issue">Issue</option>
           <option value="Comment">Comment</option>
+          <option value="CommentPush">Comment Push</option>
           <option value="Project">Project</option>
           <option value="Initiative">Initiative</option>
         </select>
@@ -703,6 +705,7 @@ function EntityTypeBadge({ type }: { type: string }) {
   const colors: Record<string, string> = {
     Issue: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
     Comment: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+    CommentPush: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
     Project: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
     Initiative: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
   };
@@ -801,6 +804,7 @@ function SyncActions({ onActionComplete }: { onActionComplete: () => void }) {
   const [selectedHub, setSelectedHub] = useState<string>("");
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
+  const [retryResult, setRetryResult] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/hubs")
@@ -820,7 +824,9 @@ function SyncActions({ onActionComplete }: { onActionComplete: () => void }) {
 
     try {
       let url: string;
-      if (action === "reconcile-all") {
+      if (action === "retry-pushes") {
+        url = "/api/admin/sync/retry-pushes";
+      } else if (action === "reconcile-all") {
         url = "/api/sync/reconcile";
       } else if (action === "sync-hub") {
         url = `/api/admin/hubs/${selectedHub}/sync`;
@@ -833,6 +839,18 @@ function SyncActions({ onActionComplete }: { onActionComplete: () => void }) {
 
       if (!res.ok || data.error) {
         throw new Error(data.error ?? "Action failed");
+      }
+
+      if (action === "retry-pushes") {
+        const result = data as { retried?: number; succeeded?: number; failed?: number };
+        const msg = `Retried ${result.retried ?? 0}: ${result.succeeded ?? 0} succeeded, ${result.failed ?? 0} failed`;
+        if ((result.failed ?? 0) > 0) {
+          toast.warning(msg);
+        } else {
+          toast.success(msg);
+        }
+        onActionComplete();
+        return;
       }
 
       const label =
@@ -913,6 +931,21 @@ function SyncActions({ onActionComplete }: { onActionComplete: () => void }) {
         onConfirm={() => executeAction("reconcile-all")}
         onCancel={() => setConfirmAction(null)}
         variant="danger"
+      />
+
+      <div className="w-px h-6 bg-border" />
+
+      {/* Retry Failed Pushes */}
+      <ActionButton
+        label="Retry Failed Pushes"
+        tooltip="Retry all hub comments that failed to push to Linear"
+        icon={<RotateCcw className="w-3.5 h-3.5" />}
+        loading={actionInProgress === "retry-pushes"}
+        disabled={actionInProgress !== null}
+        confirming={confirmAction === "retry-pushes"}
+        onConfirmStart={() => setConfirmAction("retry-pushes")}
+        onConfirm={() => executeAction("retry-pushes")}
+        onCancel={() => setConfirmAction(null)}
       />
     </div>
   );

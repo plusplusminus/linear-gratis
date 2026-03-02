@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withHubAuthWrite, type HubAuthError } from "@/lib/hub-auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { pushCommentToLinear } from "@/lib/linear-push";
+import { logSyncEvent } from "@/lib/sync-logger";
 
 export async function POST(
   request: Request,
@@ -79,6 +80,14 @@ export async function POST(
         })
         .eq("id", comment.id);
 
+      void logSyncEvent({
+        eventType: "CommentPush",
+        action: "create",
+        entityId: comment.id,
+        status: "success",
+        payloadSummary: { issueLinearId, authorName, linearCommentId },
+      });
+
       return NextResponse.json({
         ...comment,
         linear_comment_id: linearCommentId,
@@ -99,6 +108,15 @@ export async function POST(
           updated_at: new Date().toISOString(),
         })
         .eq("id", comment.id);
+
+      void logSyncEvent({
+        eventType: "CommentPush",
+        action: "create",
+        entityId: comment.id,
+        status: "error",
+        errorMessage: errorMsg,
+        payloadSummary: { issueLinearId, authorName },
+      });
 
       // Still return the comment — it's saved locally, just not pushed
       return NextResponse.json({
@@ -177,6 +195,14 @@ export async function PATCH(
         })
         .eq("id", commentId);
 
+      void logSyncEvent({
+        eventType: "CommentPush",
+        action: "retry",
+        entityId: commentId,
+        status: "success",
+        payloadSummary: { issueLinearId: comment.issue_linear_id, linearCommentId },
+      });
+
       return NextResponse.json({
         id: commentId,
         linear_comment_id: linearCommentId,
@@ -193,6 +219,15 @@ export async function PATCH(
           updated_at: new Date().toISOString(),
         })
         .eq("id", commentId);
+
+      void logSyncEvent({
+        eventType: "CommentPush",
+        action: "retry",
+        entityId: commentId,
+        status: "error",
+        errorMessage: errorMsg,
+        payloadSummary: { issueLinearId: comment.issue_linear_id },
+      });
 
       return NextResponse.json(
         { error: errorMsg, push_status: "failed" },
