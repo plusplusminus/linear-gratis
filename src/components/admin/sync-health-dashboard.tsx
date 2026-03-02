@@ -248,18 +248,19 @@ function HealthSummary({
 
       {/* Events 24h */}
       <div className="border border-border rounded-lg p-4 bg-card">
-        <div className="flex items-center gap-1.5 mb-2 text-muted-foreground">
+        <div className="flex items-center gap-1.5 mb-1 text-muted-foreground">
           <Activity className="w-3.5 h-3.5" />
           <span className="text-xs">Events (24h)</span>
         </div>
         <p className="text-lg font-semibold tabular-nums">
           {health?.totalEvents24h ?? 0}
         </p>
+        <p className="text-[10px] text-muted-foreground mt-1">Webhook events processed from Linear</p>
       </div>
 
       {/* Error rate */}
       <div className="border border-border rounded-lg p-4 bg-card">
-        <div className="flex items-center gap-1.5 mb-2 text-muted-foreground">
+        <div className="flex items-center gap-1.5 mb-1 text-muted-foreground">
           <AlertTriangle className="w-3.5 h-3.5" />
           <span className="text-xs">Error Rate</span>
         </div>
@@ -271,22 +272,24 @@ function HealthSummary({
         >
           {((health?.errorRate ?? 0) * 100).toFixed(1)}%
         </p>
+        <p className="text-[10px] text-muted-foreground mt-1">Webhook handler failures in 24h</p>
       </div>
 
       {/* Last event */}
       <div className="border border-border rounded-lg p-4 bg-card">
-        <div className="flex items-center gap-1.5 mb-2 text-muted-foreground">
+        <div className="flex items-center gap-1.5 mb-1 text-muted-foreground">
           <Clock className="w-3.5 h-3.5" />
           <span className="text-xs">Last Event</span>
         </div>
         <p className="text-sm font-medium tabular-nums">
           {health?.lastEventAt ? formatRelativeTime(health.lastEventAt) : "—"}
         </p>
+        <p className="text-[10px] text-muted-foreground mt-1">Most recent successful webhook</p>
       </div>
 
       {/* Last sync run */}
       <div className="border border-border rounded-lg p-4 bg-card">
-        <div className="flex items-center gap-1.5 mb-2 text-muted-foreground">
+        <div className="flex items-center gap-1.5 mb-1 text-muted-foreground">
           <RefreshCw className="w-3.5 h-3.5" />
           <span className="text-xs">Last Sync Run</span>
         </div>
@@ -295,6 +298,7 @@ function HealthSummary({
             ? formatRelativeTime(health.lastSyncRunAt)
             : "—"}
         </p>
+        <p className="text-[10px] text-muted-foreground mt-1">Last manual or scheduled full sync</p>
       </div>
 
       {/* Failed pushes */}
@@ -304,7 +308,7 @@ function HealthSummary({
           (health?.failedPushes ?? 0) > 0 ? "bg-red-500/5 border-red-500/20" : "bg-card"
         )}
       >
-        <div className="flex items-center gap-1.5 mb-2 text-muted-foreground">
+        <div className="flex items-center gap-1.5 mb-1 text-muted-foreground">
           <XCircle className="w-3.5 h-3.5" />
           <span className="text-xs">Failed Pushes</span>
         </div>
@@ -316,6 +320,7 @@ function HealthSummary({
         >
           {health?.failedPushes ?? 0}
         </p>
+        <p className="text-[10px] text-muted-foreground mt-1">Client comments that failed to push to Linear</p>
       </div>
     </div>
   );
@@ -1220,8 +1225,11 @@ function SyncActions({ onActionComplete }: { onActionComplete: () => void }) {
 
     try {
       let url: string;
+      let method = "POST";
       if (action === "retry-pushes") {
         url = "/api/admin/sync/retry-pushes";
+      } else if (action === "dismiss-pushes") {
+        url = "/api/admin/sync/dismiss-pushes";
       } else if (action === "reconcile-all") {
         url = "/api/sync/reconcile";
       } else if (action === "sync-hub") {
@@ -1230,7 +1238,7 @@ function SyncActions({ onActionComplete }: { onActionComplete: () => void }) {
         url = `/api/admin/hubs/${selectedHub}/reconcile`;
       }
 
-      const res = await fetch(url, { method: "POST" });
+      const res = await fetch(url, { method });
       const data = (await res.json()) as { error?: string };
 
       if (!res.ok || data.error) {
@@ -1245,6 +1253,13 @@ function SyncActions({ onActionComplete }: { onActionComplete: () => void }) {
         } else {
           toast.success(msg);
         }
+        onActionComplete();
+        return;
+      }
+
+      if (action === "dismiss-pushes") {
+        const result = data as { dismissed?: number };
+        toast.success(`Dismissed ${result.dismissed ?? 0} failed pushes`);
         onActionComplete();
         return;
       }
@@ -1265,84 +1280,104 @@ function SyncActions({ onActionComplete }: { onActionComplete: () => void }) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      {/* Hub selector */}
-      {hubs.length > 0 && (
-        <div className="flex items-center gap-2">
-          <label htmlFor="hub-selector" className="text-xs font-medium text-muted-foreground whitespace-nowrap">
-            Target Hub
-          </label>
-          <select
-            id="hub-selector"
-            value={selectedHub}
-            onChange={(e) => setSelectedHub(e.target.value)}
-            className="text-sm bg-card border border-border rounded-md px-2 py-1.5 text-foreground"
-          >
-            {hubs.map((hub) => (
-              <option key={hub.id} value={hub.id}>
-                {hub.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">
+        These actions make API calls to Linear. Avoid running them repeatedly — Linear enforces rate limits
+        (50 req/sec for standard plans) and excessive use can temporarily block your integration.
+      </p>
 
-      {/* Sync Hub */}
-      <ActionButton
-        label="Sync Hub"
-        tooltip="Fetch latest issues, projects, and cycles from Linear for the selected hub"
-        icon={<RefreshCw className="w-3.5 h-3.5" />}
-        loading={actionInProgress === "sync-hub"}
-        disabled={!selectedHub || actionInProgress !== null}
-        confirming={confirmAction === "sync-hub"}
-        onConfirmStart={() => setConfirmAction("sync-hub")}
-        onConfirm={() => executeAction("sync-hub")}
-        onCancel={() => setConfirmAction(null)}
-      />
+      <div className="flex flex-wrap items-center gap-3">
+        {/* Hub selector */}
+        {hubs.length > 0 && (
+          <div className="flex items-center gap-2">
+            <label htmlFor="hub-selector" className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+              Target Hub
+            </label>
+            <select
+              id="hub-selector"
+              value={selectedHub}
+              onChange={(e) => setSelectedHub(e.target.value)}
+              className="text-sm bg-card border border-border rounded-md px-2 py-1.5 text-foreground"
+            >
+              {hubs.map((hub) => (
+                <option key={hub.id} value={hub.id}>
+                  {hub.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
-      {/* Reconcile Hub */}
-      <ActionButton
-        label="Reconcile Hub"
-        tooltip="Full re-sync of all data for the selected hub — compares and fixes any drift from Linear"
-        icon={<RefreshCw className="w-3.5 h-3.5" />}
-        loading={actionInProgress === "reconcile-hub"}
-        disabled={!selectedHub || actionInProgress !== null}
-        confirming={confirmAction === "reconcile-hub"}
-        onConfirmStart={() => setConfirmAction("reconcile-hub")}
-        onConfirm={() => executeAction("reconcile-hub")}
-        onCancel={() => setConfirmAction(null)}
-      />
+        {/* Sync Hub */}
+        <ActionButton
+          label="Sync Hub"
+          tooltip="Incremental sync — fetches recent changes from Linear for the selected hub. Safe to run occasionally."
+          icon={<RefreshCw className="w-3.5 h-3.5" />}
+          loading={actionInProgress === "sync-hub"}
+          disabled={!selectedHub || actionInProgress !== null}
+          confirming={confirmAction === "sync-hub"}
+          onConfirmStart={() => setConfirmAction("sync-hub")}
+          onConfirm={() => executeAction("sync-hub")}
+          onCancel={() => setConfirmAction(null)}
+        />
 
-      <div className="w-px h-6 bg-border" />
+        {/* Reconcile Hub */}
+        <ActionButton
+          label="Reconcile Hub"
+          tooltip="Full re-fetch of all data for one hub. Makes many API calls — only use when data looks out of sync."
+          icon={<RefreshCw className="w-3.5 h-3.5" />}
+          loading={actionInProgress === "reconcile-hub"}
+          disabled={!selectedHub || actionInProgress !== null}
+          confirming={confirmAction === "reconcile-hub"}
+          onConfirmStart={() => setConfirmAction("reconcile-hub")}
+          onConfirm={() => executeAction("reconcile-hub")}
+          onCancel={() => setConfirmAction(null)}
+        />
 
-      {/* Reconcile All */}
-      <ActionButton
-        label="Reconcile All"
-        tooltip="Full re-sync across every active hub — use sparingly, this hits the Linear API heavily"
-        icon={<RefreshCw className="w-3.5 h-3.5" />}
-        loading={actionInProgress === "reconcile-all"}
-        disabled={actionInProgress !== null}
-        confirming={confirmAction === "reconcile-all"}
-        onConfirmStart={() => setConfirmAction("reconcile-all")}
-        onConfirm={() => executeAction("reconcile-all")}
-        onCancel={() => setConfirmAction(null)}
-        variant="danger"
-      />
+        <div className="w-px h-6 bg-border" />
 
-      <div className="w-px h-6 bg-border" />
+        {/* Reconcile All */}
+        <ActionButton
+          label="Reconcile All"
+          tooltip="Full re-fetch across every active hub. Very API-heavy — can easily hit Linear rate limits. Use only as a last resort."
+          icon={<RefreshCw className="w-3.5 h-3.5" />}
+          loading={actionInProgress === "reconcile-all"}
+          disabled={actionInProgress !== null}
+          confirming={confirmAction === "reconcile-all"}
+          onConfirmStart={() => setConfirmAction("reconcile-all")}
+          onConfirm={() => executeAction("reconcile-all")}
+          onCancel={() => setConfirmAction(null)}
+          variant="danger"
+        />
 
-      {/* Retry Failed Pushes */}
-      <ActionButton
-        label="Retry Failed Pushes"
-        tooltip="Retry all hub comments that failed to push to Linear"
-        icon={<RotateCcw className="w-3.5 h-3.5" />}
-        loading={actionInProgress === "retry-pushes"}
-        disabled={actionInProgress !== null}
-        confirming={confirmAction === "retry-pushes"}
-        onConfirmStart={() => setConfirmAction("retry-pushes")}
-        onConfirm={() => executeAction("retry-pushes")}
-        onCancel={() => setConfirmAction(null)}
-      />
+        <div className="w-px h-6 bg-border" />
+
+        {/* Retry Failed Pushes */}
+        <ActionButton
+          label="Retry Pushes"
+          tooltip="Re-attempt pushing failed client comments to Linear. Each retry makes one API call per comment."
+          icon={<RotateCcw className="w-3.5 h-3.5" />}
+          loading={actionInProgress === "retry-pushes"}
+          disabled={actionInProgress !== null}
+          confirming={confirmAction === "retry-pushes"}
+          onConfirmStart={() => setConfirmAction("retry-pushes")}
+          onConfirm={() => executeAction("retry-pushes")}
+          onCancel={() => setConfirmAction(null)}
+        />
+
+        {/* Dismiss Failed Pushes */}
+        <ActionButton
+          label="Dismiss Pushes"
+          tooltip="Mark all failed pushes as dismissed. Clears the counter without retrying. Use for old or irrelevant failures."
+          icon={<XCircle className="w-3.5 h-3.5" />}
+          loading={actionInProgress === "dismiss-pushes"}
+          disabled={actionInProgress !== null}
+          confirming={confirmAction === "dismiss-pushes"}
+          onConfirmStart={() => setConfirmAction("dismiss-pushes")}
+          onConfirm={() => executeAction("dismiss-pushes")}
+          onCancel={() => setConfirmAction(null)}
+        />
+      </div>
     </div>
   );
 }
