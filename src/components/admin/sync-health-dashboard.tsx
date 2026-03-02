@@ -1225,7 +1225,7 @@ function SyncActions({ onActionComplete }: { onActionComplete: () => void }) {
 
     try {
       let url: string;
-      let method = "POST";
+      const method = "POST";
       if (action === "retry-pushes") {
         url = "/api/admin/sync/retry-pushes";
       } else if (action === "dismiss-pushes") {

@@ -6,12 +6,11 @@ interface EventRowProps {
   deepLinkUrl: string
   actorName?: string
   metadata?: Record<string, string>
-  eventType?: string
 }
 
 const HIDDEN_KEYS = new Set(['_', 'team_key'])
 
-export function EventRow({ summary, timestamp, deepLinkUrl, actorName, metadata, eventType }: EventRowProps) {
+export function EventRow({ summary, timestamp, deepLinkUrl, actorName, metadata }: EventRowProps) {
   const meta = metadata ?? {}
   const project = meta['Project'] || meta['project']
   const otherMeta = Object.entries(meta)

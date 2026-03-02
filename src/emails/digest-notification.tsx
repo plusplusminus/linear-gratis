@@ -5,7 +5,6 @@ import {
   Container,
   Section,
   Text,
-  Hr,
   Preview,
 } from '@react-email/components'
 import { EmailHeader } from './components/email-header'
