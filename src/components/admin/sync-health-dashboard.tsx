@@ -346,6 +346,7 @@ function EventsTab() {
           <option value="CommentPush">Comment Push</option>
           <option value="Project">Project</option>
           <option value="Initiative">Initiative</option>
+          <option value="FormSubmission">Form Submission</option>
         </select>
       </div>
 
@@ -708,6 +709,7 @@ function EntityTypeBadge({ type }: { type: string }) {
     CommentPush: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
     Project: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
     Initiative: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    FormSubmission: "bg-pink-500/10 text-pink-600 dark:text-pink-400",
   };
 
   return (
@@ -717,7 +719,7 @@ function EntityTypeBadge({ type }: { type: string }) {
         colors[type] ?? "bg-muted text-muted-foreground"
       )}
     >
-      {type}
+      {type === "CommentPush" ? "Comment Push" : type === "FormSubmission" ? "Form Submission" : type}
     </span>
   );
 }
@@ -1061,10 +1063,23 @@ function formatEntities(entities: Record<string, number>): string {
 
 function getEntityLabel(event: SyncEvent): string {
   const summary = event.payload_summary;
-  if (summary) {
-    if (typeof summary.identifier === "string") return summary.identifier;
-    if (typeof summary.title === "string") return summary.title;
-    if (typeof summary.name === "string") return summary.name;
+  if (!summary) return event.entity_id.substring(0, 8) + "...";
+
+  if (event.event_type === "FormSubmission" && typeof summary.formName === "string") {
+    return summary.formName;
   }
-  return event.entity_id.substring(0, 8) + "...";
+
+  let label = "";
+  if (typeof summary.identifier === "string") label = summary.identifier;
+  else if (typeof summary.title === "string") label = summary.title;
+  else if (typeof summary.name === "string") label = summary.name;
+  else label = event.entity_id.substring(0, 8) + "...";
+
+  // Show what changed for update events
+  if (event.action === "update" && Array.isArray(summary.changed) && summary.changed.length > 0) {
+    const fields = (summary.changed as string[]).join(", ");
+    label += ` (${fields})`;
+  }
+
+  return label;
 }

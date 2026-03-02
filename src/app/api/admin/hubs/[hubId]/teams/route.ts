@@ -3,6 +3,39 @@ import { withAdminAuth } from "@/lib/admin-auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { invalidateTeamHubCache } from "@/lib/hub-team-lookup";
 
+// GET: List team mappings for a hub
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ hubId: string }> }
+) {
+  try {
+    const auth = await withAdminAuth();
+    if ("error" in auth) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
+    const { hubId } = await params;
+
+    const { data: mappings, error } = await supabaseAdmin
+      .from("hub_team_mappings")
+      .select("linear_team_id, linear_team_name")
+      .eq("hub_id", hubId)
+      .eq("is_active", true);
+
+    if (error) {
+      throw new Error(`Failed to fetch team mappings: ${error.message}`);
+    }
+
+    return NextResponse.json(mappings ?? []);
+  } catch (error) {
+    console.error("GET /api/admin/hubs/[hubId]/teams error:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
 // POST: Add a team mapping to a hub
 export async function POST(
   request: Request,

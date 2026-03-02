@@ -8,6 +8,11 @@ import type { FormTemplate, FormField } from "@/lib/supabase";
 
 type FormWithFields = FormTemplate & { fields: FormField[] };
 
+interface HubTeamMapping {
+  linear_team_id: string;
+  linear_team_name: string | null;
+}
+
 export default function FormDetailPage({
   params,
 }: {
@@ -18,6 +23,12 @@ export default function FormDetailPage({
 
   const { data: form, loading, error } = useFetch<FormWithFields>(
     isNew ? null : `/api/admin/forms/${formId}`
+  );
+
+  // Fetch hub team mappings when editing a hub-specific form
+  const hubId = form?.hub_id ?? null;
+  const { data: hubTeams } = useFetch<HubTeamMapping[]>(
+    hubId ? `/api/admin/hubs/${hubId}/teams` : null
   );
 
   if (!isNew && loading) {
@@ -41,7 +52,11 @@ export default function FormDetailPage({
 
   return (
     <div className="p-6 max-w-4xl">
-      <FormBuilder form={isNew ? null : form ?? null} />
+      <FormBuilder
+        form={isNew ? null : form ?? null}
+        hubId={hubId ?? undefined}
+        hubTeams={hubTeams ?? undefined}
+      />
     </div>
   );
 }

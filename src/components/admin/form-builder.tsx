@@ -37,9 +37,15 @@ import type {
 
 type FormWithFields = FormTemplate & { fields: FormField[] };
 
+interface HubTeam {
+  linear_team_id: string;
+  linear_team_name: string | null;
+}
+
 interface FormBuilderProps {
   form: FormWithFields | null;
   hubId?: string;
+  hubTeams?: HubTeam[];
 }
 
 export const BUTTON_ICONS: Record<string, LucideIcon> = {
@@ -162,7 +168,7 @@ function fieldFromApi(f: FormField): FieldDraft {
 const inputClass =
   "w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent";
 
-export function FormBuilder({ form, hubId }: FormBuilderProps) {
+export function FormBuilder({ form, hubId, hubTeams }: FormBuilderProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const isNew = !form;
@@ -185,7 +191,6 @@ export function FormBuilder({ form, hubId }: FormBuilderProps) {
   // Linear routing
   const [targetTeamId, setTargetTeamId] = useState(form?.target_team_id ?? "");
   const [targetProjectId, setTargetProjectId] = useState(form?.target_project_id ?? "");
-  const [targetCycleId, setTargetCycleId] = useState(form?.target_cycle_id ?? "");
   const [targetLabelIds, setTargetLabelIds] = useState(
     (form?.target_label_ids ?? []).join(", ")
   );
@@ -206,10 +211,12 @@ export function FormBuilder({ form, hubId }: FormBuilderProps) {
   const [newFieldType, setNewFieldType] = useState<FormFieldType>("text");
   const [newFieldLabel, setNewFieldLabel] = useState("");
 
-  // Fetch teams/projects only for hub-specific forms (routing is set at hub level for global forms)
-  const { data: teams } = useFetch<TeamOption[]>(
-    !isGlobal ? "/api/admin/linear/teams" : null
-  );
+  // Use hub team mappings for team selection (routing is set at hub level for global forms)
+  const teams: TeamOption[] = (hubTeams ?? []).map((t) => ({
+    linear_id: t.linear_team_id,
+    name: t.linear_team_name ?? t.linear_team_id,
+    key: "",
+  }));
   const { data: projects } = useFetch<ProjectOption[]>(
     !isGlobal && targetTeamId
       ? `/api/admin/linear/teams/${targetTeamId}/projects`
@@ -282,7 +289,6 @@ export function FormBuilder({ form, hubId }: FormBuilderProps) {
             : {
                 target_team_id: targetTeamId || null,
                 target_project_id: targetProjectId || null,
-                target_cycle_id: targetCycleId || null,
                 target_label_ids: targetLabelIds
                   .split(",")
                   .map((s) => s.trim())
@@ -344,7 +350,7 @@ export function FormBuilder({ form, hubId }: FormBuilderProps) {
   }, [
     name, type, description, isActive, buttonLabel, buttonIcon,
     confirmationMessage, errorMessage,
-    targetTeamId, targetProjectId, targetCycleId, targetLabelIds, targetPriority,
+    targetTeamId, targetProjectId, targetLabelIds, targetPriority,
     fields, isNew, form, router, hubId,
   ]);
 
@@ -547,9 +553,9 @@ export function FormBuilder({ form, hubId }: FormBuilderProps) {
                   className={inputClass}
                 >
                   <option value="">Select a team...</option>
-                  {(teams ?? []).map((t) => (
+                  {teams.map((t) => (
                     <option key={t.linear_id} value={t.linear_id}>
-                      {t.name} ({t.key})
+                      {t.name}{t.key ? ` (${t.key})` : ""}
                     </option>
                   ))}
                 </select>
@@ -575,20 +581,6 @@ export function FormBuilder({ form, hubId }: FormBuilderProps) {
                     </option>
                   ))}
                 </select>
-              </div>
-
-              <div>
-                <label htmlFor="target-cycle" className="block text-sm font-medium mb-1.5">
-                  Target Cycle
-                </label>
-                <input
-                  id="target-cycle"
-                  type="text"
-                  value={targetCycleId}
-                  onChange={(e) => setTargetCycleId(e.target.value)}
-                  placeholder="Cycle ID (optional)"
-                  className={inputClass}
-                />
               </div>
 
               <div>

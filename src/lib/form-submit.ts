@@ -4,6 +4,7 @@ import {
   fetchFormWithFields,
   fetchHubFormConfig,
 } from "./form-read";
+import { logSyncEvent } from "./sync-logger";
 
 // -- Types ────────────────────────────────────────────────────────────────────
 
@@ -213,6 +214,7 @@ export async function processFormSubmission(
   const submissionId = submission.id;
 
   // 6. Create issue in Linear
+  const syncStart = Date.now();
   try {
     const issue = await createIssueInLinear({
       teamId,
@@ -235,6 +237,16 @@ export async function processFormSubmission(
       })
       .eq("id", submissionId);
 
+    void logSyncEvent({
+      eventType: "FormSubmission",
+      action: "create",
+      entityId: submissionId,
+      teamId,
+      status: "success",
+      processingTimeMs: Date.now() - syncStart,
+      payloadSummary: { title, formName: form.name, formId, hubId, issueIdentifier: issue.identifier },
+    });
+
     return {
       submissionId,
       syncStatus: "synced",
@@ -256,6 +268,17 @@ export async function processFormSubmission(
       })
       .eq("id", submissionId);
 
+    void logSyncEvent({
+      eventType: "FormSubmission",
+      action: "create",
+      entityId: submissionId,
+      teamId,
+      status: "error",
+      errorMessage: syncError,
+      processingTimeMs: Date.now() - syncStart,
+      payloadSummary: { title, formName: form.name, formId, hubId },
+    });
+
     return {
       submissionId,
       syncStatus: "failed",
@@ -263,6 +286,7 @@ export async function processFormSubmission(
       errorMessage: form.error_message,
     };
   }
+
 }
 
 /**
@@ -338,6 +362,7 @@ export async function retrySubmission(
   const confirmationMessage =
     hubConfig?.confirmation_message ?? form.confirmation_message;
 
+  const syncStart = Date.now();
   try {
     const issue = await createIssueInLinear({
       teamId,
@@ -359,6 +384,22 @@ export async function retrySubmission(
       })
       .eq("id", submissionId);
 
+    void logSyncEvent({
+      eventType: "FormSubmission",
+      action: "retry",
+      entityId: submissionId,
+      teamId,
+      status: "success",
+      processingTimeMs: Date.now() - syncStart,
+      payloadSummary: {
+        title: submission.derived_title,
+        formName: form.name,
+        formId: submission.form_id,
+        hubId: submission.hub_id,
+        issueIdentifier: issue.identifier,
+      },
+    });
+
     return {
       submissionId,
       syncStatus: "synced",
@@ -378,6 +419,22 @@ export async function retrySubmission(
         updated_at: new Date().toISOString(),
       })
       .eq("id", submissionId);
+
+    void logSyncEvent({
+      eventType: "FormSubmission",
+      action: "retry",
+      entityId: submissionId,
+      teamId,
+      status: "error",
+      errorMessage: syncError,
+      processingTimeMs: Date.now() - syncStart,
+      payloadSummary: {
+        title: submission.derived_title,
+        formName: form.name,
+        formId: submission.form_id,
+        hubId: submission.hub_id,
+      },
+    });
 
     return {
       submissionId,

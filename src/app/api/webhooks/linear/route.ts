@@ -20,6 +20,49 @@ type WebhookPayload = {
 const WORKSPACE_USER_ID = "workspace";
 
 /**
+ * Build a compact payload summary for sync event logging.
+ * Extracts identifier/name + what changed on updates.
+ */
+function buildPayloadSummary(
+  payload: WebhookPayload
+): Record<string, unknown> {
+  const { type, action, data } = payload;
+  const summary: Record<string, unknown> = {};
+
+  // Identity fields
+  switch (type) {
+    case "Issue": {
+      if (data.identifier) summary.identifier = data.identifier;
+      if (data.title) summary.title = data.title;
+      break;
+    }
+    case "Comment": {
+      const issue = data.issue as { identifier?: string } | undefined;
+      if (issue?.identifier) summary.identifier = issue.identifier;
+      const user = data.user as { name?: string } | undefined;
+      if (user?.name) summary.author = user.name;
+      break;
+    }
+    case "Project":
+    case "Initiative":
+    case "Cycle": {
+      if (data.name) summary.name = data.name;
+      break;
+    }
+  }
+
+  // For updates, show what changed using Linear's updatedFrom field
+  if (action === "update" && data.updatedFrom) {
+    const changed = Object.keys(data.updatedFrom as Record<string, unknown>);
+    if (changed.length > 0) {
+      summary.changed = changed;
+    }
+  }
+
+  return summary;
+}
+
+/**
  * Extract team ID from a webhook payload.
  * Returns null for org-level entities (Initiative).
  */
@@ -96,6 +139,8 @@ export async function POST(request: NextRequest) {
     const teamId = extractTeamId(payload);
     const entityId = (payload.data?.id as string) ?? "unknown";
 
+    const summary = buildPayloadSummary(payload);
+
     if (teamId) {
       const configured = await isTeamConfigured(teamId);
       if (!configured) {
@@ -105,6 +150,7 @@ export async function POST(request: NextRequest) {
           entityId,
           teamId,
           status: "skipped",
+          payloadSummary: summary,
         });
         return NextResponse.json({ success: true });
       }
@@ -122,6 +168,7 @@ export async function POST(request: NextRequest) {
         teamId,
         status: "success",
         processingTimeMs: Date.now() - start,
+        payloadSummary: summary,
       });
     } catch (error) {
       console.error("Webhook handler error:", error);
@@ -133,6 +180,7 @@ export async function POST(request: NextRequest) {
         status: "error",
         errorMessage: error instanceof Error ? error.message : String(error),
         processingTimeMs: Date.now() - start,
+        payloadSummary: summary,
       });
     }
 
