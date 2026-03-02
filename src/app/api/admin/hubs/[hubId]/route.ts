@@ -16,8 +16,6 @@ export async function GET(
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
-    const { user } = auth;
-
     const { hubId } = await params;
 
     const { data: hub, error } = await supabaseAdmin
@@ -49,8 +47,6 @@ export async function PATCH(
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
-    const { user } = auth;
-
     const { hubId } = await params;
     const body = (await request.json()) as {
       name?: string;
@@ -134,8 +130,6 @@ export async function DELETE(
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
-    const { user } = auth;
-
     const { hubId } = await params;
 
     // Fetch the hub first to get WorkOS org ID for cleanup

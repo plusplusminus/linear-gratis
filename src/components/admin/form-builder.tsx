@@ -351,7 +351,7 @@ export function FormBuilder({ form, hubId, hubTeams }: FormBuilderProps) {
     name, type, description, isActive, buttonLabel, buttonIcon,
     confirmationMessage, errorMessage,
     targetTeamId, targetProjectId, targetLabelIds, targetPriority,
-    fields, isNew, form, router, hubId,
+    fields, isNew, form, router, hubId, isGlobal,
   ]);
 
   return (

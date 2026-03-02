@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { cn } from "@/lib/utils";
+
 import { Calendar, FolderKanban } from "lucide-react";
 import { HubVoteButton } from "./vote-button";
 

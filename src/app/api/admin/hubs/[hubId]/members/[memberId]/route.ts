@@ -15,8 +15,6 @@ export async function PATCH(
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
-    const { user } = auth;
-
     const { hubId, memberId } = await params;
 
     const body = (await request.json()) as { role?: HubMemberRole };
@@ -62,8 +60,6 @@ export async function DELETE(
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
-    const { user } = auth;
-
     const { hubId, memberId } = await params;
 
     // Fetch member to get WorkOS info for cleanup

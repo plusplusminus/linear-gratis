@@ -38,7 +38,8 @@ type HubInfo = {
 
 // -- Deep link construction --------------------------------------------------
 
-function buildDeepLinkUrl(hubSlug: string, entityType: string, _entityId: string): string {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function buildDeepLinkUrl(hubSlug: string, _entityType: string, _entityId: string): string {
   // Deep links go to the hub's main page — entity-specific routing
   // would need team key which we don't always have in the event.
   // Hub landing is the safest default.

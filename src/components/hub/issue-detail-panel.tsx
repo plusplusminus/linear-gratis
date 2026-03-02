@@ -18,7 +18,7 @@ import {
   SignalHigh,
   SignalMedium,
   SignalLow,
-  Signal,
+
   Calendar,
   ChevronDown,
   ChevronRight,

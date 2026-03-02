@@ -91,10 +91,6 @@ export async function POST(
     // Get workspace token for Linear API
     const apiToken = await getWorkspaceToken();
 
-    const customerName = [user.firstName, user.lastName]
-      .filter(Boolean)
-      .join(" ") || user.email;
-
     const customerNeedInput = {
       customerExternalId: user.email,
       projectId: body.targetProjectId,

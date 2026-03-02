@@ -15,8 +15,6 @@ export async function POST(
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
-    const { user } = auth;
-
     const { hubId } = await params;
 
     const body = (await request.json()) as {
@@ -122,8 +120,6 @@ export async function GET(
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
-    const { user } = auth;
-
     const { hubId } = await params;
 
     const { data: members, error } = await supabaseAdmin

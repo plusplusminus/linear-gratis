@@ -12,8 +12,6 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
-    const { user } = auth;
-
     const { hubId, mappingId } = await params;
 
     const body = (await request.json()) as {
@@ -84,8 +82,6 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
-    const { user } = auth;
-
     const { hubId, mappingId } = await params;
 
     const { error, count } = await supabaseAdmin

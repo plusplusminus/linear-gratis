@@ -18,7 +18,7 @@ export async function GET() {
       { count: errorEvents24h, error: errorError },
       { data: lastEventRow, error: lastEventError },
       { data: lastRunRow, error: lastRunError },
-      { count: failedPushCount, error: failedPushError },
+      { count: failedPushCount },
     ] = await Promise.all([
       // Total events in last 24h
       supabaseAdmin

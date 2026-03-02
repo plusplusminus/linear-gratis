@@ -1,4 +1,4 @@
-import { Section, Text, Button, Link } from '@react-email/components'
+import { Section, Text, Link } from '@react-email/components'
 
 interface EventRowProps {
   summary: string

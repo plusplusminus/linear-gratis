@@ -361,7 +361,7 @@ describe("executeWorkflowActions", () => {
       { ruleId: "rule-1", actionType: "set_status", actionConfig: { stateId: "state-done" } },
     ];
 
-    const results = await executeWorkflowActions(actions, "issue-1");
+    await executeWorkflowActions(actions, "issue-1");
 
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock).toHaveBeenCalledWith(

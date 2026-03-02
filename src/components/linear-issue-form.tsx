@@ -36,7 +36,7 @@ type Project = {
 }
 
 export function LinearIssueForm() {
-  const { user } = useAuth()
+  useAuth()
   const { token: savedToken, loading: loadingProfile } = useWorkspaceToken()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])

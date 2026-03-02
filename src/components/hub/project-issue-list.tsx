@@ -77,9 +77,10 @@ export function ProjectIssueList({
   labels,
   cycles,
   hubId,
-  teamId,
   projectId,
   projects,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  teamId,
 }: {
   issues: Issue[];
   states: Array<{ id: string; name: string; color: string; type: string }>;

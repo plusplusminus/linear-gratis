@@ -1201,7 +1201,6 @@ function SyncActions({ onActionComplete }: { onActionComplete: () => void }) {
   const [selectedHub, setSelectedHub] = useState<string>("");
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
-  const [retryResult, setRetryResult] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/hubs")

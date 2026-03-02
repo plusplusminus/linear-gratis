@@ -11,7 +11,7 @@ import {
   Eye,
   Map,
   Lock,
-  ThumbsUp,
+
   MessageSquare,
   Filter,
   Columns3,
@@ -24,7 +24,7 @@ import {
 import Link from 'next/link'
 
 export default function CustomerExperiencePage() {
-  const { user, loading } = useAuth()
+  const { loading } = useAuth()
 
   if (loading) {
     return (

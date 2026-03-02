@@ -46,8 +46,6 @@ export async function POST(
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
-    const { user } = auth;
-
     const { hubId } = await params;
 
     // Verify hub exists

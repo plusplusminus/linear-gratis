@@ -3,12 +3,10 @@
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import {
-  FolderKanban,
   Target,
   Flag,
   Calendar,
   CircleDot,
-  CircleOff,
   IterationCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
