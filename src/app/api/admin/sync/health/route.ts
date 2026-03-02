@@ -20,11 +20,12 @@ export async function GET() {
       { data: lastRunRow, error: lastRunError },
       { count: failedPushCount },
     ] = await Promise.all([
-      // Total events in last 24h
+      // Total events in last 24h (exclude skipped — unmapped team noise)
       supabaseAdmin
         .from("sync_events")
         .select("id", { count: "exact", head: true })
-        .gte("created_at", since24h),
+        .gte("created_at", since24h)
+        .neq("status", "skipped"),
 
       // Error events in last 24h
       supabaseAdmin

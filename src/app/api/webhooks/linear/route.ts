@@ -145,14 +145,7 @@ export async function POST(request: NextRequest) {
     if (teamId) {
       const configured = await isTeamConfigured(teamId);
       if (!configured) {
-        void logSyncEvent({
-          eventType: payload.type,
-          action: payload.action,
-          entityId,
-          teamId,
-          status: "skipped",
-          payloadSummary: summary,
-        });
+        // Silently discard — don't log noise for unmapped teams
         return NextResponse.json({ success: true });
       }
     }

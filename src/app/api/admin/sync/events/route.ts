@@ -38,7 +38,12 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
 
-    if (status) dataQuery = dataQuery.eq("status", status);
+    if (status) {
+      dataQuery = dataQuery.eq("status", status);
+    } else {
+      // Hide skipped events by default (unmapped team noise)
+      dataQuery = dataQuery.neq("status", "skipped");
+    }
     if (event_type) dataQuery = dataQuery.eq("event_type", event_type);
     if (since) dataQuery = dataQuery.gte("created_at", since);
 
@@ -47,7 +52,11 @@ export async function GET(request: NextRequest) {
       .from("sync_events")
       .select("id", { count: "exact", head: true });
 
-    if (status) countQuery = countQuery.eq("status", status);
+    if (status) {
+      countQuery = countQuery.eq("status", status);
+    } else {
+      countQuery = countQuery.neq("status", "skipped");
+    }
     if (event_type) countQuery = countQuery.eq("event_type", event_type);
     if (since) countQuery = countQuery.gte("created_at", since);
 
