@@ -4,7 +4,11 @@ import { getPreferencesForUser } from "@/lib/notification-preferences";
 import { sendEmail } from "@/lib/email";
 import { ImmediateNotification } from "@/emails/immediate-notification";
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://lineargratis.com";
+function getAppUrl(): string {
+  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return "http://localhost:3000";
+}
 
 // -- Types -------------------------------------------------------------------
 
@@ -38,7 +42,7 @@ function buildDeepLinkUrl(hubSlug: string, entityType: string, _entityId: string
   // Deep links go to the hub's main page — entity-specific routing
   // would need team key which we don't always have in the event.
   // Hub landing is the safest default.
-  return `${APP_URL}/hub/${hubSlug}`;
+  return `${getAppUrl()}/hub/${hubSlug}`;
 }
 
 // -- Fetch helpers -----------------------------------------------------------

@@ -5,10 +5,14 @@ interface EmailFooterProps {
   footerText?: string
 }
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_DOMAIN || 'linear.gratis'
+function getBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`
+  return 'http://localhost:3000'
+}
 
 export function EmailFooter({ hubSlug, footerText }: EmailFooterProps) {
-  const settingsUrl = `https://${BASE_URL}/hub/${hubSlug}/settings`
+  const settingsUrl = `${getBaseUrl()}/hub/${hubSlug}/settings`
 
   return (
     <Section style={{ padding: '0 32px 24px' }}>

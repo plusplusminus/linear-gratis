@@ -8,9 +8,11 @@ import {
   setWorkspaceSetting,
 } from "@/lib/workspace";
 
-const WEBHOOK_URL =
-  (process.env.NEXT_PUBLIC_APP_URL || "https://linear.gratis") +
-  "/api/webhooks/linear";
+function getWebhookUrl(): string {
+  if (process.env.NEXT_PUBLIC_APP_URL) return `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/linear`;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}/api/webhooks/linear`;
+  return "http://localhost:3000/api/webhooks/linear";
+}
 
 const DEFAULT_RESOURCE_TYPES = ["Issue", "Comment", "Project", "Initiative"];
 
@@ -54,7 +56,7 @@ export async function POST() {
         query: mutation,
         variables: {
           input: {
-            url: WEBHOOK_URL,
+            url: getWebhookUrl(),
             resourceTypes: DEFAULT_RESOURCE_TYPES,
             secret: webhookSecret,
             allPublicTeams: true,
