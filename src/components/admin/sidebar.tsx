@@ -24,6 +24,11 @@ export function AdminSidebar() {
   );
   const tokenConnected = tokenStatus?.configured ?? false;
 
+  const { data: syncHealth } = useFetch<{ status: string }>(
+    "/api/admin/sync/health"
+  );
+  const syncStatus = syncHealth?.status ?? "unknown";
+
   const activeHubId = pathname.match(/\/admin\/hubs\/([^/]+)/)?.[1];
 
   return (
@@ -144,7 +149,18 @@ export function AdminSidebar() {
           )}
           title={collapsed ? "Sync Monitor" : undefined}
         >
-          <Activity className="w-4 h-4 shrink-0" />
+          <div className="relative shrink-0">
+            <Activity className="w-4 h-4" />
+            <span
+              className={cn(
+                "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-sidebar",
+                syncStatus === "healthy" ? "bg-green-500" :
+                syncStatus === "degraded" ? "bg-yellow-500" :
+                syncStatus === "unhealthy" ? "bg-red-500" :
+                "bg-muted-foreground"
+              )}
+            />
+          </div>
           {!collapsed && <span>Sync Monitor</span>}
         </Link>
         <Link
