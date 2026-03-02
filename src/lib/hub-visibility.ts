@@ -69,10 +69,7 @@ export async function isProjectVisibleToHub(
   // check if projectId is in the union.
   for (const mapping of data) {
     const ids = mapping.visible_project_ids as string[];
-    if (!ids || ids.length === 0) {
-      // No project filter for this team = all projects visible
-      return true;
-    }
+    if (!ids || ids.length === 0) continue;
     if (ids.includes(projectId)) return true;
   }
 
