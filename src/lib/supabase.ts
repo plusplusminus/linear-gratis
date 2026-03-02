@@ -65,37 +65,6 @@ export type PublicView = {
   updated_at: string
 }
 
-export type BrandingSettings = {
-  id: string
-  user_id: string
-  logo_url?: string
-  logo_width?: number
-  logo_height?: number
-  favicon_url?: string
-  brand_name?: string
-  tagline?: string
-  primary_color?: string
-  secondary_color?: string
-  accent_color?: string
-  background_color?: string
-  text_color?: string
-  border_color?: string
-  font_family?: string
-  heading_font_family?: string
-  footer_text?: string
-  footer_links?: {
-    label: string
-    url: string
-  }[]
-  show_powered_by?: boolean
-  social_links?: {
-    [key: string]: string
-  }
-  custom_css?: string
-  created_at: string
-  updated_at: string
-}
-
 export type CustomDomain = {
   id: string
   user_id: string

@@ -239,6 +239,8 @@ async function processOneDigest(
       summary: ev.summary,
       timestamp: ev.created_at,
       deepLinkUrl,
+      actorName: ev.actor_name ?? undefined,
+      metadata: ev.metadata as Record<string, string> | undefined,
     });
   }
 

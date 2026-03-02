@@ -5,7 +5,7 @@ import {
   Container,
   Section,
   Text,
-  Button,
+  Link,
   Preview,
 } from '@react-email/components'
 import { EmailHeader } from './components/email-header'
@@ -14,10 +14,6 @@ import { EmailFooter } from './components/email-footer'
 export interface ImmediateNotificationProps {
   hubName: string
   hubSlug: string
-  logoUrl?: string
-  primaryColor?: string
-  accentColor?: string
-  footerText?: string
   event: {
     type: string
     summary: string
@@ -32,10 +28,6 @@ export interface ImmediateNotificationProps {
 export function ImmediateNotification({
   hubName,
   hubSlug,
-  logoUrl,
-  primaryColor = '#5E6AD2',
-  accentColor = '#5E6AD2',
-  footerText,
   event,
   deepLinkUrl,
 }: ImmediateNotificationProps) {
@@ -47,13 +39,9 @@ export function ImmediateNotification({
       <Preview>{previewText}</Preview>
       <Body style={body}>
         <Container style={container}>
-          <EmailHeader hubName={hubName} logoUrl={logoUrl} primaryColor={primaryColor} />
+          <EmailHeader hubName={hubName} subtitle={`${formatEventType(event.type)} · ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`} />
 
           <Section style={content}>
-            <Text style={eventType}>
-              {formatEventType(event.type)}
-            </Text>
-
             <Text style={summary}>
               {event.summary}
             </Text>
@@ -64,22 +52,25 @@ export function ImmediateNotification({
               </Text>
             )}
 
-            {event.metadata && Object.keys(event.metadata).length > 0 && (
+            {event.metadata && Object.keys(event.metadata).length > 0 ? (
               <Section style={metadataSection}>
                 {Object.entries(event.metadata).map(([key, value]) => (
                   <Text key={key} style={metadataLine}>
                     <span style={{ color: '#888888' }}>{key}:</span> {value}
                   </Text>
                 ))}
+                <Link href={deepLinkUrl} style={viewLink}>
+                  View &rarr;
+                </Link>
               </Section>
+            ) : (
+              <Link href={deepLinkUrl} style={viewLink}>
+                View &rarr;
+              </Link>
             )}
-
-            <Button href={deepLinkUrl} style={{ ...button, backgroundColor: accentColor }}>
-              View in Hub
-            </Button>
           </Section>
 
-          <EmailFooter hubSlug={hubSlug} footerText={footerText} />
+          <EmailFooter hubSlug={hubSlug} />
         </Container>
       </Body>
     </Html>
@@ -108,15 +99,6 @@ const container = {
 
 const content = {
   padding: '24px 32px',
-} as const
-
-const eventType = {
-  color: '#888888',
-  fontSize: '12px',
-  fontWeight: 600 as const,
-  textTransform: 'uppercase' as const,
-  letterSpacing: '0.5px',
-  margin: '0 0 8px',
 } as const
 
 const summary = {
@@ -148,13 +130,12 @@ const metadataLine = {
   margin: '2px 0',
 } as const
 
-const button = {
-  color: '#ffffff',
-  fontSize: '14px',
-  fontWeight: 600 as const,
-  borderRadius: '6px',
-  padding: '10px 20px',
+const viewLink = {
+  color: '#5E6AD2',
+  fontSize: '13px',
+  fontWeight: 500 as const,
   textDecoration: 'none',
+  marginTop: '8px',
   display: 'inline-block' as const,
 } as const
 
