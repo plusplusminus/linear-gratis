@@ -95,10 +95,12 @@ export function SyncHealthDashboard() {
   // Fetch hub id→name map once
   useEffect(() => {
     fetch("/api/admin/hubs")
-      .then((r) => r.json() as Promise<{ hubs?: Array<{ id: string; name: string }> }>)
+      .then((r) => r.json() as Promise<Array<{ id: string; name: string }>>)
       .then((data) => {
         const map: Record<string, string> = {};
-        for (const h of data.hubs ?? []) map[h.id] = h.name;
+        if (Array.isArray(data)) {
+          for (const h of data) map[h.id] = h.name;
+        }
         setHubMap(map);
       })
       .catch(() => {});
