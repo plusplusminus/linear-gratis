@@ -33,9 +33,6 @@ export function ScopingEditor({ hubId, mappings }: ScopingEditorProps) {
   const [showAddTeam, setShowAddTeam] = useState(false);
   const [addingTeamIds, setAddingTeamIds] = useState<string[]>([]);
 
-  // IDs already mapped (for excluding from add picker)
-  const mappedTeamIds = mappings.map((m) => m.linear_team_id);
-
   function saveMapping(mapping: TeamMapping, updates: Partial<Pick<TeamMapping, "visible_project_ids" | "visible_initiative_ids" | "visible_label_ids" | "hidden_label_ids">>) {
     startTransition(async () => {
       try {

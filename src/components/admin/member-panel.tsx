@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition, useCallback } from "react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+
 import { InviteForm } from "./invite-form";
 import { MemberList } from "./member-list";
 import { Users } from "lucide-react";

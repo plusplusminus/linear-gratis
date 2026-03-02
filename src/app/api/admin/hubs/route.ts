@@ -103,8 +103,6 @@ export async function GET() {
     if ("error" in auth) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
-    const { user } = auth;
-
     const { data: hubs, error } = await supabaseAdmin
       .from("client_hubs")
       .select(

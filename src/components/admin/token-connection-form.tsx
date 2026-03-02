@@ -3,7 +3,7 @@
 import { useState, useEffect, useTransition } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { Check, Unplug, RefreshCw, AlertCircle, Zap } from "lucide-react";
+import { Check, Unplug, RefreshCw, Zap } from "lucide-react";
 
 interface TokenStatus {
   configured: boolean;
