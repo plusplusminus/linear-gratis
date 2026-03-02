@@ -26,6 +26,7 @@ type HealthData = {
   errorRate: number;
   lastEventAt: string | null;
   lastSyncRunAt: string | null;
+  failedPushes: number;
 };
 
 type SyncEvent = {
@@ -149,8 +150,8 @@ function HealthSummary({
 }) {
   if (loading) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        {[1, 2, 3, 4, 5].map((i) => (
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
           <div key={i} className="border border-border rounded-lg p-4 bg-card">
             <div className="h-4 w-16 bg-muted rounded animate-pulse mb-2" />
             <div className="h-6 w-12 bg-muted rounded animate-pulse" />
@@ -193,7 +194,7 @@ function HealthSummary({
   const cfg = statusConfig[health?.status ?? "unknown"];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
       {/* Status indicator — prominent */}
       <div
         className={cn(
@@ -265,6 +266,27 @@ function HealthSummary({
           {health?.lastSyncRunAt
             ? formatRelativeTime(health.lastSyncRunAt)
             : "—"}
+        </p>
+      </div>
+
+      {/* Failed pushes */}
+      <div
+        className={cn(
+          "border border-border rounded-lg p-4",
+          (health?.failedPushes ?? 0) > 0 ? "bg-red-500/5 border-red-500/20" : "bg-card"
+        )}
+      >
+        <div className="flex items-center gap-1.5 mb-2 text-muted-foreground">
+          <XCircle className="w-3.5 h-3.5" />
+          <span className="text-xs">Failed Pushes</span>
+        </div>
+        <p
+          className={cn(
+            "text-lg font-semibold tabular-nums",
+            (health?.failedPushes ?? 0) > 0 ? "text-red-500" : ""
+          )}
+        >
+          {health?.failedPushes ?? 0}
         </p>
       </div>
     </div>
