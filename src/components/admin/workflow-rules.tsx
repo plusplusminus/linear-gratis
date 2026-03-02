@@ -102,6 +102,13 @@ export function WorkflowRules({ hubId, mappingId, teamId, visibleLabelIds }: Wor
     fetchRules();
   }, [fetchRules]);
 
+  // Eagerly load label/state names so rule rows can display them
+  useEffect(() => {
+    if (!loading && rules.length > 0 && !optionsLoaded) {
+      fetchOptions();
+    }
+  }, [loading, rules.length, optionsLoaded, fetchOptions]);
+
   function resetForm() {
     setTriggerType("label_added");
     setTriggerLabelId("");
