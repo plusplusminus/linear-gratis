@@ -3,6 +3,7 @@ import { fetchHubTeams, fetchHubTeamStats } from "@/lib/hub-read";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Layers, FolderKanban, CircleDot, Clock } from "lucide-react";
+import { ActivityFeed } from "@/components/hub/activity-feed";
 
 export default async function HubLandingPage({
   params,
@@ -19,7 +20,7 @@ export default async function HubLandingPage({
   ]);
 
   return (
-    <div className="p-6 max-w-4xl">
+    <div className="p-6 max-w-6xl">
       <div className="mb-6">
         <h1 className="text-lg font-semibold">{hub.name}</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
@@ -27,33 +28,48 @@ export default async function HubLandingPage({
         </p>
       </div>
 
-      {teams.length === 0 ? (
-        <div className="border border-border rounded-lg p-10 bg-card text-center">
-          <Layers className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
-          <p className="text-sm font-medium mb-1">No teams configured</p>
-          <p className="text-xs text-muted-foreground">
-            No teams have been added to this hub yet. Contact your project
-            manager.
-          </p>
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Teams grid */}
+        <div className="flex-1 min-w-0">
+          {teams.length === 0 ? (
+            <div className="border border-border rounded-lg p-10 bg-card text-center">
+              <Layers className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
+              <p className="text-sm font-medium mb-1">No teams configured</p>
+              <p className="text-xs text-muted-foreground">
+                No teams have been added to this hub yet. Contact your project
+                manager.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {teams.map((team) => {
+                const teamStats = stats.get(team.id);
+                return (
+                  <TeamCard
+                    key={team.id}
+                    name={team.name}
+                    teamKey={team.key}
+                    projectCount={teamStats?.projectCount ?? 0}
+                    openIssueCount={teamStats?.openIssueCount ?? 0}
+                    lastActivity={teamStats?.lastActivity ?? null}
+                    href={`/hub/${slug}/${team.key}`}
+                  />
+                );
+              })}
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {teams.map((team) => {
-            const teamStats = stats.get(team.id);
-            return (
-              <TeamCard
-                key={team.id}
-                name={team.name}
-                teamKey={team.key}
-                projectCount={teamStats?.projectCount ?? 0}
-                openIssueCount={teamStats?.openIssueCount ?? 0}
-                lastActivity={teamStats?.lastActivity ?? null}
-                href={`/hub/${slug}/${team.key}`}
-              />
-            );
-          })}
+
+        {/* Activity feed */}
+        <div className="lg:w-80 shrink-0">
+          <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
+            Recent Activity
+          </h2>
+          <div className="border border-border rounded-lg bg-card overflow-hidden max-h-[600px] overflow-y-auto">
+            <ActivityFeed hubId={hub.id} hubSlug={slug} />
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

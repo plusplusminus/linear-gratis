@@ -13,8 +13,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProjectIssueList } from "./project-issue-list";
+import { ActivityFeed } from "./activity-feed";
 
-type Tab = "issues" | "projects" | "cycles" | "initiatives" | "milestones";
+type Tab = "issues" | "projects" | "cycles" | "initiatives" | "milestones" | "activity";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "issues", label: "Issues" },
@@ -22,6 +23,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "cycles", label: "Cycles" },
   { key: "initiatives", label: "Initiatives" },
   { key: "milestones", label: "Milestones" },
+  { key: "activity", label: "Activity" },
 ];
 
 type Project = {
@@ -140,6 +142,7 @@ export function TeamTabs({
       <div className="flex items-center gap-0 border-b border-border px-6 shrink-0">
         {TABS.filter((tab) => {
           if (tab.key === "issues") return true;
+          if (tab.key === "activity") return true;
           if (tab.key === "projects") return projects.length > 0;
           if (tab.key === "cycles") return (cycleDetails?.length ?? 0) > 0;
           if (tab.key === "initiatives") return initiatives.length > 0;
@@ -156,7 +159,9 @@ export function TeamTabs({
                   ? (cycleDetails?.length ?? 0)
                   : tab.key === "initiatives"
                     ? initiatives.length
-                    : milestones.length;
+                    : tab.key === "activity"
+                      ? null
+                      : milestones.length;
 
           return (
             <button
@@ -171,14 +176,16 @@ export function TeamTabs({
             >
               <span className="flex items-center gap-1.5">
                 {tab.label}
-                <span
-                  className={cn(
-                    "tabular-nums text-[10px]",
-                    isActive ? "text-foreground/60" : "text-muted-foreground/60"
-                  )}
-                >
-                  {count}
-                </span>
+                {count !== null && (
+                  <span
+                    className={cn(
+                      "tabular-nums text-[10px]",
+                      isActive ? "text-foreground/60" : "text-muted-foreground/60"
+                    )}
+                  >
+                    {count}
+                  </span>
+                )}
               </span>
               {/* Active underline */}
               {isActive && (
@@ -265,6 +272,12 @@ export function TeamTabs({
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {activeTab === "activity" && (
+        <div className="p-6 max-w-4xl overflow-y-auto">
+          <ActivityFeed hubId={hubId} hubSlug={hubSlug} teamId={teamId} />
         </div>
       )}
     </div>

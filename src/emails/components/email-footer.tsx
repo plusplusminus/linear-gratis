@@ -1,0 +1,28 @@
+import { Section, Text, Link, Hr } from '@react-email/components'
+
+interface EmailFooterProps {
+  hubSlug: string
+  footerText?: string
+}
+
+const BASE_URL = process.env.NEXT_PUBLIC_APP_DOMAIN || 'linear.gratis'
+
+export function EmailFooter({ hubSlug, footerText }: EmailFooterProps) {
+  const settingsUrl = `https://${BASE_URL}/hub/${hubSlug}/settings`
+
+  return (
+    <Section style={{ padding: '0 32px 24px' }}>
+      <Hr style={{ borderColor: '#e5e5e5', margin: '24px 0 16px' }} />
+      <Text style={{ color: '#888888', fontSize: '12px', lineHeight: '18px', textAlign: 'center' as const, margin: '0 0 8px' }}>
+        <Link href={settingsUrl} style={{ color: '#888888', textDecoration: 'underline' }}>
+          Manage notification settings
+        </Link>
+      </Text>
+      {footerText && (
+        <Text style={{ color: '#aaaaaa', fontSize: '11px', lineHeight: '16px', textAlign: 'center' as const, margin: '0' }}>
+          {footerText}
+        </Text>
+      )}
+    </Section>
+  )
+}

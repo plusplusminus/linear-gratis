@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw } from "lucide-react";
+import Link from "next/link";
+import { RefreshCw, Settings } from "lucide-react";
 import { useHub } from "@/contexts/hub-context";
 import { SimpleThemeToggle } from "@/components/theme-toggle";
+import { NotificationBell } from "@/components/hub/notification-bell";
 import { cn } from "@/lib/utils";
 
 function useRelativeTime(timestamp: number) {
@@ -26,7 +28,7 @@ function useRelativeTime(timestamp: number) {
 }
 
 export function HubTopBar() {
-  const { firstName, email, role, isLoading } = useHub();
+  const { firstName, email, role, isLoading, hubSlug, hubId } = useHub();
   const router = useRouter();
   const [lastRefreshedAt, setLastRefreshedAt] = useState(Date.now);
   const [refreshing, setRefreshing] = useState(false);
@@ -60,6 +62,14 @@ export function HubTopBar() {
       </div>
 
       <div className="flex items-center gap-3">
+        <NotificationBell hubId={hubId} hubSlug={hubSlug} />
+        <Link
+          href={`/hub/${hubSlug}/settings`}
+          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          title="Settings"
+        >
+          <Settings className="w-4 h-4" />
+        </Link>
         <SimpleThemeToggle />
 
         {!isLoading && (

@@ -6,6 +6,7 @@ import {
   routeWebhookEvent,
 } from "@/lib/webhook-handlers";
 import { logSyncEvent } from "@/lib/sync-logger";
+import { emitNotificationEventsForWebhook } from "@/lib/notification-events";
 
 type WebhookPayload = {
   action: "create" | "update" | "remove";
@@ -161,6 +162,8 @@ export async function POST(request: NextRequest) {
     const start = Date.now();
     try {
       await routeWebhookEvent(payload, WORKSPACE_USER_ID);
+      // Fire-and-forget: emit notification events for hub visibility
+      void emitNotificationEventsForWebhook(payload);
       void logSyncEvent({
         eventType: payload.type,
         action: payload.action,
