@@ -21,6 +21,7 @@ import {
   Signal,
   Calendar,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   MessageSquare,
   AlertCircle,
@@ -337,69 +338,29 @@ export function IssueDetailPanel({
                 </div>
               )}
 
-              {/* Comments */}
-              <div className="px-4 py-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <MessageSquare className="w-4 h-4 text-muted-foreground" />
-                  <h3 className="text-xs font-semibold">
-                    Comments
-                    {comments.length > 0 && (
-                      <span className="text-muted-foreground font-normal ml-1">
-                        ({comments.reduce((n, c) => n + 1 + (c.children?.length ?? 0), 0)})
-                      </span>
-                    )}
-                  </h3>
-                </div>
+              {/* Comments — expanded by default */}
+              <CollapsibleComments
+                comments={comments}
+                hubId={hubId}
+                isViewOnly={isViewOnly ?? false}
+                onReply={(parentId, authorName) => setReplyingTo({ parentId, authorName })}
+                onRetrySuccess={(commentId, linearCommentId) => {
+                  setComments((prev) => {
+                    const update = (c: Comment): Comment => ({
+                      ...c,
+                      push_status: c.id === commentId ? "pushed" : c.push_status,
+                      push_error: c.id === commentId ? undefined : c.push_error,
+                      linearId: c.id === commentId ? linearCommentId : c.linearId,
+                      children: c.children?.map(update),
+                    });
+                    return prev.map(update);
+                  });
+                }}
+              />
 
-                {comments.length === 0 ? (
-                  <p className="text-xs text-muted-foreground py-4 text-center">
-                    No comments yet
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {comments.map((comment) => (
-                      <CommentThread
-                        key={comment.id}
-                        comment={comment}
-                        hubId={hubId}
-                        onReply={isViewOnly ? undefined : (parentId, authorName) => setReplyingTo({ parentId, authorName })}
-                        onRetrySuccess={(commentId, linearCommentId) => {
-                          setComments((prev) => {
-                            const update = (c: Comment): Comment => ({
-                              ...c,
-                              push_status: c.id === commentId ? "pushed" : c.push_status,
-                              push_error: c.id === commentId ? undefined : c.push_error,
-                              linearId: c.id === commentId ? linearCommentId : c.linearId,
-                              children: c.children?.map(update),
-                            });
-                            return prev.map(update);
-                          });
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
-
-              </div>
-
-              {/* History */}
+              {/* History — collapsed by default */}
               {history.length > 0 && (
-                <div className="px-4 py-4 border-t border-border">
-                  <div className="flex items-center gap-2 mb-3">
-                    <History className="w-4 h-4 text-muted-foreground" />
-                    <h3 className="text-xs font-semibold">
-                      Activity
-                      <span className="text-muted-foreground font-normal ml-1">
-                        ({history.length})
-                      </span>
-                    </h3>
-                  </div>
-                  <div className="space-y-0">
-                    {history.map((entry) => (
-                      <HistoryItem key={entry.id} entry={entry} />
-                    ))}
-                  </div>
-                </div>
+                <CollapsibleHistory history={history} />
               )}
             </div>
 
@@ -667,6 +628,99 @@ const PRIORITY_LABELS: Record<number, string> = {
   3: "Medium",
   4: "Low",
 };
+
+function CollapsibleComments({
+  comments,
+  hubId,
+  isViewOnly,
+  onReply,
+  onRetrySuccess,
+}: {
+  comments: Comment[];
+  hubId: string;
+  isViewOnly: boolean;
+  onReply: (parentId: string, authorName: string) => void;
+  onRetrySuccess: (commentId: string, linearCommentId: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const count = comments.reduce((n, c) => n + 1 + (c.children?.length ?? 0), 0);
+
+  return (
+    <div>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-2 w-full px-4 py-3 text-left hover:bg-accent/50 transition-colors"
+      >
+        <ChevronRight
+          className={cn(
+            "w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform",
+            expanded && "rotate-90"
+          )}
+        />
+        <MessageSquare className="w-3.5 h-3.5 text-muted-foreground" />
+        <span className="text-xs font-semibold">Comments</span>
+        {count > 0 && (
+          <span className="text-[10px] text-muted-foreground">
+            ({count})
+          </span>
+        )}
+      </button>
+      {expanded && (
+        <div className="px-4 pb-4">
+          {comments.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-4 text-center">
+              No comments yet
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {comments.map((comment) => (
+                <CommentThread
+                  key={comment.id}
+                  comment={comment}
+                  hubId={hubId}
+                  onReply={isViewOnly ? undefined : (parentId, authorName) => onReply(parentId, authorName)}
+                  onRetrySuccess={onRetrySuccess}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CollapsibleHistory({ history }: { history: HistoryEntry[] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="border-t border-border">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-2 w-full px-4 py-3 text-left hover:bg-accent/50 transition-colors"
+      >
+        <ChevronRight
+          className={cn(
+            "w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform",
+            expanded && "rotate-90"
+          )}
+        />
+        <History className="w-3.5 h-3.5 text-muted-foreground" />
+        <span className="text-xs font-semibold">Activity</span>
+        <span className="text-[10px] text-muted-foreground">
+          ({history.length})
+        </span>
+      </button>
+      {expanded && (
+        <div className="px-4 pb-4 space-y-0">
+          {history.map((entry) => (
+            <HistoryItem key={entry.id} entry={entry} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function HistoryItem({ entry }: { entry: HistoryEntry }) {
   const isWorkflow = entry.type === "workflow";
