@@ -2,7 +2,6 @@ import { Section, Text, Link, Hr } from '@react-email/components'
 
 interface EmailFooterProps {
   hubSlug: string
-  footerText?: string
 }
 
 function getBaseUrl(): string {
@@ -11,7 +10,7 @@ function getBaseUrl(): string {
   return 'http://localhost:3000'
 }
 
-export function EmailFooter({ hubSlug, footerText }: EmailFooterProps) {
+export function EmailFooter({ hubSlug }: EmailFooterProps) {
   const settingsUrl = `${getBaseUrl()}/hub/${hubSlug}/settings`
 
   return (
@@ -22,11 +21,9 @@ export function EmailFooter({ hubSlug, footerText }: EmailFooterProps) {
           Manage notification settings
         </Link>
       </Text>
-      {footerText && (
-        <Text style={{ color: '#aaaaaa', fontSize: '11px', lineHeight: '16px', textAlign: 'center' as const, margin: '0' }}>
-          {footerText}
-        </Text>
-      )}
+      <Text style={{ color: '#aaaaaa', fontSize: '11px', lineHeight: '16px', textAlign: 'center' as const, margin: '0' }}>
+        PlusPlusMinus Design &amp; Development
+      </Text>
     </Section>
   )
 }

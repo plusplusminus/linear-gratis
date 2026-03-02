@@ -17,27 +17,30 @@ export interface DigestEvent {
   summary: string
   timestamp: string
   deepLinkUrl: string
+  actorName?: string
+  metadata?: Record<string, string>
 }
 
 export interface DigestNotificationProps {
   hubName: string
   hubSlug: string
-  logoUrl?: string
-  primaryColor?: string
-  accentColor?: string
-  footerText?: string
   events: Record<string, DigestEvent[]>
   period: 'daily' | 'weekly'
   dateRange: string
 }
 
+// Display order for event types in digest emails
+const EVENT_TYPE_ORDER = [
+  'project_update',
+  'issue_created',
+  'new_comment',
+  'status_change',
+  'label_change',
+]
+
 export function DigestNotification({
   hubName,
   hubSlug,
-  logoUrl,
-  primaryColor = '#5E6AD2',
-  accentColor = '#5E6AD2',
-  footerText,
   events,
   period,
   dateRange,
@@ -49,48 +52,51 @@ export function DigestNotification({
   const summaryText = summaryParts.join(', ')
   const previewText = `${period === 'daily' ? 'Daily' : 'Weekly'} digest: ${summaryText} — ${hubName}`
 
+  // Sort event types by defined order, then any remaining types alphabetically
+  const sortedTypes = Object.keys(events).sort((a, b) => {
+    const ai = EVENT_TYPE_ORDER.indexOf(a)
+    const bi = EVENT_TYPE_ORDER.indexOf(b)
+    if (ai === -1 && bi === -1) return a.localeCompare(b)
+    if (ai === -1) return 1
+    if (bi === -1) return -1
+    return ai - bi
+  })
+
   return (
     <Html>
       <Head />
       <Preview>{previewText}</Preview>
       <Body style={body}>
         <Container style={container}>
-          <EmailHeader hubName={hubName} logoUrl={logoUrl} primaryColor={primaryColor} />
+          <EmailHeader hubName={hubName} subtitle={`${period === 'daily' ? 'Daily' : 'Weekly'} Digest ${dateRange}`} />
 
           <Section style={content}>
-            <Text style={title}>
-              {period === 'daily' ? 'Daily' : 'Weekly'} Digest
-            </Text>
-            <Text style={dateRangeStyle}>
-              {dateRange}
-            </Text>
-
             <Section style={statsBar}>
               <Text style={statsText}>
                 {totalCount} update{totalCount !== 1 ? 's' : ''}: {summaryText}
               </Text>
             </Section>
 
-            {Object.entries(events).map(([type, items]) => (
-              <Section key={type} style={{ marginBottom: '16px' }}>
+            {sortedTypes.map((type) => (
+              <Section key={type} style={sectionCard}>
                 <Text style={sectionHeader}>
-                  {formatEventType(type)} ({items.length})
+                  {formatEventType(type)} ({events[type].length})
                 </Text>
-                <Hr style={{ borderColor: '#e5e5e5', margin: '0 0 4px' }} />
-                {items.map((event, i) => (
+                {events[type].map((event, i) => (
                   <EventRow
                     key={i}
                     summary={event.summary}
                     timestamp={event.timestamp}
                     deepLinkUrl={event.deepLinkUrl}
-                    accentColor={accentColor}
+                    actorName={event.actorName}
+                    metadata={event.metadata}
                   />
                 ))}
               </Section>
             ))}
           </Section>
 
-          <EmailFooter hubSlug={hubSlug} footerText={footerText} />
+          <EmailFooter hubSlug={hubSlug} />
         </Container>
       </Body>
     </Html>
@@ -121,19 +127,6 @@ const content = {
   padding: '24px 32px',
 } as const
 
-const title = {
-  color: '#1a1a1a',
-  fontSize: '20px',
-  fontWeight: 600 as const,
-  margin: '0 0 4px',
-} as const
-
-const dateRangeStyle = {
-  color: '#888888',
-  fontSize: '13px',
-  margin: '0 0 16px',
-} as const
-
 const statsBar = {
   backgroundColor: '#fafafa',
   borderRadius: '6px',
@@ -148,11 +141,22 @@ const statsText = {
   margin: '0',
 } as const
 
+const sectionCard = {
+  backgroundColor: '#fafafa',
+  borderRadius: '8px',
+  padding: '16px',
+  marginBottom: '12px',
+} as const
+
 const sectionHeader = {
   color: '#1a1a1a',
-  fontSize: '14px',
+  fontSize: '13px',
   fontWeight: 600 as const,
-  margin: '0 0 4px',
+  textTransform: 'uppercase' as const,
+  letterSpacing: '0.3px',
+  margin: '0 0 8px',
+  paddingBottom: '8px',
+  borderBottom: '1px solid #e5e5e5',
 } as const
 
 export default DigestNotification
