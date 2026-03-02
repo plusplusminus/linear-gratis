@@ -26,24 +26,6 @@ export function Navigation() {
           linear.gratis
         </Link>
 
-        {/* Center navigation */}
-        <div className="flex items-center gap-2">
-          {!user && (
-            <>
-              <Link href="/features">
-                <Button variant="ghost" size="sm" className="font-medium">
-                  Features
-                </Button>
-              </Link>
-              <Link href="https://linear.gratis/view/lineargratis">
-                <Button variant="ghost" size="sm" className="font-medium">
-                  Roadmap
-                </Button>
-              </Link>
-            </>
-          )}
-        </div>
-
         <div className="flex items-center gap-2">
           <SimpleThemeToggle />
           {user ? (
