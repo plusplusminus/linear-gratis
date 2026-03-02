@@ -80,6 +80,49 @@ export async function getHubMembership(
   return null;
 }
 
+/**
+ * Find the hub a user belongs to, given their user_id or email.
+ * Used for post-auth redirect to route clients directly to their hub.
+ * Returns the hub slug or null if no active membership found.
+ */
+export async function getHubForUser(
+  userId: string,
+  email?: string
+): Promise<string | null> {
+  // Try direct user_id match first
+  const { data: byUserId } = await supabaseAdmin
+    .from("hub_members")
+    .select("hub_id, client_hubs!inner(slug, is_active)")
+    .eq("user_id", userId)
+    .eq("client_hubs.is_active", true)
+    .limit(1)
+    .single();
+
+  if (byUserId) {
+    const hub = byUserId.client_hubs as unknown as { slug: string };
+    return hub.slug;
+  }
+
+  // Fall back to email match (invited but not yet claimed)
+  if (email) {
+    const { data: byEmail } = await supabaseAdmin
+      .from("hub_members")
+      .select("hub_id, client_hubs!inner(slug, is_active)")
+      .eq("email", email.toLowerCase())
+      .is("user_id", null)
+      .eq("client_hubs.is_active", true)
+      .limit(1)
+      .single();
+
+    if (byEmail) {
+      const hub = byEmail.client_hubs as unknown as { slug: string };
+      return hub.slug;
+    }
+  }
+
+  return null;
+}
+
 export type HubAuthResult = {
   user: User;
   hubId: string;
