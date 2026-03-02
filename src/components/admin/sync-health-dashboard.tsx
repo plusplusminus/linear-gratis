@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Activity,
   AlertTriangle,
+  Bell,
   CheckCircle2,
   XCircle,
   RefreshCw,
@@ -13,6 +14,8 @@ import {
   ChevronLeft,
   ChevronRight,
   HelpCircle,
+  Mail,
+  Send,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -57,7 +60,29 @@ type SyncRun = {
   duration_ms: number | null;
 };
 
-type Tab = "overview" | "events" | "runs";
+type Tab = "overview" | "events" | "runs" | "notifications";
+
+type EmailQueueItem = {
+  id: string;
+  notification_event_id: string;
+  user_id: string;
+  hub_id: string;
+  email_address: string;
+  status: string;
+  is_digest: boolean;
+  resend_message_id: string | null;
+  error_message: string | null;
+  attempts: number;
+  created_at: string;
+  sent_at: string | null;
+};
+
+type EmailStats = {
+  sent: number;
+  failed: number;
+  pending: number;
+  digests: number;
+};
 
 // -- Main Component ----------------------------------------------------------
 
@@ -100,6 +125,7 @@ export function SyncHealthDashboard() {
     { key: "overview", label: "Overview" },
     { key: "events", label: "Events" },
     { key: "runs", label: "Runs" },
+    { key: "notifications", label: "Notifications" },
   ];
 
   return (
@@ -134,6 +160,7 @@ export function SyncHealthDashboard() {
       {activeTab === "overview" && <OverviewTab hubMap={hubMap} />}
       {activeTab === "events" && <EventsTab />}
       {activeTab === "runs" && <RunsTab hubMap={hubMap} />}
+      {activeTab === "notifications" && <NotificationsTab hubMap={hubMap} />}
     </div>
   );
 }
@@ -652,6 +679,370 @@ function RunsTable({
         <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
       )}
     </div>
+  );
+}
+
+// -- Notifications Tab -------------------------------------------------------
+
+function NotificationsTab({ hubMap }: { hubMap: Record<string, string> }) {
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [view, setView] = useState<"emails" | "events">("emails");
+
+  return (
+    <div className="space-y-4">
+      {/* View toggle + filters */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-1 border border-border rounded-md overflow-hidden">
+          <button
+            onClick={() => setView("emails")}
+            className={cn(
+              "px-3 py-1.5 text-xs font-medium transition-colors",
+              view === "emails"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Mail className="w-3 h-3 inline mr-1" />
+            Email Queue
+          </button>
+          <button
+            onClick={() => setView("events")}
+            className={cn(
+              "px-3 py-1.5 text-xs font-medium transition-colors",
+              view === "events"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Bell className="w-3 h-3 inline mr-1" />
+            Events
+          </button>
+        </div>
+
+        {view === "emails" && (
+          <div className="flex items-center gap-2">
+            <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="text-xs border border-border rounded px-2 py-1 bg-background"
+            >
+              <option value="">All statuses</option>
+              <option value="sent">Sent</option>
+              <option value="failed">Failed</option>
+              <option value="pending">Pending</option>
+            </select>
+          </div>
+        )}
+      </div>
+
+      {view === "emails" ? (
+        <EmailQueueTable statusFilter={statusFilter} hubMap={hubMap} />
+      ) : (
+        <NotificationEventsTable />
+      )}
+    </div>
+  );
+}
+
+function EmailQueueTable({
+  statusFilter = "",
+  hubMap,
+}: {
+  statusFilter?: string;
+  hubMap: Record<string, string>;
+}) {
+  const [items, setItems] = useState<EmailQueueItem[]>([]);
+  const [stats, setStats] = useState<EmailStats | null>(null);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const limit = 50;
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(limit),
+        view: "emails",
+      });
+      if (statusFilter) params.set("status", statusFilter);
+
+      const res = await fetch(`/api/admin/sync/notifications?${params}`);
+      if (res.ok) {
+        const data = (await res.json()) as {
+          items: EmailQueueItem[];
+          total: number;
+          stats: EmailStats;
+        };
+        setItems(data.items);
+        setTotal(data.total);
+        setStats(data.stats);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setLoading(false);
+    }
+  }, [page, statusFilter]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter]);
+
+  if (loading) {
+    return <TableSkeleton rows={10} cols={6} />;
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Stats cards */}
+      {stats && (
+        <div className="grid grid-cols-4 gap-3">
+          <div className="border border-border rounded-lg p-3 bg-card">
+            <p className="text-xs text-muted-foreground">Sent</p>
+            <p className="text-lg font-semibold tabular-nums text-green-600 dark:text-green-400">{stats.sent}</p>
+          </div>
+          <div className="border border-border rounded-lg p-3 bg-card">
+            <p className="text-xs text-muted-foreground">Failed</p>
+            <p className={cn("text-lg font-semibold tabular-nums", stats.failed > 0 ? "text-red-600 dark:text-red-400" : "text-foreground")}>{stats.failed}</p>
+          </div>
+          <div className="border border-border rounded-lg p-3 bg-card">
+            <p className="text-xs text-muted-foreground">Pending</p>
+            <p className={cn("text-lg font-semibold tabular-nums", stats.pending > 0 ? "text-yellow-600 dark:text-yellow-400" : "text-foreground")}>{stats.pending}</p>
+          </div>
+          <div className="border border-border rounded-lg p-3 bg-card">
+            <p className="text-xs text-muted-foreground">Digests</p>
+            <p className="text-lg font-semibold tabular-nums">{stats.digests}</p>
+          </div>
+        </div>
+      )}
+
+      {items.length === 0 ? (
+        <div className="border border-border rounded-lg p-8 bg-card text-center">
+          <Send className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground">No emails in queue yet</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Emails will appear here when clients opt in to notifications
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="border border-border rounded-lg overflow-hidden bg-card">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/30">
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Time</th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">To</th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Hub</th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Type</th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Status</th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Error</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr
+                    key={item.id}
+                    className={cn(
+                      "border-b border-border last:border-b-0 transition-colors",
+                      item.status === "failed"
+                        ? "bg-red-500/5 hover:bg-red-500/10"
+                        : "hover:bg-accent/30"
+                    )}
+                  >
+                    <td className="px-3 py-2 text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                      {formatTime(item.created_at)}
+                    </td>
+                    <td className="px-3 py-2 text-xs truncate max-w-[160px]" title={item.email_address}>
+                      {item.email_address}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground truncate max-w-[120px]">
+                      {hubMap[item.hub_id] ?? item.hub_id.slice(0, 8)}
+                    </td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={cn(
+                          "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium",
+                          item.is_digest
+                            ? "bg-purple-500/10 text-purple-600 dark:text-purple-400"
+                            : "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                        )}
+                      >
+                        {item.is_digest ? "Digest" : "Immediate"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <StatusBadge status={item.status === "sent" ? "success" : item.status} />
+                    </td>
+                    <td className="px-3 py-2 text-xs text-red-500 truncate max-w-[200px]" title={item.error_message ?? undefined}>
+                      {item.error_message ?? "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {Math.ceil(total / limit) > 1 && (
+            <Pagination page={page} totalPages={Math.ceil(total / limit)} onPageChange={setPage} />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function NotificationEventsTable() {
+  const [items, setItems] = useState<Array<{
+    id: string;
+    hub_id: string;
+    team_id: string | null;
+    event_type: string;
+    entity_type: string;
+    entity_id: string;
+    actor_name: string | null;
+    summary: string;
+    created_at: string;
+  }>>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [typeFilter, setTypeFilter] = useState<string>("");
+  const limit = 50;
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(limit),
+        view: "events",
+      });
+      if (typeFilter) params.set("event_type", typeFilter);
+
+      const res = await fetch(`/api/admin/sync/notifications?${params}`);
+      if (res.ok) {
+        const data = (await res.json()) as { items: typeof items; total: number };
+        setItems(data.items);
+        setTotal(data.total);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setLoading(false);
+    }
+  }, [page, typeFilter]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [typeFilter]);
+
+  if (loading) {
+    return <TableSkeleton rows={10} cols={5} />;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value)}
+          className="text-xs border border-border rounded px-2 py-1 bg-background"
+        >
+          <option value="">All event types</option>
+          <option value="comment">Comment</option>
+          <option value="status_change">Status Change</option>
+          <option value="project_update">Project Update</option>
+          <option value="new_issue">New Issue</option>
+          <option value="cycle_update">Cycle Update</option>
+          <option value="initiative_update">Initiative Update</option>
+        </select>
+      </div>
+
+      {items.length === 0 ? (
+        <div className="border border-border rounded-lg p-8 bg-card text-center">
+          <Bell className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground">No notification events yet</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Events will appear as webhooks trigger notifications for hub-visible entities
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="border border-border rounded-lg overflow-hidden bg-card">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/30">
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Time</th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Type</th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Actor</th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Summary</th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Entity</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr
+                    key={item.id}
+                    className="border-b border-border last:border-b-0 hover:bg-accent/30 transition-colors"
+                  >
+                    <td className="px-3 py-2 text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                      {formatTime(item.created_at)}
+                    </td>
+                    <td className="px-3 py-2">
+                      <NotificationTypeBadge type={item.event_type} />
+                    </td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground truncate max-w-[120px]">
+                      {item.actor_name ?? "—"}
+                    </td>
+                    <td className="px-3 py-2 text-xs truncate max-w-[300px]" title={item.summary}>
+                      {item.summary}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground font-mono truncate max-w-[120px]">
+                      {item.entity_type}:{item.entity_id.slice(0, 8)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {Math.ceil(total / limit) > 1 && (
+            <Pagination page={page} totalPages={Math.ceil(total / limit)} onPageChange={setPage} />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function NotificationTypeBadge({ type }: { type: string }) {
+  const config: Record<string, { label: string; className: string }> = {
+    comment: { label: "Comment", className: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
+    status_change: { label: "Status", className: "bg-violet-500/10 text-violet-600 dark:text-violet-400" },
+    project_update: { label: "Project", className: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
+    new_issue: { label: "New Issue", className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
+    cycle_update: { label: "Cycle", className: "bg-orange-500/10 text-orange-600 dark:text-orange-400" },
+    initiative_update: { label: "Initiative", className: "bg-pink-500/10 text-pink-600 dark:text-pink-400" },
+  };
+
+  const cfg = config[type] ?? { label: type, className: "bg-muted text-muted-foreground" };
+
+  return (
+    <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium", cfg.className)}>
+      {cfg.label}
+    </span>
   );
 }
 
