@@ -739,7 +739,7 @@ function NotificationsTab({ hubMap }: { hubMap: Record<string, string> }) {
       {view === "emails" ? (
         <EmailQueueTable statusFilter={statusFilter} hubMap={hubMap} />
       ) : (
-        <NotificationEventsTable />
+        <NotificationEventsTable hubMap={hubMap} />
       )}
     </div>
   );
@@ -898,7 +898,7 @@ function EmailQueueTable({
   );
 }
 
-function NotificationEventsTable() {
+function NotificationEventsTable({ hubMap }: { hubMap: Record<string, string> }) {
   const [items, setItems] = useState<Array<{
     id: string;
     hub_id: string;
@@ -986,6 +986,7 @@ function NotificationEventsTable() {
                 <tr className="border-b border-border bg-muted/30">
                   <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Time</th>
                   <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Type</th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Hub</th>
                   <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Actor</th>
                   <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Summary</th>
                   <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Entity</th>
@@ -1002,6 +1003,9 @@ function NotificationEventsTable() {
                     </td>
                     <td className="px-3 py-2">
                       <NotificationTypeBadge type={item.event_type} />
+                    </td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground truncate max-w-[120px]">
+                      {hubMap[item.hub_id] ?? item.hub_id.slice(0, 8)}
                     </td>
                     <td className="px-3 py-2 text-xs text-muted-foreground truncate max-w-[120px]">
                       {item.actor_name ?? "—"}

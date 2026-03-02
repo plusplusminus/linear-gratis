@@ -1,4 +1,5 @@
 import { Resend } from 'resend'
+import { render } from '@react-email/render'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -11,13 +12,16 @@ export async function sendEmail(options: {
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const { to, subject, react } = options
 
+  // Pre-render to HTML to avoid React 19 incompatibility with Resend's internal renderer
+  const html = await render(react)
+
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const { data, error } = await resend.emails.send({
         from: FROM_EMAIL,
         to: Array.isArray(to) ? to : [to],
         subject,
-        react,
+        html,
       })
 
       if (error) {
