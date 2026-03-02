@@ -96,9 +96,7 @@ export async function isInitiativeVisibleToHub(
 
   for (const mapping of data) {
     const ids = mapping.visible_initiative_ids as string[];
-    if (!ids || ids.length === 0) {
-      return true;
-    }
+    if (!ids || ids.length === 0) continue;
     if (ids.includes(initiativeId)) return true;
   }
 
