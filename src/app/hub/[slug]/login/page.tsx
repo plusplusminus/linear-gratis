@@ -35,7 +35,7 @@ export default async function HubLoginPage({
     }
 
     // PPM admin — can access any hub without org auth
-    if (await isPPMAdmin(user.id)) {
+    if (await isPPMAdmin(user.id, user.email)) {
       redirect(`/hub/${slug}`);
     }
   }

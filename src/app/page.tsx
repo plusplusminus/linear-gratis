@@ -10,7 +10,7 @@ export default async function Home() {
 
   if (user) {
     // PPM admins go to the admin portal
-    if (await isPPMAdmin(user.id)) {
+    if (await isPPMAdmin(user.id, user.email)) {
       redirect('/admin')
     }
 

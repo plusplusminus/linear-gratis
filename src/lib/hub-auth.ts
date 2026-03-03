@@ -174,7 +174,7 @@ export async function withHubAuth(
   }
 
   // PPM admin bypass — admins can access any hub with full write access
-  const admin = await isPPMAdmin(user.id);
+  const admin = await isPPMAdmin(user.id, user.email);
   if (admin) {
     return { user, hubId, role: "admin" };
   }

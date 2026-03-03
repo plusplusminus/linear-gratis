@@ -25,7 +25,7 @@ export async function withAdminAuth(): Promise<AdminAuthResult> {
     return { error: "Unauthorized", status: 401 };
   }
 
-  const admin = await isPPMAdmin(user.id);
+  const admin = await isPPMAdmin(user.id, user.email);
   if (!admin) {
     return { error: "Forbidden", status: 403 };
   }

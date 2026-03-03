@@ -20,7 +20,7 @@ export default async function middleware(request: NextRequest) {
       return handleAuthkitHeaders(request, headers, { redirect: authorizationUrl })
     }
     if (session.user) {
-      const isAdmin = await lookupPPMAdmin(session.user.id)
+      const isAdmin = await lookupPPMAdmin(session.user.id, session.user.email)
       if (!isAdmin) {
         return new NextResponse('Forbidden', { status: 403 })
       }
@@ -43,7 +43,7 @@ export default async function middleware(request: NextRequest) {
     // If authenticated, verify org match or PPM admin status
     if (!isLoginPage && session.user) {
       // PPM admins can access any hub
-      const isAdmin = await lookupPPMAdmin(session.user.id)
+      const isAdmin = await lookupPPMAdmin(session.user.id, session.user.email)
       if (isAdmin) {
         return handleAuthkitHeaders(request, headers)
       }
