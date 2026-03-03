@@ -7,6 +7,7 @@ import {
   fetchHubMetadata,
   fetchHubCycles,
   fetchHubCycleStats,
+  fetchOverviewOnlyProjectIds,
 } from "@/lib/hub-read";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
@@ -75,8 +76,11 @@ export default async function TeamDashboardPage({
     stats: cycleStats[c.id],
   }));
 
-  // Fetch issues and metadata for the Issues tab
-  const projectIdList = projects.map((p) => p.id);
+  // Fetch issues and metadata for the Issues tab, excluding overview-only projects
+  const overviewOnlyIds = await fetchOverviewOnlyProjectIds(hub.id);
+  const projectIdList = projects
+    .filter((p) => !overviewOnlyIds.has(p.id))
+    .map((p) => p.id);
   const [issues, metadata] = await Promise.all([
     projectIdList.length > 0
       ? fetchHubRoadmapIssues(hub.id, projectIdList)

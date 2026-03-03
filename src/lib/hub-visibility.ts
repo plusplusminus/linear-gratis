@@ -49,8 +49,8 @@ export async function getAllActiveHubs(): Promise<HubInfo[]> {
 
 /**
  * Check if a project is visible to a specific hub.
- * A project is visible if it appears in any of the hub's team mappings' visible_project_ids,
- * or if no project filtering is configured (empty array = no filter).
+ * A project is visible if auto_include_projects is on for any mapping,
+ * or if it appears in any mapping's visible_project_ids.
  */
 export async function isProjectVisibleToHub(
   hubId: string,
@@ -58,22 +58,40 @@ export async function isProjectVisibleToHub(
 ): Promise<boolean> {
   const { data, error } = await supabaseAdmin
     .from("hub_team_mappings")
-    .select("visible_project_ids")
+    .select("visible_project_ids, auto_include_projects")
     .eq("hub_id", hubId)
     .eq("is_active", true);
 
   if (error || !data || data.length === 0) return false;
 
-  // If any mapping has an empty visible_project_ids array, there's no project filter
-  // for that team — project is visible. If all mappings have non-empty arrays,
-  // check if projectId is in the union.
   for (const mapping of data) {
+    if (mapping.auto_include_projects) return true;
     const ids = mapping.visible_project_ids as string[];
-    if (!ids || ids.length === 0) continue;
-    if (ids.includes(projectId)) return true;
+    if (ids && ids.includes(projectId)) return true;
   }
 
   return false;
+}
+
+/**
+ * Check if a project is overview-only in a hub (should not show issues/notifications).
+ */
+export async function isProjectOverviewOnlyInHub(
+  hubId: string,
+  projectId: string
+): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from("hub_team_mappings")
+    .select("overview_only_project_ids")
+    .eq("hub_id", hubId)
+    .eq("is_active", true);
+
+  if (error || !data || data.length === 0) return false;
+
+  return data.some((mapping) => {
+    const ids = mapping.overview_only_project_ids as string[];
+    return ids && ids.includes(projectId);
+  });
 }
 
 /**
