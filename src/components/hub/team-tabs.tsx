@@ -113,7 +113,8 @@ export function TeamTabs({
   const router = useRouter();
   const pathname = usePathname();
 
-  const activeTab = (searchParams.get("tab") as Tab) || "issues";
+  const requestedTab = (searchParams.get("tab") as Tab) || "issues";
+  const activeTab = requestedTab === "issues" && issues.length === 0 ? "projects" : requestedTab;
 
   function setTab(tab: Tab) {
     const params = new URLSearchParams(searchParams.toString());
@@ -139,7 +140,7 @@ export function TeamTabs({
       {/* Tab bar */}
       <div className="flex items-center gap-0 border-b border-border px-6 shrink-0">
         {TABS.filter((tab) => {
-          if (tab.key === "issues") return true;
+          if (tab.key === "issues") return issues.length > 0;
           if (tab.key === "activity") return true;
           if (tab.key === "projects") return projects.length > 0;
           if (tab.key === "cycles") return (cycleDetails?.length ?? 0) > 0;
