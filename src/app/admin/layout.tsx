@@ -15,7 +15,7 @@ export default async function AdminLayout({
   const { user } = await withAuth();
   if (!user) redirect("/login");
 
-  const isAdmin = await isPPMAdmin(user.id);
+  const isAdmin = await isPPMAdmin(user.id, user.email);
   if (!isAdmin) redirect("/");
 
   return (

@@ -38,7 +38,7 @@ export default async function HubLayout({
   }
 
   // PPM admins bypass all org/membership checks
-  const admin = await isPPMAdmin(user.id);
+  const admin = await isPPMAdmin(user.id, user.email);
 
   if (!admin) {
     // Client users: verify session org matches this hub
