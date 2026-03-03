@@ -32,7 +32,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
         updates.visible_project_ids = [];
       }
     }
-    if (body.visible_project_ids !== undefined) {
+    if (body.visible_project_ids !== undefined && body.auto_include_projects !== true) {
       updates.visible_project_ids = body.visible_project_ids;
     }
     if (body.visible_initiative_ids !== undefined) {

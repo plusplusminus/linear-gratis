@@ -73,7 +73,7 @@ function formatDate(dateStr: string): string {
 }
 
 export function ProjectOverview({ project }: ProjectOverviewProps) {
-  const hasMetadata = project.priority > 0 || project.health || project.lead || project.milestones.length > 0;
+  const hasMetadata = project.priority > 0 || project.health || project.lead;
   const hasContent = project.content || project.description;
 
   return (

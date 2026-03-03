@@ -414,20 +414,24 @@ function mergeProjectVisibility(
     return null;
   }
 
-  return mergeProjectVisibility(mappings);
+  return mergeVisibility(mappings, "visible_project_ids");
 }
 
 /**
- * Check if a project is marked as overview-only in any of the hub's team mappings.
+ * Check if a project is marked as overview-only for a specific team in the hub.
  * Overview-only projects show description/updates but not issues.
  */
 export async function isProjectOverviewOnly(
   hubId: string,
+  teamId: string,
   projectId: string
 ): Promise<boolean> {
   const mappings = await getHubMappings(hubId);
   return mappings.some(
-    (m) => m.overview_only_project_ids && m.overview_only_project_ids.includes(projectId)
+    (m) =>
+      m.linear_team_id === teamId &&
+      m.overview_only_project_ids &&
+      m.overview_only_project_ids.includes(projectId)
   );
 }
 
@@ -958,6 +962,11 @@ export async function fetchHubProjects(
   const teamIds = mappings.map((m) => m.linear_team_id);
   const allowedProjectIds = mergeProjectVisibility(mappings);
 
+  // Explicit empty array means no projects are allowed (auto-include off, none selected)
+  if (Array.isArray(allowedProjectIds) && allowedProjectIds.length === 0) {
+    return [];
+  }
+
   // Projects are linked to teams — fetch all, then filter
   let query = supabaseAdmin
     .from("synced_projects")
@@ -969,7 +978,7 @@ export async function fetchHubProjects(
     query = query.eq("status_name", options.statusName);
   }
 
-  if (allowedProjectIds && allowedProjectIds.length > 0) {
+  if (allowedProjectIds) {
     query = query.in("linear_id", allowedProjectIds);
   }
 
@@ -988,9 +997,9 @@ export async function fetchHubProjects(
       )
     )
     .filter((project) => {
-      // If we already filtered by specific allowedProjectIds, all are visible
-      if (allowedProjectIds && allowedProjectIds.length > 0) return true;
-      // Otherwise ensure the project has at least one team in the hub
+      // If we filtered by specific allowedProjectIds, all are visible
+      if (allowedProjectIds) return true;
+      // Otherwise (null = auto-include) ensure the project has at least one team in the hub
       return project.teams.some((t) => teamIds.includes(t.id));
     });
 }

@@ -271,6 +271,7 @@ function MappingCard({
               )}
               role="switch"
               aria-checked={autoInclude}
+              aria-label="Automatically include all projects"
             >
               <span
                 className={cn(
@@ -387,7 +388,7 @@ function ScopingBadges({
   return (
     <div className="flex items-center gap-1.5">
       <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 rounded bg-muted">
-        {autoInclude ? "Auto" : p === 0 ? "All" : p} proj
+        {autoInclude ? "Auto" : p === 0 ? "None" : p} proj
       </span>
       {overviewOnlyCount > 0 && (
         <span className="text-[10px] text-blue-500/80 px-1.5 py-0.5 rounded bg-blue-500/10">

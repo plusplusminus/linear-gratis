@@ -43,7 +43,10 @@ export function ProjectPicker({ teamId, value, onChange, label, description, ico
     return (
       <div className="border border-border rounded-lg bg-card">
         <div className="px-3 py-2 border-b border-border bg-muted/30">
-          <p className="text-xs font-medium text-foreground">Projects</p>
+          <p className="text-xs font-medium text-foreground flex items-center gap-1.5">
+            {icon}
+            {label ?? "Projects"}
+          </p>
         </div>
         <div className="px-3 py-4 text-center">
           <p className="text-xs text-muted-foreground">
@@ -58,6 +61,7 @@ export function ProjectPicker({ teamId, value, onChange, label, description, ico
     <PickerShell
       label={label ?? "Projects"}
       description={description}
+      icon={icon}
       loading={loading}
       error={error}
       onRetry={refetch}

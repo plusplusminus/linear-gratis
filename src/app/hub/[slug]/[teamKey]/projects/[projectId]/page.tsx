@@ -25,7 +25,7 @@ export default async function ProjectViewPage({
 
   const [allProjects, overviewOnly] = await Promise.all([
     fetchHubProjects(hub.id),
-    isProjectOverviewOnly(hub.id, projectId),
+    isProjectOverviewOnly(hub.id, team.id, projectId),
   ]);
 
   const project = allProjects.find((p) => p.id === projectId);
