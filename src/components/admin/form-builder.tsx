@@ -241,10 +241,12 @@ export function FormBuilder({ form, hubId, hubTeams }: FormBuilderProps) {
     }
   }, [targetTeamId, form?.target_team_id]);
 
-  // Field operations
-  const moveField = useCallback((index: number, direction: -1 | 1) => {
+  // Field operations — move by ID to avoid index mismatch with filtered lists
+  const moveFieldById = useCallback((id: string, direction: -1 | 1) => {
     setFields((prev) => {
       const next = [...prev];
+      const index = next.findIndex((f) => f.id === id);
+      if (index === -1) return prev;
       const target = index + direction;
       if (target < 0 || target >= next.length) return prev;
       [next[index], next[target]] = [next[target], next[index]];
@@ -655,6 +657,7 @@ export function FormBuilder({ form, hubId, hubTeams }: FormBuilderProps) {
               </div>
               <ToggleSwitch
                 label=""
+                aria-label="Allow submitters to set priority"
                 checked={fields.some((f) => f.linear_field === "priority")}
                 onChange={(enabled) => {
                   if (enabled) {
@@ -698,13 +701,20 @@ export function FormBuilder({ form, hubId, hubTeams }: FormBuilderProps) {
         <section className="border border-border rounded-lg bg-card">
           <div className="px-4 py-3 border-b border-border">
             <h2 className="text-sm font-semibold">Fields</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {fields.filter((f) => f.linear_field !== "priority").length} field{fields.filter((f) => f.linear_field !== "priority").length !== 1 ? "s" : ""}
-            </p>
+            {(() => {
+              const count = fields.filter((f) => f.linear_field !== "priority").length;
+              return (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {count} field{count !== 1 ? "s" : ""}
+                </p>
+              );
+            })()}
           </div>
 
           <div>
-            {fields.filter((f) => f.linear_field !== "priority").map((field, index) => {
+            {(() => {
+              const visibleFields = fields.filter((f) => f.linear_field !== "priority");
+              return visibleFields.map((field, index) => {
               const badge = FIELD_TYPE_BADGE[field.field_type] ?? FIELD_TYPE_BADGE.text;
               const isExpanded = expandedField === field.id;
               const hasOptions =
@@ -772,7 +782,7 @@ export function FormBuilder({ form, hubId, hubTeams }: FormBuilderProps) {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          moveField(index, -1);
+                          moveFieldById(field.id, -1);
                         }}
                         disabled={index === 0}
                         className={cn(
@@ -788,12 +798,12 @@ export function FormBuilder({ form, hubId, hubTeams }: FormBuilderProps) {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          moveField(index, 1);
+                          moveFieldById(field.id, 1);
                         }}
-                        disabled={index === fields.length - 1}
+                        disabled={index === visibleFields.length - 1}
                         className={cn(
                           "p-1 rounded transition-colors",
-                          index === fields.length - 1
+                          index === visibleFields.length - 1
                             ? "text-muted-foreground/30"
                             : "text-muted-foreground hover:text-foreground"
                         )}
@@ -970,7 +980,8 @@ export function FormBuilder({ form, hubId, hubTeams }: FormBuilderProps) {
                   )}
                 </div>
               );
-            })}
+            });
+            })()}
           </div>
 
           {/* Add field */}
@@ -1126,6 +1137,7 @@ function LabelPicker({
                   e.stopPropagation();
                   toggle(label.id);
                 }}
+                aria-label={`Remove ${label.name}`}
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
                 <X className="w-3 h-3" />
@@ -1191,10 +1203,12 @@ function ToggleSwitch({
   label,
   checked,
   onChange,
+  "aria-label": ariaLabel,
 }: {
   label: string;
   checked: boolean;
   onChange: (v: boolean) => void;
+  "aria-label"?: string;
 }) {
   return (
     <label className="flex items-center gap-2 cursor-pointer">
@@ -1202,6 +1216,7 @@ function ToggleSwitch({
         type="button"
         role="switch"
         aria-checked={checked}
+        aria-label={ariaLabel || label || undefined}
         onClick={() => onChange(!checked)}
         className={cn(
           "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",

@@ -71,6 +71,11 @@ export async function GET(
  * enabled per-hub via hub_form_config.
  */
 export async function POST() {
+  const auth = await withAdminAuth();
+  if ("error" in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   return NextResponse.json(
     { error: "Hub-specific form creation is no longer supported. Create global forms instead." },
     { status: 400 }
