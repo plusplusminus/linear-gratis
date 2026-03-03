@@ -47,6 +47,15 @@ export function ProjectTabs({
   projectId,
   hubId,
 }: ProjectTabsProps) {
+  const hasOverviewContent =
+    isOverviewOnly ||
+    !!project.content ||
+    !!project.description ||
+    project.priority > 0 ||
+    !!project.health ||
+    !!project.lead ||
+    project.milestones.length > 0;
+
   const [activeTab, setActiveTab] = useState<Tab>(
     isOverviewOnly ? "overview" : "issues"
   );
@@ -54,13 +63,16 @@ export function ProjectTabs({
   const tabs: { id: Tab; label: string; count?: number }[] = isOverviewOnly
     ? [{ id: "overview", label: "Overview" }]
     : [
-        { id: "overview", label: "Overview" },
+        ...(hasOverviewContent
+          ? [{ id: "overview" as const, label: "Overview" }]
+          : []),
         { id: "issues", label: "Issues", count: issues.length },
       ];
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* Tab bar */}
+      {/* Tab bar — hide when only one tab */}
+      {tabs.length > 1 && (
       <div className="flex items-center gap-0 px-6 border-b border-border">
         {tabs.map((tab) => (
           <button
@@ -82,6 +94,7 @@ export function ProjectTabs({
           </button>
         ))}
       </div>
+      )}
 
       {/* Tab content */}
       {activeTab === "overview" && (
