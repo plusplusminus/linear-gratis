@@ -20,9 +20,12 @@ interface ProjectPickerProps {
   teamId: string | null;
   value: string[];
   onChange: (ids: string[]) => void;
+  label?: string;
+  description?: string;
+  icon?: React.ReactNode;
 }
 
-export function ProjectPicker({ teamId, value, onChange }: ProjectPickerProps) {
+export function ProjectPicker({ teamId, value, onChange, label, description, icon }: ProjectPickerProps) {
   const { data, loading, error, refetch } = useFetch<SyncedProject[]>(
     teamId ? `/api/admin/linear/teams/${teamId}/projects` : null,
     { enabled: !!teamId }
@@ -53,7 +56,8 @@ export function ProjectPicker({ teamId, value, onChange }: ProjectPickerProps) {
 
   return (
     <PickerShell
-      label="Projects"
+      label={label ?? "Projects"}
+      description={description}
       loading={loading}
       error={error}
       onRetry={refetch}

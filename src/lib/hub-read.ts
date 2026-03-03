@@ -53,6 +53,7 @@ type ProjectData = {
   id?: string;
   name?: string;
   description?: string;
+  content?: string;
   icon?: string;
   color?: string;
   url?: string;
@@ -232,6 +233,7 @@ export function mapRowToProject(row: {
     id: d.id ?? row.linear_id,
     name: d.name ?? "",
     description: d.description ?? undefined,
+    content: d.content ?? undefined,
     icon: d.icon ?? undefined,
     color: d.color ?? undefined,
     url: d.url ?? "",
@@ -400,6 +402,51 @@ function mergeVisibility(
 }
 
 /**
+ * Merge project visibility, taking auto_include_projects into account.
+ * If ANY mapping has auto_include_projects = true, return null (no filter for that team's projects).
+ * Otherwise merge visible_project_ids as before.
+ */
+function mergeProjectVisibility(
+  mappings: HubTeamMapping[]
+): string[] | null {
+  // If any mapping auto-includes all projects, we can't filter at DB level
+  if (mappings.some((m) => m.auto_include_projects)) {
+    return null;
+  }
+
+  return mergeProjectVisibility(mappings);
+}
+
+/**
+ * Check if a project is marked as overview-only in any of the hub's team mappings.
+ * Overview-only projects show description/updates but not issues.
+ */
+export async function isProjectOverviewOnly(
+  hubId: string,
+  projectId: string
+): Promise<boolean> {
+  const mappings = await getHubMappings(hubId);
+  return mappings.some(
+    (m) => m.overview_only_project_ids && m.overview_only_project_ids.includes(projectId)
+  );
+}
+
+/**
+ * Get the set of overview-only project IDs across all team mappings for a hub.
+ */
+export function getOverviewOnlyProjectIds(
+  mappings: HubTeamMapping[]
+): Set<string> {
+  const ids = new Set<string>();
+  for (const m of mappings) {
+    if (m.overview_only_project_ids) {
+      for (const id of m.overview_only_project_ids) ids.add(id);
+    }
+  }
+  return ids;
+}
+
+/**
  * Strip assignee data from a LinearIssue (clients should not see assignees).
  */
 function stripAssignee<T extends LinearIssue>(issue: T): T {
@@ -472,7 +519,7 @@ export async function fetchHubIssues(
   if (mappings.length === 0) return [];
 
   const teamIds = mappings.map((m) => m.linear_team_id);
-  const allowedProjectIds = mergeVisibility(mappings, "visible_project_ids");
+  const allowedProjectIds = mergeProjectVisibility(mappings);
 
   // If a specific teamId is requested, verify it belongs to this hub
   if (options?.teamId && !teamIds.includes(options.teamId)) {
@@ -573,7 +620,7 @@ export async function fetchHubRoadmapIssues(
   const mappings = await getHubMappings(hubId);
   if (mappings.length === 0) return [];
 
-  const allowedProjectIds = mergeVisibility(mappings, "visible_project_ids");
+  const allowedProjectIds = mergeProjectVisibility(mappings);
 
   // Filter requested projectIds to only those visible in the hub
   const filteredProjectIds = allowedProjectIds
@@ -881,7 +928,7 @@ export async function fetchHubTeamStats(hubId: string) {
   }
 
   // Count projects per team (projects have teams array in data)
-  const allowedProjectIds = mergeVisibility(mappings, "visible_project_ids");
+  const allowedProjectIds = mergeProjectVisibility(mappings);
   for (const proj of projects || []) {
     if (allowedProjectIds && !allowedProjectIds.includes(proj.linear_id)) continue;
     const d = proj.data as Record<string, unknown>;
@@ -909,7 +956,7 @@ export async function fetchHubProjects(
   if (mappings.length === 0) return [];
 
   const teamIds = mappings.map((m) => m.linear_team_id);
-  const allowedProjectIds = mergeVisibility(mappings, "visible_project_ids");
+  const allowedProjectIds = mergeProjectVisibility(mappings);
 
   // Projects are linked to teams — fetch all, then filter
   let query = supabaseAdmin
@@ -922,7 +969,7 @@ export async function fetchHubProjects(
     query = query.eq("status_name", options.statusName);
   }
 
-  if (allowedProjectIds) {
+  if (allowedProjectIds && allowedProjectIds.length > 0) {
     query = query.in("linear_id", allowedProjectIds);
   }
 
@@ -941,8 +988,8 @@ export async function fetchHubProjects(
       )
     )
     .filter((project) => {
-      // If we already filtered by allowedProjectIds, all are visible
-      if (allowedProjectIds) return true;
+      // If we already filtered by specific allowedProjectIds, all are visible
+      if (allowedProjectIds && allowedProjectIds.length > 0) return true;
       // Otherwise ensure the project has at least one team in the hub
       return project.teams.some((t) => teamIds.includes(t.id));
     });

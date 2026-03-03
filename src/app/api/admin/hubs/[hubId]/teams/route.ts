@@ -65,6 +65,8 @@ export async function POST(
       visible_initiative_ids?: string[];
       visible_label_ids?: string[];
       hidden_label_ids?: string[];
+      auto_include_projects?: boolean;
+      overview_only_project_ids?: string[];
     };
 
     if (!body.linear_team_id || typeof body.linear_team_id !== "string") {
@@ -106,10 +108,12 @@ export async function POST(
         hub_id: hubId,
         linear_team_id: body.linear_team_id,
         linear_team_name: team?.name ?? null,
+        auto_include_projects: body.auto_include_projects ?? false,
         visible_project_ids: body.visible_project_ids ?? [],
         visible_initiative_ids: body.visible_initiative_ids ?? [],
         visible_label_ids: body.visible_label_ids ?? [],
         hidden_label_ids: body.hidden_label_ids ?? [],
+        overview_only_project_ids: body.overview_only_project_ids ?? [],
       })
       .select()
       .single();

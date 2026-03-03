@@ -25,6 +25,8 @@ export default async function HubSettingsPage({
     visible_initiative_ids: string[];
     visible_label_ids: string[];
     hidden_label_ids: string[];
+    auto_include_projects: boolean;
+    overview_only_project_ids: string[];
     is_active: boolean;
   }>;
 

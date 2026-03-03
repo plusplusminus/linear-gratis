@@ -266,6 +266,8 @@ export type HubTeamMapping = {
   visible_initiative_ids: string[]
   visible_label_ids: string[]
   hidden_label_ids: string[]
+  auto_include_projects: boolean
+  overview_only_project_ids: string[]
   is_active: boolean
   created_at: string
   updated_at: string
