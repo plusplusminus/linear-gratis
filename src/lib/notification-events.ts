@@ -3,6 +3,7 @@ import {
   getHubsForTeam,
   getAllActiveHubs,
   isProjectVisibleToHub,
+  isProjectOverviewOnlyInHub,
   isInitiativeVisibleToHub,
   type HubInfo,
 } from "@/lib/hub-visibility";
@@ -472,16 +473,22 @@ async function filterHubsByVisibility(
   type: string,
   data: Record<string, unknown>
 ): Promise<HubInfo[]> {
-  if (type === "Issue") {
-    const projectId = (data.project as { id?: string })?.id ?? (data.projectId as string);
+  // For issues and comments, skip notifications when the project is overview-only
+  if (type === "Issue" || type === "Comment") {
+    const projectId = type === "Issue"
+      ? (data.project as { id?: string })?.id ?? (data.projectId as string)
+      : (data.issue as { project?: { id?: string } })?.project?.id;
+
     if (projectId) {
       const results = await Promise.all(
-        hubs.map(async (hub) => ({
-          hub,
-          visible: await isProjectVisibleToHub(hub.id, projectId),
-        }))
+        hubs.map(async (hub) => {
+          const visible = await isProjectVisibleToHub(hub.id, projectId);
+          if (!visible) return { hub, include: false };
+          const overviewOnly = await isProjectOverviewOnlyInHub(hub.id, projectId);
+          return { hub, include: !overviewOnly };
+        })
       );
-      return results.filter((r) => r.visible).map((r) => r.hub);
+      return results.filter((r) => r.include).map((r) => r.hub);
     }
     // No project — visible to all team-mapped hubs
     return hubs;
@@ -499,7 +506,7 @@ async function filterHubsByVisibility(
     return results.filter((r) => r.visible).map((r) => r.hub);
   }
 
-  // Projects, Cycles, Comments — visible to all hubs for that team
+  // Projects, Cycles — visible to all hubs for that team
   return hubs;
 }
 

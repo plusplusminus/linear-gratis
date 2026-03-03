@@ -451,6 +451,16 @@ export function getOverviewOnlyProjectIds(
 }
 
 /**
+ * Fetch the set of overview-only project IDs for a hub.
+ */
+export async function fetchOverviewOnlyProjectIds(
+  hubId: string
+): Promise<Set<string>> {
+  const mappings = await getHubMappings(hubId);
+  return getOverviewOnlyProjectIds(mappings);
+}
+
+/**
  * Strip assignee data from a LinearIssue (clients should not see assignees).
  */
 function stripAssignee<T extends LinearIssue>(issue: T): T {
