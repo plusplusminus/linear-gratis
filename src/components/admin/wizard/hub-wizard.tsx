@@ -5,37 +5,22 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { StepName } from "./step-name";
 import { StepTeams } from "./step-teams";
-import { StepScoping } from "./step-scoping";
 import { StepReview } from "./step-review";
 import { cn } from "@/lib/utils";
 import { refreshAdminHubs } from "@/hooks/use-admin-hubs";
-
-export interface TeamScoping {
-  teamId: string;
-  teamName: string;
-  visibleProjectIds: string[];
-  visibleInitiativeIds: string[];
-  visibleLabelIds: string[];
-}
 
 export interface WizardState {
   step: number;
   name: string;
   selectedTeamIds: string[];
-  teamScopings: Record<string, TeamScoping>;
+  teamNames: Record<string, string>;
 }
 
 type WizardAction =
   | { type: "SET_STEP"; step: number }
   | { type: "SET_NAME"; name: string }
   | { type: "SET_TEAMS"; teamIds: string[] }
-  | { type: "SET_TEAM_NAME"; teamId: string; teamName: string }
-  | {
-      type: "SET_SCOPING";
-      teamId: string;
-      field: "visibleProjectIds" | "visibleInitiativeIds" | "visibleLabelIds";
-      value: string[];
-    };
+  | { type: "SET_TEAM_NAME"; teamId: string; teamName: string };
 
 function reducer(state: WizardState, action: WizardAction): WizardState {
   switch (action.type) {
@@ -44,45 +29,18 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
     case "SET_NAME":
       return { ...state, name: action.name };
     case "SET_TEAMS": {
-      // Clean up scopings for deselected teams
-      const scopings = { ...state.teamScopings };
-      for (const id of Object.keys(scopings)) {
-        if (!action.teamIds.includes(id)) delete scopings[id];
+      const names = { ...state.teamNames };
+      for (const id of Object.keys(names)) {
+        if (!action.teamIds.includes(id)) delete names[id];
       }
-      // Initialize new scopings
-      for (const id of action.teamIds) {
-        if (!scopings[id]) {
-          scopings[id] = {
-            teamId: id,
-            teamName: "",
-            visibleProjectIds: [],
-            visibleInitiativeIds: [],
-            visibleLabelIds: [],
-          };
-        }
-      }
-      return { ...state, selectedTeamIds: action.teamIds, teamScopings: scopings };
+      return { ...state, selectedTeamIds: action.teamIds, teamNames: names };
     }
     case "SET_TEAM_NAME":
       return {
         ...state,
-        teamScopings: {
-          ...state.teamScopings,
-          [action.teamId]: {
-            ...state.teamScopings[action.teamId],
-            teamName: action.teamName,
-          },
-        },
-      };
-    case "SET_SCOPING":
-      return {
-        ...state,
-        teamScopings: {
-          ...state.teamScopings,
-          [action.teamId]: {
-            ...state.teamScopings[action.teamId],
-            [action.field]: action.value,
-          },
+        teamNames: {
+          ...state.teamNames,
+          [action.teamId]: action.teamName,
         },
       };
     default:
@@ -90,7 +48,7 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
   }
 }
 
-const STEPS = ["Hub Name", "Select Teams", "Scoping", "Review"];
+const STEPS = ["Hub Name", "Select Teams", "Review"];
 
 export function HubWizard() {
   const router = useRouter();
@@ -101,7 +59,7 @@ export function HubWizard() {
     step: 0,
     name: "",
     selectedTeamIds: [],
-    teamScopings: {},
+    teamNames: {},
   });
 
   const canNext =
@@ -111,42 +69,8 @@ export function HubWizard() {
         ? state.selectedTeamIds.length > 0
         : true;
 
-  async function next() {
+  function next() {
     if (state.step >= STEPS.length - 1) return;
-
-    // When moving from teams → scoping, sync the selected teams first
-    if (state.step === 1) {
-      setSyncing(true);
-      try {
-        const res = await fetch("/api/admin/sync/teams", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ teamIds: state.selectedTeamIds }),
-        });
-
-        if (!res.ok) {
-          const err = (await res.json()) as { error?: string };
-          throw new Error(err.error ?? "Sync failed");
-        }
-
-        const data = (await res.json()) as {
-          teamCount: number;
-          projectCount: number;
-          initiativeCount: number;
-        };
-
-        toast.success(
-          `Synced ${data.teamCount} teams, ${data.projectCount} projects, ${data.initiativeCount} initiatives`
-        );
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed to sync teams");
-        setSyncing(false);
-        return;
-      } finally {
-        setSyncing(false);
-      }
-    }
-
     dispatch({ type: "SET_STEP", step: state.step + 1 });
   }
 
@@ -159,7 +83,21 @@ export function HubWizard() {
   async function submit() {
     startTransition(async () => {
       try {
-        // 1. Create the hub
+        // 1. Sync the selected teams so synced_teams data is available
+        setSyncing(true);
+        const syncRes = await fetch("/api/admin/sync/teams", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ teamIds: state.selectedTeamIds }),
+        });
+
+        if (!syncRes.ok) {
+          const err = (await syncRes.json()) as { error?: string };
+          throw new Error(err.error ?? "Sync failed");
+        }
+        setSyncing(false);
+
+        // 2. Create the hub
         const hubRes = await fetch("/api/admin/hubs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -173,26 +111,20 @@ export function HubWizard() {
 
         const hub = (await hubRes.json()) as { id: string };
 
-        // 2. Add team mappings with scoping
+        // 3. Add team mappings (scoping defaults to "show all", configurable in hub settings)
         const teamErrors: string[] = [];
 
         for (const teamId of state.selectedTeamIds) {
-          const scoping = state.teamScopings[teamId];
           const teamRes = await fetch(`/api/admin/hubs/${hub.id}/teams`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              linear_team_id: teamId,
-              visible_project_ids: scoping?.visibleProjectIds ?? [],
-              visible_initiative_ids: scoping?.visibleInitiativeIds ?? [],
-              visible_label_ids: scoping?.visibleLabelIds ?? [],
-            }),
+            body: JSON.stringify({ linear_team_id: teamId }),
           });
 
           if (!teamRes.ok) {
             const err = (await teamRes.json()) as { error?: string };
             teamErrors.push(
-              `Team ${scoping?.teamName || teamId}: ${err.error ?? "Failed"}`
+              `Team ${state.teamNames[teamId] || teamId}: ${err.error ?? "Failed"}`
             );
           }
         }
@@ -209,6 +141,7 @@ export function HubWizard() {
         router.push(`/admin/hubs/${hub.id}`);
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Failed to create hub");
+        setSyncing(false);
       }
     });
   }
@@ -271,16 +204,7 @@ export function HubWizard() {
             }
           />
         )}
-        {state.step === 2 && (
-          <StepScoping
-            teamIds={state.selectedTeamIds}
-            teamScopings={state.teamScopings}
-            onScopingChange={(teamId, field, value) =>
-              dispatch({ type: "SET_SCOPING", teamId, field, value })
-            }
-          />
-        )}
-        {state.step === 3 && <StepReview state={state} />}
+        {state.step === 2 && <StepReview state={state} />}
       </div>
 
       {/* Navigation */}
@@ -301,23 +225,23 @@ export function HubWizard() {
         {state.step < STEPS.length - 1 ? (
           <button
             onClick={next}
-            disabled={!canNext || syncing}
+            disabled={!canNext}
             className={cn(
               "px-4 py-2 text-sm font-medium rounded-md transition-colors",
-              canNext && !syncing
+              canNext
                 ? "bg-primary text-primary-foreground hover:bg-primary/90"
                 : "bg-muted text-muted-foreground cursor-not-allowed"
             )}
           >
-            {syncing ? "Syncing teams..." : "Next"}
+            Next
           </button>
         ) : (
           <button
             onClick={submit}
-            disabled={isPending}
+            disabled={isPending || syncing}
             className="px-4 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
-            {isPending ? "Creating..." : "Create Hub"}
+            {syncing ? "Syncing teams..." : isPending ? "Creating..." : "Create Hub"}
           </button>
         )}
       </div>
