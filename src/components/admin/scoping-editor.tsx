@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { TeamPicker, ProjectPicker, LabelPicker, InitiativePicker } from "./pickers";
-import { Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronRight, Eye } from "lucide-react";
 import { WorkflowRules } from "./workflow-rules";
 
 interface TeamMapping {
@@ -16,8 +16,15 @@ interface TeamMapping {
   visible_initiative_ids: string[];
   visible_label_ids: string[];
   hidden_label_ids: string[];
+  auto_include_projects: boolean;
+  overview_only_project_ids: string[];
   is_active: boolean;
 }
+
+type ScopingUpdates = Partial<Pick<TeamMapping,
+  "visible_project_ids" | "visible_initiative_ids" | "visible_label_ids" |
+  "hidden_label_ids" | "auto_include_projects" | "overview_only_project_ids"
+>>;
 
 interface ScopingEditorProps {
   hubId: string;
@@ -33,7 +40,7 @@ export function ScopingEditor({ hubId, mappings }: ScopingEditorProps) {
   const [showAddTeam, setShowAddTeam] = useState(false);
   const [addingTeamIds, setAddingTeamIds] = useState<string[]>([]);
 
-  function saveMapping(mapping: TeamMapping, updates: Partial<Pick<TeamMapping, "visible_project_ids" | "visible_initiative_ids" | "visible_label_ids" | "hidden_label_ids">>) {
+  function saveMapping(mapping: TeamMapping, updates: ScopingUpdates) {
     startTransition(async () => {
       try {
         const res = await fetch(
@@ -196,17 +203,21 @@ function MappingCard({
   mapping: TeamMapping;
   expanded: boolean;
   onToggle: () => void;
-  onSave: (updates: Partial<Pick<TeamMapping, "visible_project_ids" | "visible_initiative_ids" | "visible_label_ids" | "hidden_label_ids">>) => void;
+  onSave: (updates: ScopingUpdates) => void;
   onRemove: () => void;
   isPending: boolean;
 }) {
+  const [autoInclude, setAutoInclude] = useState(mapping.auto_include_projects);
   const [projectIds, setProjectIds] = useState(mapping.visible_project_ids);
+  const [overviewOnlyIds, setOverviewOnlyIds] = useState(mapping.overview_only_project_ids);
   const [initiativeIds, setInitiativeIds] = useState(mapping.visible_initiative_ids);
   const [labelIds, setLabelIds] = useState(mapping.visible_label_ids);
   const [hiddenLabelIds, setHiddenLabelIds] = useState(mapping.hidden_label_ids);
 
   const hasChanges =
+    autoInclude !== mapping.auto_include_projects ||
     JSON.stringify(projectIds) !== JSON.stringify(mapping.visible_project_ids) ||
+    JSON.stringify(overviewOnlyIds) !== JSON.stringify(mapping.overview_only_project_ids) ||
     JSON.stringify(initiativeIds) !== JSON.stringify(mapping.visible_initiative_ids) ||
     JSON.stringify(labelIds) !== JSON.stringify(mapping.visible_label_ids) ||
     JSON.stringify(hiddenLabelIds) !== JSON.stringify(mapping.hidden_label_ids);
@@ -226,7 +237,7 @@ function MappingCard({
           {mapping.linear_team_name ?? mapping.linear_team_id}
         </button>
         <div className="flex items-center gap-2">
-          <ScopingBadges mapping={mapping} />
+          <ScopingBadges mapping={mapping} autoInclude={autoInclude} overviewOnlyCount={overviewOnlyIds.length} />
           <button
             onClick={onRemove}
             disabled={isPending}
@@ -240,11 +251,58 @@ function MappingCard({
 
       {expanded && (
         <div className="border-t border-border px-4 py-4 space-y-4">
-          <ProjectPicker
-            teamId={mapping.linear_team_id}
-            value={projectIds}
-            onChange={setProjectIds}
-          />
+          {/* Auto-include toggle */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Show all projects</p>
+              <p className="text-xs text-muted-foreground">
+                Automatically include all projects, including newly created ones.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                const next = !autoInclude;
+                setAutoInclude(next);
+                if (next) setProjectIds([]);
+              }}
+              className={cn(
+                "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
+                autoInclude ? "bg-primary" : "bg-muted"
+              )}
+              role="switch"
+              aria-checked={autoInclude}
+              aria-label="Automatically include all projects"
+            >
+              <span
+                className={cn(
+                  "pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow-sm ring-0 transition-transform",
+                  autoInclude ? "translate-x-4" : "translate-x-0"
+                )}
+              />
+            </button>
+          </div>
+
+          {/* Project picker — hidden when auto-include is on */}
+          {!autoInclude && (
+            <ProjectPicker
+              teamId={mapping.linear_team_id}
+              value={projectIds}
+              onChange={setProjectIds}
+            />
+          )}
+
+          {/* Overview-only projects */}
+          <div>
+            <ProjectPicker
+              teamId={mapping.linear_team_id}
+              value={overviewOnlyIds}
+              onChange={setOverviewOnlyIds}
+              label="Overview-only projects"
+              description="These projects will show their description and updates but not individual issues."
+              icon={<Eye className="w-3.5 h-3.5 text-muted-foreground" />}
+            />
+          </div>
+
           <LabelPicker
             teamId={mapping.linear_team_id}
             value={labelIds}
@@ -279,7 +337,9 @@ function MappingCard({
               <button
                 onClick={() =>
                   onSave({
-                    visible_project_ids: projectIds,
+                    auto_include_projects: autoInclude,
+                    visible_project_ids: autoInclude ? [] : projectIds,
+                    overview_only_project_ids: overviewOnlyIds,
                     visible_initiative_ids: initiativeIds,
                     visible_label_ids: labelIds,
                     hidden_label_ids: hiddenLabelIds,
@@ -292,7 +352,9 @@ function MappingCard({
               </button>
               <button
                 onClick={() => {
+                  setAutoInclude(mapping.auto_include_projects);
                   setProjectIds(mapping.visible_project_ids);
+                  setOverviewOnlyIds(mapping.overview_only_project_ids);
                   setInitiativeIds(mapping.visible_initiative_ids);
                   setLabelIds(mapping.visible_label_ids);
                   setHiddenLabelIds(mapping.hidden_label_ids);
@@ -309,7 +371,15 @@ function MappingCard({
   );
 }
 
-function ScopingBadges({ mapping }: { mapping: TeamMapping }) {
+function ScopingBadges({
+  mapping,
+  autoInclude,
+  overviewOnlyCount,
+}: {
+  mapping: TeamMapping;
+  autoInclude: boolean;
+  overviewOnlyCount: number;
+}) {
   const p = mapping.visible_project_ids.length;
   const l = mapping.visible_label_ids.length;
   const h = mapping.hidden_label_ids.length;
@@ -318,8 +388,13 @@ function ScopingBadges({ mapping }: { mapping: TeamMapping }) {
   return (
     <div className="flex items-center gap-1.5">
       <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 rounded bg-muted">
-        {p === 0 ? "All" : p} proj
+        {autoInclude ? "Auto" : p === 0 ? "None" : p} proj
       </span>
+      {overviewOnlyCount > 0 && (
+        <span className="text-[10px] text-blue-500/80 px-1.5 py-0.5 rounded bg-blue-500/10">
+          {overviewOnlyCount} overview
+        </span>
+      )}
       <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 rounded bg-muted">
         {l === 0 ? "All" : l} labels
       </span>

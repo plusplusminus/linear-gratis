@@ -4,11 +4,11 @@ import {
   fetchHubProjects,
   fetchHubRoadmapIssues,
   fetchHubMetadata,
+  isProjectOverviewOnly,
 } from "@/lib/hub-read";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { ProjectIssueList } from "@/components/hub/project-issue-list";
-import { ProjectUpdates } from "@/components/hub/project-updates";
+import { ProjectTabs } from "@/components/hub/project-tabs";
 
 export default async function ProjectViewPage({
   params,
@@ -23,14 +23,21 @@ export default async function ProjectViewPage({
   const team = teams.find((t) => t.key === teamKey);
   if (!team) notFound();
 
-  const [allProjects, issues, metadata] = await Promise.all([
+  const [allProjects, overviewOnly] = await Promise.all([
     fetchHubProjects(hub.id),
-    fetchHubRoadmapIssues(hub.id, [projectId]),
-    fetchHubMetadata(hub.id, { projectId, teamId: team.id }),
+    isProjectOverviewOnly(hub.id, team.id, projectId),
   ]);
 
   const project = allProjects.find((p) => p.id === projectId);
   if (!project) notFound();
+
+  // Only fetch issues and metadata if the project is not overview-only
+  const [issues, metadata] = overviewOnly
+    ? [[], { states: [], labels: [], cycles: [] }]
+    : await Promise.all([
+        fetchHubRoadmapIssues(hub.id, [projectId]),
+        fetchHubMetadata(hub.id, { projectId, teamId: team.id }),
+      ]);
 
   return (
     <div className="flex flex-col h-full">
@@ -54,7 +61,7 @@ export default async function ProjectViewPage({
       </div>
 
       {/* Project header */}
-      <div className="px-6 pb-4 border-b border-border">
+      <div className="px-6 pb-4">
         <div className="flex items-center gap-3 mb-2">
           <div
             className="w-3 h-3 rounded-full shrink-0"
@@ -93,23 +100,18 @@ export default async function ProjectViewPage({
             </span>
           )}
 
-          <span className="text-[10px] text-muted-foreground">
-            {issues.length} {issues.length === 1 ? "issue" : "issues"}
-          </span>
+          {!overviewOnly && (
+            <span className="text-[10px] text-muted-foreground">
+              {issues.length} {issues.length === 1 ? "issue" : "issues"}
+            </span>
+          )}
         </div>
-
-        {project.description && (
-          <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
-            {project.description}
-          </p>
-        )}
       </div>
 
-      {/* Project Updates */}
-      <ProjectUpdates hubId={hub.id} projectId={projectId} />
-
-      {/* Issue list (client component for interactive filtering) */}
-      <ProjectIssueList
+      {/* Tabbed content */}
+      <ProjectTabs
+        project={project}
+        isOverviewOnly={overviewOnly}
         issues={issues}
         states={metadata.states}
         labels={metadata.labels}

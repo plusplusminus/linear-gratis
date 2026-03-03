@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 interface PickerShellProps {
   label: string;
   description?: string;
+  icon?: React.ReactNode;
   loading: boolean;
   error: string | null;
   onRetry?: () => void;
@@ -19,6 +20,7 @@ interface PickerShellProps {
 export function PickerShell({
   label,
   description,
+  icon,
   loading,
   error,
   onRetry,
@@ -32,7 +34,10 @@ export function PickerShell({
   return (
     <div className="border border-border rounded-lg overflow-hidden bg-card">
       <div className="px-3 py-2 border-b border-border bg-muted/30">
-        <p className="text-xs font-medium text-foreground">{label}</p>
+        <p className="text-xs font-medium text-foreground flex items-center gap-1.5">
+          {icon}
+          {label}
+        </p>
         {description && (
           <p className="text-[10px] text-muted-foreground mt-0.5">{description}</p>
         )}

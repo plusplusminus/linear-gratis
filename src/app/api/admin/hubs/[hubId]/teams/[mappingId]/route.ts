@@ -19,11 +19,20 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       visible_initiative_ids?: string[];
       visible_label_ids?: string[];
       hidden_label_ids?: string[];
+      auto_include_projects?: boolean;
+      overview_only_project_ids?: string[];
       is_active?: boolean;
     };
 
     const updates: Record<string, unknown> = {};
-    if (body.visible_project_ids !== undefined) {
+    if (body.auto_include_projects !== undefined) {
+      updates.auto_include_projects = body.auto_include_projects;
+      // When enabling auto-include, clear visible_project_ids to avoid stale data
+      if (body.auto_include_projects) {
+        updates.visible_project_ids = [];
+      }
+    }
+    if (body.visible_project_ids !== undefined && body.auto_include_projects !== true) {
       updates.visible_project_ids = body.visible_project_ids;
     }
     if (body.visible_initiative_ids !== undefined) {
@@ -34,6 +43,9 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     }
     if (body.hidden_label_ids !== undefined) {
       updates.hidden_label_ids = body.hidden_label_ids;
+    }
+    if (body.overview_only_project_ids !== undefined) {
+      updates.overview_only_project_ids = body.overview_only_project_ids;
     }
     if (body.is_active !== undefined) {
       updates.is_active = body.is_active;

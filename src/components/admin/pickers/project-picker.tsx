@@ -20,9 +20,12 @@ interface ProjectPickerProps {
   teamId: string | null;
   value: string[];
   onChange: (ids: string[]) => void;
+  label?: string;
+  description?: string;
+  icon?: React.ReactNode;
 }
 
-export function ProjectPicker({ teamId, value, onChange }: ProjectPickerProps) {
+export function ProjectPicker({ teamId, value, onChange, label, description, icon }: ProjectPickerProps) {
   const { data, loading, error, refetch } = useFetch<SyncedProject[]>(
     teamId ? `/api/admin/linear/teams/${teamId}/projects` : null,
     { enabled: !!teamId }
@@ -40,7 +43,10 @@ export function ProjectPicker({ teamId, value, onChange }: ProjectPickerProps) {
     return (
       <div className="border border-border rounded-lg bg-card">
         <div className="px-3 py-2 border-b border-border bg-muted/30">
-          <p className="text-xs font-medium text-foreground">Projects</p>
+          <p className="text-xs font-medium text-foreground flex items-center gap-1.5">
+            {icon}
+            {label ?? "Projects"}
+          </p>
         </div>
         <div className="px-3 py-4 text-center">
           <p className="text-xs text-muted-foreground">
@@ -53,7 +59,9 @@ export function ProjectPicker({ teamId, value, onChange }: ProjectPickerProps) {
 
   return (
     <PickerShell
-      label="Projects"
+      label={label ?? "Projects"}
+      description={description}
+      icon={icon}
       loading={loading}
       error={error}
       onRetry={refetch}

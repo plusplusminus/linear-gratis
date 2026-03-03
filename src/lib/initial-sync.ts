@@ -107,6 +107,7 @@ const PROJECTS_QUERY = `
         id
         name
         description
+        content
         icon
         color
         url
