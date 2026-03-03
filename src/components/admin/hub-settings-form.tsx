@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { useFetch } from "@/hooks/use-fetch";
 import { ScopingEditor } from "./scoping-editor";
 import { LabelPicker } from "./pickers/label-picker";
-import { AlertTriangle, Globe, Loader2, Trash2, ChevronDown, ChevronRight, Plus } from "lucide-react";
+import { AlertTriangle, Globe, Loader2, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 import type { FormTemplate, HubFormConfig } from "@/lib/supabase";
 
 interface TeamMapping {
@@ -563,27 +563,7 @@ function HubFormsTab({ hubId, teamMappings }: { hubId: string; teamMappings: Tea
     }));
   };
 
-  const deleteHubForm = (formId: string, formName: string) => {
-    if (!confirm(`Delete "${formName}"? This will deactivate the form.`)) return;
-    startTransition(async () => {
-      try {
-        const res = await fetch(`/api/admin/forms/${formId}`, {
-          method: "DELETE",
-        });
-        if (!res.ok) {
-          const err = (await res.json()) as { error?: string };
-          throw new Error(err.error ?? "Failed to delete");
-        }
-        toast.success("Form deleted");
-        refetchConfigs();
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed to delete");
-      }
-    });
-  };
-
   const globalForms = hubFormsData?.global_forms ?? [];
-  const hubForms = (hubFormsData?.hub_forms ?? []).filter((f) => f.is_active);
 
   return (
     <div className="space-y-6">
@@ -713,73 +693,7 @@ function HubFormsTab({ hubId, teamMappings }: { hubId: string; teamMappings: Tea
             )}
           </div>
 
-          {/* Hub-Specific Forms */}
-          <div>
-            <h3 className="text-sm font-semibold mb-3">Hub-Specific Forms</h3>
-            {hubForms.length === 0 ? (
-              <div className="text-sm text-muted-foreground text-center py-6 border border-border rounded-lg bg-card">
-                No hub-specific forms yet.
-              </div>
-            ) : (
-              <div className="border border-border rounded-lg bg-card overflow-hidden">
-                {hubForms.map((form, i) => {
-                  const badge = TYPE_BADGE[form.type] ?? TYPE_BADGE.custom;
-                  return (
-                    <div
-                      key={form.id}
-                      className={cn(
-                        "flex items-center gap-3 px-4 py-3",
-                        i < hubForms.length - 1 && "border-b border-border"
-                      )}
-                    >
-                      <span className="text-sm font-medium flex-1 truncate">
-                        {form.name}
-                      </span>
-                      <span
-                        className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium"
-                        style={{ backgroundColor: badge.bg, color: badge.text }}
-                      >
-                        {badge.label}
-                      </span>
-                      <span
-                        className={cn(
-                          "px-1.5 py-0.5 text-xs rounded-full font-medium",
-                          form.is_active
-                            ? "bg-green-500/10 text-green-500"
-                            : "bg-muted text-muted-foreground"
-                        )}
-                      >
-                        {form.is_active ? "Active" : "Inactive"}
-                      </span>
-                      <Link
-                        href={`/admin/forms/${form.id}`}
-                        className="text-xs text-primary hover:underline"
-                      >
-                        Edit
-                      </Link>
-                      <button
-                        onClick={() => deleteHubForm(form.id, form.name)}
-                        disabled={isPending}
-                        className="p-1 text-muted-foreground hover:text-destructive transition-colors"
-                        title="Delete form"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            <div className="mt-3">
-              <Link
-                href={`/admin/hubs/${hubId}/forms/new`}
-                className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                New Hub Form
-              </Link>
-            </div>
-          </div>
+          {/* Hub-specific form creation removed — use global forms with per-hub opt-in */}
         </>
       )}
     </div>

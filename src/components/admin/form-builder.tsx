@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useCallback, useEffect } from "react";
+import { useState, useTransition, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -26,6 +26,8 @@ import {
   Mail,
   Phone,
   Megaphone,
+  Check,
+  Search,
   type LucideIcon,
 } from "lucide-react";
 import type {
@@ -91,6 +93,12 @@ interface TeamOption {
 interface ProjectOption {
   linear_id: string;
   name: string;
+}
+
+interface LinearLabel {
+  id: string;
+  name: string;
+  color: string;
 }
 
 const FIELD_TYPES: { value: FormFieldType; label: string }[] = [
@@ -191,8 +199,8 @@ export function FormBuilder({ form, hubId, hubTeams }: FormBuilderProps) {
   // Linear routing
   const [targetTeamId, setTargetTeamId] = useState(form?.target_team_id ?? "");
   const [targetProjectId, setTargetProjectId] = useState(form?.target_project_id ?? "");
-  const [targetLabelIds, setTargetLabelIds] = useState(
-    (form?.target_label_ids ?? []).join(", ")
+  const [targetLabelIds, setTargetLabelIds] = useState<string[]>(
+    form?.target_label_ids ?? []
   );
   const [targetPriority, setTargetPriority] = useState(
     form?.target_priority?.toString() ?? ""
@@ -221,6 +229,9 @@ export function FormBuilder({ form, hubId, hubTeams }: FormBuilderProps) {
     !isGlobal && targetTeamId
       ? `/api/admin/linear/teams/${targetTeamId}/projects`
       : null
+  );
+  const { data: workspaceLabels, loading: labelsLoading } = useFetch<LinearLabel[]>(
+    "/api/admin/linear/labels"
   );
 
   // Reset project when team changes
@@ -284,18 +295,15 @@ export function FormBuilder({ form, hubId, hubTeams }: FormBuilderProps) {
           button_icon: buttonIcon || null,
           confirmation_message: confirmationMessage.trim(),
           error_message: errorMessage.trim(),
+          target_label_ids: targetLabelIds.length > 0 ? targetLabelIds : null,
+          target_priority: targetPriority
+            ? parseInt(targetPriority, 10)
+            : null,
           ...(isGlobal
             ? {}
             : {
                 target_team_id: targetTeamId || null,
                 target_project_id: targetProjectId || null,
-                target_label_ids: targetLabelIds
-                  .split(",")
-                  .map((s) => s.trim())
-                  .filter(Boolean),
-                target_priority: targetPriority
-                  ? parseInt(targetPriority, 10)
-                  : null,
               }),
           fields: fields.map((f) => ({
             id: f.id.startsWith("new-") ? undefined : f.id,
@@ -532,7 +540,52 @@ export function FormBuilder({ form, hubId, hubTeams }: FormBuilderProps) {
           </div>
         </section>
 
-        {/* Section 3: Linear Routing — only shown for hub-specific forms */}
+        {/* Section 3: Linear Defaults — shown for all forms */}
+        <section className="border border-border rounded-lg bg-card">
+          <div className="px-4 py-3 border-b border-border">
+            <h2 className="text-sm font-semibold">Linear Defaults</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Defaults applied to all issues created from this form
+            </p>
+          </div>
+          <div className="p-4 space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1.5">
+                Default Labels
+              </label>
+              <LabelPicker
+                labels={workspaceLabels ?? []}
+                loading={labelsLoading}
+                selected={targetLabelIds}
+                onChange={setTargetLabelIds}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Labels automatically applied to created issues
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="target-priority" className="block text-sm font-medium mb-1.5">
+                Default Priority
+              </label>
+              <select
+                id="target-priority"
+                value={targetPriority}
+                onChange={(e) => setTargetPriority(e.target.value)}
+                className={inputClass}
+              >
+                <option value="">Inherit from Linear</option>
+                {PRIORITY_OPTIONS.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </section>
+
+        {/* Section 4: Linear Routing — only shown for hub-specific forms */}
         {!isGlobal && (
           <section className="border border-border rounded-lg bg-card">
             <div className="px-4 py-3 border-b border-border">
@@ -582,57 +635,75 @@ export function FormBuilder({ form, hubId, hubTeams }: FormBuilderProps) {
                   ))}
                 </select>
               </div>
-
-              <div>
-                <label htmlFor="target-labels" className="block text-sm font-medium mb-1.5">
-                  Default Labels
-                </label>
-                <input
-                  id="target-labels"
-                  type="text"
-                  value={targetLabelIds}
-                  onChange={(e) => setTargetLabelIds(e.target.value)}
-                  placeholder="Comma-separated label IDs"
-                  className={inputClass}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Labels automatically applied to created issues
-                </p>
-              </div>
-
-              <div>
-                <label htmlFor="target-priority" className="block text-sm font-medium mb-1.5">
-                  Default Priority
-                </label>
-                <select
-                  id="target-priority"
-                  value={targetPriority}
-                  onChange={(e) => setTargetPriority(e.target.value)}
-                  className={inputClass}
-                >
-                  <option value="">Inherit from Linear</option>
-                  {PRIORITY_OPTIONS.map((p) => (
-                    <option key={p.value} value={p.value}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
             </div>
           </section>
         )}
 
-        {/* Section 4: Fields */}
+        {/* Section: Form Options */}
+        <section className="border border-border rounded-lg bg-card">
+          <div className="px-4 py-3 border-b border-border">
+            <h2 className="text-sm font-semibold">Form Options</h2>
+          </div>
+          <div className="p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-sm font-medium">Allow submitters to set priority</span>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Show a priority picker on the form
+                </p>
+              </div>
+              <ToggleSwitch
+                label=""
+                checked={fields.some((f) => f.linear_field === "priority")}
+                onChange={(enabled) => {
+                  if (enabled) {
+                    setFields((prev) => [
+                      ...prev,
+                      {
+                        id: `new-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                        field_key: "priority",
+                        field_type: "select",
+                        label: "Priority",
+                        description: "",
+                        placeholder: "",
+                        is_required: false,
+                        is_removable: false,
+                        is_hidden: false,
+                        linear_field: "priority",
+                        options: [
+                          { value: "1", label: "Urgent" },
+                          { value: "2", label: "High" },
+                          { value: "3", label: "Medium" },
+                          { value: "4", label: "Low" },
+                        ],
+                        default_value: "",
+                        display_order: 999,
+                      },
+                    ]);
+                  } else {
+                    setFields((prev) =>
+                      prev
+                        .filter((f) => f.linear_field !== "priority")
+                        .map((f, i) => ({ ...f, display_order: i }))
+                    );
+                  }
+                }}
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* Section 5: Fields */}
         <section className="border border-border rounded-lg bg-card">
           <div className="px-4 py-3 border-b border-border">
             <h2 className="text-sm font-semibold">Fields</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {fields.length} field{fields.length !== 1 ? "s" : ""}
+              {fields.filter((f) => f.linear_field !== "priority").length} field{fields.filter((f) => f.linear_field !== "priority").length !== 1 ? "s" : ""}
             </p>
           </div>
 
           <div>
-            {fields.map((field, index) => {
+            {fields.filter((f) => f.linear_field !== "priority").map((field, index) => {
               const badge = FIELD_TYPE_BADGE[field.field_type] ?? FIELD_TYPE_BADGE.text;
               const isExpanded = expandedField === field.id;
               const hasOptions =
@@ -971,6 +1042,146 @@ export function FormBuilder({ form, hubId, hubTeams }: FormBuilderProps) {
           </div>
         </section>
       </div>
+    </div>
+  );
+}
+
+function LabelPicker({
+  labels,
+  loading,
+  selected,
+  onChange,
+}: {
+  labels: LinearLabel[];
+  loading: boolean;
+  selected: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setSearch("");
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  const filtered = labels.filter((l) =>
+    l.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const toggle = (id: string) => {
+    onChange(
+      selected.includes(id)
+        ? selected.filter((s) => s !== id)
+        : [...selected, id]
+    );
+  };
+
+  const selectedLabels = labels.filter((l) => selected.includes(l.id));
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={cn(
+          inputClass,
+          "text-left flex items-center justify-between cursor-pointer"
+        )}
+      >
+        <span className={cn("truncate", selected.length === 0 && "text-muted-foreground")}>
+          {loading
+            ? "Loading labels..."
+            : selected.length === 0
+              ? "Select labels..."
+              : `${selected.length} label${selected.length !== 1 ? "s" : ""} selected`}
+        </span>
+        <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform", open && "rotate-180")} />
+      </button>
+
+      {selectedLabels.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {selectedLabels.map((label) => (
+            <span
+              key={label.id}
+              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-foreground"
+            >
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ backgroundColor: label.color }}
+              />
+              {label.name}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggle(label.id);
+                }}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-full border border-border rounded-lg bg-popover shadow-lg">
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
+            <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Filter labels..."
+              className="flex-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground"
+              autoFocus
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto py-1">
+            {loading ? (
+              <div className="px-3 py-2 text-sm text-muted-foreground">Loading...</div>
+            ) : filtered.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-muted-foreground">No labels found</div>
+            ) : (
+              filtered.map((label) => {
+                const isSelected = selected.includes(label.id);
+                return (
+                  <button
+                    key={label.id}
+                    type="button"
+                    onClick={() => toggle(label.id)}
+                    className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left hover:bg-accent/50 transition-colors"
+                  >
+                    <span className={cn(
+                      "flex items-center justify-center w-4 h-4 rounded border shrink-0 transition-colors",
+                      isSelected
+                        ? "bg-primary border-primary text-primary-foreground"
+                        : "border-border"
+                    )}>
+                      {isSelected && <Check className="w-3 h-3" />}
+                    </span>
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: label.color }}
+                    />
+                    <span className="truncate">{label.name}</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
