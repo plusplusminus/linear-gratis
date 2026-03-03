@@ -12,26 +12,43 @@ export async function GET() {
 
     const token = await getWorkspaceToken();
 
-    const res = await fetch("https://api.linear.app/graphql", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: token,
-      },
-      body: JSON.stringify({
-        query: `
-          query WorkspaceLabels {
-            issueLabels(filter: { team: { null: true } }, first: 250) {
-              nodes {
-                id
-                name
-                color
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+
+    let res: Response;
+    try {
+      res = await fetch("https://api.linear.app/graphql", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: token,
+        },
+        body: JSON.stringify({
+          query: `
+            query WorkspaceLabels {
+              issueLabels(filter: { team: { null: true } }, first: 250) {
+                nodes {
+                  id
+                  name
+                  color
+                }
               }
             }
-          }
-        `,
-      }),
-    });
+          `,
+        }),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return NextResponse.json(
+          { error: "Linear API request timed out" },
+          { status: 504 }
+        );
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+    }
 
     const result = (await res.json()) as {
       data?: {

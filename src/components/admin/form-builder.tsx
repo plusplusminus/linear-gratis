@@ -296,9 +296,10 @@ export function FormBuilder({ form, hubId, hubTeams }: FormBuilderProps) {
           confirmation_message: confirmationMessage.trim(),
           error_message: errorMessage.trim(),
           target_label_ids: targetLabelIds.length > 0 ? targetLabelIds : null,
-          target_priority: targetPriority
-            ? parseInt(targetPriority, 10)
-            : null,
+          target_priority:
+            targetPriority === "" || targetPriority == null
+              ? null
+              : parseInt(targetPriority, 10),
           ...(isGlobal
             ? {}
             : {
