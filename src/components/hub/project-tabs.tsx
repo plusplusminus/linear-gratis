@@ -57,7 +57,7 @@ export function ProjectTabs({
     project.milestones.length > 0;
 
   const [activeTab, setActiveTab] = useState<Tab>(
-    isOverviewOnly ? "overview" : "issues"
+    isOverviewOnly || issues.length === 0 ? "overview" : "issues"
   );
 
   const tabs: { id: Tab; label: string; count?: number }[] = isOverviewOnly
@@ -66,7 +66,9 @@ export function ProjectTabs({
         ...(hasOverviewContent
           ? [{ id: "overview" as const, label: "Overview" }]
           : []),
-        { id: "issues", label: "Issues", count: issues.length },
+        ...(issues.length > 0
+          ? [{ id: "issues" as const, label: "Issues", count: issues.length }]
+          : []),
       ];
 
   return (
