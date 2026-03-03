@@ -12,8 +12,8 @@ ALTER TABLE ppm_admins ADD PRIMARY KEY (id);
 ALTER TABLE ppm_admins ALTER COLUMN user_id DROP NOT NULL;
 CREATE UNIQUE INDEX idx_ppm_admins_user_id ON ppm_admins(user_id) WHERE user_id IS NOT NULL;
 
--- 3. Ensure email uniqueness
-ALTER TABLE ppm_admins ADD CONSTRAINT uq_ppm_admins_email UNIQUE (email);
+-- 3. Ensure case-insensitive email uniqueness
+CREATE UNIQUE INDEX idx_ppm_admins_email ON ppm_admins(lower(email));
 
 -- 4. Tighten hub_members.role constraint (remove 'admin' — it's synthetic, never stored)
 ALTER TABLE hub_members DROP CONSTRAINT chk_hub_member_role;

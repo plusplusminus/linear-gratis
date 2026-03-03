@@ -100,7 +100,11 @@ export function AdminPanel({ currentUserEmail }: AdminPanelProps) {
 
       {/* Add admin form */}
       <form onSubmit={addAdmin} className="flex gap-2 mb-6">
+        <label htmlFor="admin-email" className="sr-only">
+          Admin email address
+        </label>
         <input
+          id="admin-email"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -188,7 +192,7 @@ export function AdminPanel({ currentUserEmail }: AdminPanelProps) {
                     onClick={() => removeAdmin(admin)}
                     disabled={isPending}
                     className="p-1 text-muted-foreground hover:text-destructive transition-colors"
-                    title="Remove admin"
+                    aria-label={`Remove ${admin.email}`}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

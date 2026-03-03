@@ -42,8 +42,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  const body = (await request.json()) as { email?: string };
-  const email = body.email?.trim().toLowerCase();
+  let body: { email?: string };
+  try {
+    body = (await request.json()) as { email?: string };
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
 
   if (!email || !email.includes("@")) {
     return NextResponse.json({ error: "Valid email is required" }, { status: 400 });
@@ -67,6 +73,10 @@ export async function POST(request: Request) {
     .single();
 
   if (error) {
+    // Handle race condition: unique constraint violation
+    if (error.code === "23505") {
+      return NextResponse.json({ error: "This email is already an admin" }, { status: 409 });
+    }
     console.error("[POST /api/admin/settings/admins] error:", error);
     return NextResponse.json({ error: "Failed to add admin" }, { status: 500 });
   }

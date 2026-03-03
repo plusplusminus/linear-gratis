@@ -26,10 +26,19 @@ export async function isPPMAdmin(userId: string, email?: string): Promise<boolea
 
     if (byEmail && !byEmail.user_id) {
       // Lazy claim: fill in user_id on first login
-      await supabaseAdmin
+      // Guard against race: only update if user_id is still null
+      const { data: claimed, error: claimError } = await supabaseAdmin
         .from("ppm_admins")
         .update({ user_id: userId })
-        .eq("id", byEmail.id);
+        .eq("id", byEmail.id)
+        .is("user_id", null)
+        .select("id")
+        .single();
+
+      if (claimError || !claimed) {
+        console.error("[isPPMAdmin] lazy claim failed:", claimError);
+        return false;
+      }
       return true;
     }
 
