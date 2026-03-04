@@ -19,6 +19,8 @@ export function HubDocRenderer({ content }: { content: string }) {
       prose-td:text-sm prose-td:text-muted-foreground
       prose-hr:border-border
       prose-a:text-primary prose-a:no-underline hover:prose-a:underline
+      prose-img:rounded-lg prose-img:border prose-img:border-border prose-img:shadow-sm prose-img:my-4
+      prose-em:text-xs prose-em:text-muted-foreground/70
     ">
       <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
     </article>

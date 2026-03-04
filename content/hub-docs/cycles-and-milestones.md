@@ -14,6 +14,9 @@ Cycles are time-boxed work periods (similar to sprints). The **Cycles** tab show
 - **Upcoming** cycles — Planned for the future
 - **Completed** cycles — Past cycles
 
+![Cycles tab showing active and upcoming cycles](/docs/cycles-tab.png)
+*Cycles organized by status with date ranges and progress indicators.*
+
 Each cycle card displays:
 
 - Cycle name and date range

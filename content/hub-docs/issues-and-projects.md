@@ -15,6 +15,12 @@ The **Issues** tab shows all issues across the team's visible projects. You can 
 
 Use the toggle in the top-right of the toolbar to switch views.
 
+![Issues in list view grouped by status](/docs/issues-list.png)
+*List view showing issues grouped by status with search, filter, and sort controls.*
+
+![Issues in board view with kanban columns](/docs/issues-board.png)
+*Board view showing issues as cards in status columns.*
+
 ## Grouping
 
 Issues can be grouped in two ways:
@@ -56,5 +62,8 @@ The **Projects** tab lists all visible projects with:
 - Progress bar showing completion percentage
 - Current status badge
 - Target date (if set)
+
+![Projects tab showing project list with progress](/docs/projects-tab.png)
+*Projects listed with status badges, progress bars, and target dates.*
 
 Click a project to see its dedicated page with issues scoped to that project.

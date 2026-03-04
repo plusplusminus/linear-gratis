@@ -12,6 +12,9 @@ Welcome to your project hub. This is where you can track progress, view roadmaps
 
 The **sidebar** on the left shows your available teams. Click any team to see its issues, projects, roadmap, and more.
 
+![Hub overview showing teams and sidebar navigation](/docs/hub-overview.png)
+*The hub overview shows all your teams with project counts and recent activity.*
+
 - **Overview** — A summary of all teams and their recent activity
 - **Team pages** — Click a team name to dive into its work
 

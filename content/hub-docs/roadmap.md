@@ -16,9 +16,15 @@ Switch between two views using the toggle in the toolbar:
 
 A Gantt-style chart showing projects plotted across time. Each bar represents a project's start-to-target date range, with a progress fill showing how far along it is. A "Today" marker helps you orient in time.
 
+![Roadmap timeline view](/docs/roadmap-timeline.png)
+*Timeline view showing projects plotted across months with progress indicators.*
+
 ### Board
 
-A kanban-style board where projects are shown as cards in columns. You can group the board by:
+A kanban-style board where projects are shown as cards in columns.
+
+![Roadmap board view grouped by status](/docs/roadmap-board.png)
+*Board view showing project cards organized into status columns with progress bars.* You can group the board by:
 
 - **Status** — Planned, Started, Paused, Completed, Cancelled
 - **Priority** — Urgent, High, Medium, Low
