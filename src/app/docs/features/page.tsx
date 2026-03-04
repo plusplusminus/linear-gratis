@@ -31,9 +31,12 @@ const featureInventory = [
       { name: 'Password-protected roadmaps', description: 'Restrict roadmap access with a password.', status: 'Available' },
       { name: 'Kanban & timeline views', description: 'Choose between kanban columns or a timeline layout for roadmaps.', status: 'Available' },
       { name: 'Private project sharing', description: 'Share specific Linear projects without exposing the full workspace.', status: 'Available' },
-      { name: 'Real-time Linear sync', description: 'Automatic sync so public views always reflect current Linear state.', status: 'Coming Soon' },
+      { name: 'Real-time Linear sync', description: 'Workspace-level webhook sync so hub views always reflect current Linear state.', status: 'Available' },
       { name: 'Stakeholder read-only access', description: 'Give stakeholders visibility without edit permissions.', status: 'Available' },
-      { name: 'Team collaboration features', description: 'Multi-user accounts and team-level permissions.', status: 'Coming Soon' },
+      { name: 'Cycle support', description: 'View and track Linear cycles within the hub.', status: 'Available' },
+      { name: 'Label-based issue grouping', description: 'Group and filter issues by label within projects.', status: 'Available' },
+      { name: 'Client-facing comments', description: 'Comments prefixed with @heyclient in Linear are visible to clients in the hub.', status: 'Available' },
+      { name: 'Hub member roles', description: 'Assign default (full access) or view-only roles to hub members.', status: 'Available' },
     ],
   },
   {
@@ -41,7 +44,7 @@ const featureInventory = [
     features: [
       { name: 'Basic form customisation', description: 'Configure which fields appear and set default values.', status: 'Available' },
       { name: 'Custom branding/logos', description: 'Upload your logo to appear on all public-facing pages.', status: 'Available' },
-      { name: 'White-label options', description: 'Remove linear.gratis branding for a fully white-labelled experience.', status: 'Available' },
+      { name: 'White-label options', description: 'Remove PPM Client Hub branding for a fully white-labelled experience.', status: 'Available' },
       { name: 'Custom domains', description: 'Use your own domain (e.g. feedback.yourcompany.com) with DNS verification.', status: 'Available' },
       { name: 'Advanced styling options', description: 'Set primary brand colours applied across buttons, links, and accents.', status: 'Available' },
       { name: 'Theme customisation', description: 'Light and dark mode support with theme-aware branding.', status: 'Available' },
@@ -50,7 +53,7 @@ const featureInventory = [
   {
     category: 'Security & access control',
     features: [
-      { name: 'Basic authentication', description: 'Email-based auth with Supabase for account management.', status: 'Available' },
+      { name: 'Magic link authentication', description: 'Passwordless auth via WorkOS AuthKit with org-scoped access.', status: 'Available' },
       { name: 'Domain restrictions', description: 'Restrict form access to specific email domains.', status: 'Coming Soon' },
       { name: 'IP allowlisting', description: 'Limit access to forms and views by IP range.', status: 'Coming Soon' },
       { name: 'SSO integration', description: 'Single sign-on for enterprise teams.', status: 'Planned' },
@@ -86,7 +89,7 @@ const featureInventory = [
       { name: 'Linear integration', description: 'Core integration — all features built on top of the Linear API.', status: 'Available' },
       { name: 'Slack notifications', description: 'Get notified in Slack when new submissions arrive.', status: 'Coming Soon' },
       { name: 'Email notifications', description: 'Email alerts for new submissions and status changes.', status: 'Coming Soon' },
-      { name: 'Zapier integration', description: 'Connect linear.gratis to thousands of apps via Zapier.', status: 'Coming Soon' },
+      { name: 'Zapier integration', description: 'Connect PPM Client Hub to thousands of apps via Zapier.', status: 'Coming Soon' },
       { name: 'API access', description: 'Programmatic access to forms, submissions, and views.', status: 'Coming Soon' },
       { name: 'Third-party tools', description: 'Integrations with other project management and communication tools.', status: 'Planned' },
     ],
@@ -94,17 +97,17 @@ const featureInventory = [
   {
     category: 'Support & maintenance',
     features: [
-      { name: 'Community support', description: 'Open-source community via GitHub issues and discussions.', status: 'Available' },
+      { name: 'Direct support', description: 'Support via the PPM team for account and setup issues.', status: 'Available' },
       { name: 'Email support', description: 'Direct email support for account and setup issues.', status: 'Coming Soon' },
       { name: 'Priority support', description: 'Faster response times for paying customers.', status: 'Planned' },
-      { name: 'Self-hosting option', description: 'Deploy your own instance from the open-source repository.', status: 'Available' },
+      { name: 'Managed hosting', description: 'Hosted and managed by PPM on Vercel infrastructure.', status: 'Available' },
     ],
   },
   {
     category: 'Pricing & licensing',
     features: [
       { name: 'Free tier', description: 'All core features available at no cost.', status: 'Available' },
-      { name: 'Open source', description: 'Full source code available on GitHub.', status: 'Available' },
+      { name: 'Private repository', description: 'Source code managed internally by PPM.', status: 'Available' },
       { name: 'No usage limits', description: 'Unlimited forms, views, roadmaps, and submissions.', status: 'Available' },
     ],
   },

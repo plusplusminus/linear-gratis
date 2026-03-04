@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   ChevronRight,
   LayoutDashboard,
+  BookOpen,
   Bug,
   Lightbulb,
   FileText,
@@ -193,6 +194,39 @@ export function HubSidebar() {
               </Link>
             );
           })}
+
+          {/* Documentation divider */}
+          {!collapsed && (
+            <div className="pt-3 pb-1 px-2">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                Help
+              </span>
+            </div>
+          )}
+          {collapsed && <div className="pt-2" />}
+
+          {/* Documentation link */}
+          {(() => {
+            const isDocsActive = pathname.startsWith(`${basePath}/docs`);
+            return (
+              <Link
+                href={`${basePath}/docs`}
+                className={cn(
+                  "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-colors group",
+                  isDocsActive
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                )}
+                style={isDocsActive ? {
+                  backgroundColor: "var(--accent)",
+                } : undefined}
+                title={collapsed ? "Documentation" : undefined}
+              >
+                <BookOpen className="w-4 h-4 shrink-0" />
+                {!collapsed && <span className="truncate">Documentation</span>}
+              </Link>
+            );
+          })()}
         </nav>
       </div>
 

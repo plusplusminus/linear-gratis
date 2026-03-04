@@ -51,7 +51,7 @@ export default function CustomerExperiencePage() {
           </Link>
           <h1 className="text-3xl font-bold mb-2">Customer Experience</h1>
           <p className="text-muted-foreground">
-            What your clients see and can do when they interact with your forms, views, and roadmaps. No Linear account or login required.
+            What your clients see and can do when they interact with your hub — projects, roadmaps, forms, and more. Clients sign in via magic link (WorkOS AuthKit).
           </p>
         </div>
 
@@ -64,7 +64,7 @@ export default function CustomerExperiencePage() {
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground space-y-3">
               <p>
-                Your clients never see Linear directly. Instead, they interact with three types of public pages — each with its own shareable URL, optional password protection, and your branding applied throughout.
+                Your clients never see Linear directly. Instead, they access a branded hub portal with teams, projects, roadmaps, and forms — all synced from your Linear workspace. Branding is applied throughout.
               </p>
               <div className="grid sm:grid-cols-3 gap-3 pt-1">
                 <div className="rounded-lg border border-border p-3 space-y-1">
@@ -106,7 +106,7 @@ export default function CustomerExperiencePage() {
                 </CardHeader>
                 <CardContent className="text-sm text-muted-foreground space-y-3">
                   <p>
-                    A clean, single-column form centred on the page. If you&apos;ve configured branding, your logo, colours, and fonts are applied — no linear.gratis branding visible (if disabled).
+                    A clean, single-column form centred on the page. If you&apos;ve configured branding, your logo, colours, and fonts are applied — no PPM Client Hub branding visible (if disabled).
                   </p>
                   <p>The form collects:</p>
                   <ul className="list-disc list-inside space-y-1">
@@ -211,7 +211,7 @@ export default function CustomerExperiencePage() {
                     <li><strong className="text-foreground">Activity log</strong> — status changes, assignee changes, priority changes, and comments (read-only)</li>
                   </ul>
                   <p>
-                    <strong className="text-foreground">Note:</strong> The activity log includes internal Linear comments. Be mindful of what your team writes in issue comments — customers can see them on this view.
+                    <strong className="text-foreground">Note:</strong> Only comments prefixed with <code className="text-foreground bg-muted px-1 rounded">@heyclient</code> in Linear are visible to clients. Internal team comments remain private.
                   </p>
                 </CardContent>
               </Card>
@@ -387,12 +387,12 @@ export default function CustomerExperiencePage() {
                     All three page types support the full branding system. What customers see when branding is applied:
                   </p>
                   <ul className="list-disc list-inside space-y-1">
-                    <li>Your logo replaces all linear.gratis branding</li>
+                    <li>Your logo replaces all PPM Client Hub branding</li>
                     <li>Your primary colour on buttons, links, and accents</li>
                     <li>Custom body and heading fonts</li>
                     <li>Custom favicon</li>
                     <li>Custom footer text</li>
-                    <li>&quot;Powered by linear.gratis&quot; removed (if toggled off)</li>
+                    <li>&quot;Powered by PPM Client Hub&quot; removed (if toggled off)</li>
                   </ul>
                   <p>
                     Branding is configured per hub in the admin settings and applies across all hub pages.
@@ -402,11 +402,11 @@ export default function CustomerExperiencePage() {
 
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-base">No login required</CardTitle>
+                  <CardTitle className="text-base">Authentication</CardTitle>
                 </CardHeader>
                 <CardContent className="text-sm text-muted-foreground space-y-3">
                   <p>
-                    Customers never need to create an account or sign in. All public pages are stateless from their perspective — no tracking, no cookies beyond vote/comment preferences stored in localStorage. The only barrier is an optional password you set per view or roadmap.
+                    Hub access requires authentication via WorkOS AuthKit. Clients sign in using a magic link sent to their email — no password to remember. Each client is scoped to their hub through a WorkOS Organization, and roles (<strong className="text-foreground">default</strong> or <strong className="text-foreground">view-only</strong>) control what they can do.
                   </p>
                 </CardContent>
               </Card>

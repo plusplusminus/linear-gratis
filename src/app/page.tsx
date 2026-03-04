@@ -80,7 +80,7 @@ export default async function Home() {
             </svg>
           </div>
           <h1 className="text-lg font-semibold text-foreground">
-            linear.gratis
+            PPM Client Hub
           </h1>
           <p className="text-sm text-muted-foreground">
             Sign in to continue

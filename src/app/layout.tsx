@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "linear.gratis",
+  title: "PPM Client Hub",
   description: "Client hub portal for Linear",
   icons: {
     icon: [
