@@ -11,7 +11,6 @@ import {
 } from "@/lib/hub-read";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { GanttChart, IterationCw } from "lucide-react";
 import { TeamTabs } from "@/components/hub/team-tabs";
 
 export default async function TeamDashboardPage({
@@ -110,27 +109,6 @@ export default async function TeamDashboardPage({
             <span className="text-[10px] font-mono text-muted-foreground">
               {team.key}
             </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {allCycles.length > 0 && (
-              <Link
-                href={`/hub/${slug}/${teamKey}/cycles`}
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 border border-border transition-colors"
-              >
-                <IterationCw className="w-3.5 h-3.5" />
-                Cycles
-              </Link>
-            )}
-            {projects.length > 0 && (
-              <Link
-                href={`/hub/${slug}/${teamKey}/roadmap`}
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 border border-border transition-colors"
-              >
-                <GanttChart className="w-3.5 h-3.5" />
-                Roadmap
-              </Link>
-            )}
           </div>
         </div>
       </div>

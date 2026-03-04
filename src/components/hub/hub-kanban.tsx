@@ -38,32 +38,69 @@ const STATUS_ORDER: Record<string, number> = {
   cancelled: 5,
 };
 
+type GroupBy = "status" | "label";
+type Column = {
+  label: string;
+  color: string;
+  type: "status" | "label";
+  statusType?: string;
+  issues: Issue[];
+};
+
 export function HubKanban({
   issues,
+  groupBy = "status",
   onIssueClick,
 }: {
   issues: Issue[];
+  groupBy?: GroupBy;
   onIssueClick?: (issueId: string) => void;
 }) {
-  // Group by state
-  const grouped = issues.reduce(
-    (acc, issue) => {
-      const key = issue.state.name;
-      if (!acc[key]) {
-        acc[key] = { state: issue.state, issues: [] };
-      }
-      acc[key].issues.push(issue);
-      return acc;
-    },
-    {} as Record<string, { state: Issue["state"]; issues: Issue[] }>
-  );
+  let columns: [string, Column][];
 
-  // Sort columns by workflow order
-  const columns = Object.entries(grouped).sort(([, a], [, b]) => {
-    const oa = STATUS_ORDER[a.state.type] ?? 99;
-    const ob = STATUS_ORDER[b.state.type] ?? 99;
-    return oa - ob;
-  });
+  if (groupBy === "label") {
+    const map = new Map<string, Column>();
+    for (const issue of issues) {
+      if (issue.labels.length === 0) {
+        const key = "__no_label__";
+        if (!map.has(key)) {
+          map.set(key, { label: "No Label", color: "var(--muted-foreground)", type: "label", issues: [] });
+        }
+        map.get(key)!.issues.push(issue);
+      } else {
+        for (const lbl of issue.labels) {
+          if (!map.has(lbl.id)) {
+            map.set(lbl.id, { label: lbl.name, color: lbl.color, type: "label", issues: [] });
+          }
+          map.get(lbl.id)!.issues.push(issue);
+        }
+      }
+    }
+    columns = Array.from(map.entries()).sort(([keyA, a], [keyB, b]) => {
+      if (keyA === "__no_label__") return 1;
+      if (keyB === "__no_label__") return -1;
+      return a.label.localeCompare(b.label);
+    });
+  } else {
+    // Group by state
+    const grouped = issues.reduce(
+      (acc, issue) => {
+        const key = issue.state.name;
+        if (!acc[key]) {
+          acc[key] = { label: issue.state.name, color: issue.state.color, type: "status", statusType: issue.state.type, issues: [] };
+        }
+        acc[key].issues.push(issue);
+        return acc;
+      },
+      {} as Record<string, Column>
+    );
+
+    columns = Object.entries(grouped).sort(([, a], [, b]) => {
+      const oa = STATUS_ORDER[a.statusType ?? ""] ?? 99;
+      const ob = STATUS_ORDER[b.statusType ?? ""] ?? 99;
+      return oa - ob;
+    });
+  }
 
   if (issues.length === 0) {
     return (
@@ -75,13 +112,20 @@ export function HubKanban({
 
   return (
     <div className="flex gap-1 overflow-x-auto pb-4 px-1">
-      {columns.map(([name, column]) => (
-        <div key={name} className="flex-shrink-0 w-80 sm:w-[356px]">
+      {columns.map(([key, column]) => (
+        <div key={key} className="flex-shrink-0 w-80 sm:w-[356px]">
           {/* Column header */}
           <div className="flex items-center gap-2 p-3 mb-2">
-            <StatusIcon type={column.state.type} color={column.state.color} />
+            {column.type === "status" ? (
+              <StatusIcon type={column.statusType ?? ""} color={column.color} />
+            ) : (
+              <span
+                className="w-3.5 h-3.5 rounded-full shrink-0"
+                style={{ backgroundColor: column.color }}
+              />
+            )}
             <span className="text-sm font-medium text-foreground tracking-tight">
-              {name}
+              {column.label}
             </span>
             <span className="px-2 py-0.5 bg-muted/60 rounded-full text-xs font-medium text-muted-foreground">
               {column.issues.length}

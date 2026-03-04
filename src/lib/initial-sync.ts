@@ -119,6 +119,7 @@ const PROJECTS_QUERY = `
         targetDate
         status { id name color type }
         lead { id name }
+        labels { nodes { id name color } }
         teams { nodes { id name key } }
         initiatives { nodes { id name } }
         projectMilestones { nodes { id name targetDate } }
@@ -255,6 +256,7 @@ type LinearGqlProject = {
   targetDate?: string;
   status?: { id: string; name: string; color: string; type: string };
   lead?: { id: string; name: string };
+  labels: { nodes: Array<{ id: string; name: string; color: string }> };
   teams: { nodes: Array<{ id: string; name: string; key: string }> };
   initiatives: { nodes: Array<{ id: string; name: string }> };
   projectMilestones: { nodes: Array<{ id: string; name: string; targetDate?: string }> };
@@ -558,6 +560,7 @@ export function mapTeamToRow(team: LinearGqlTeam, userId: string) {
 export function mapProjectToRow(project: LinearGqlProject, userId: string) {
   const data = {
     ...project,
+    labels: project.labels.nodes,
     teams: project.teams.nodes,
     initiatives: project.initiatives.nodes,
     milestones: project.projectMilestones.nodes,
