@@ -12,12 +12,14 @@ import {
 import { cn } from "@/lib/utils";
 import { ProjectIssueList } from "./project-issue-list";
 import { ActivityFeed } from "./activity-feed";
+import { RoadmapView } from "./roadmap-view";
 
-type Tab = "issues" | "projects" | "cycles" | "initiatives" | "milestones" | "activity";
+type Tab = "issues" | "projects" | "roadmap" | "cycles" | "initiatives" | "milestones" | "activity";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "issues", label: "Issues" },
   { key: "projects", label: "Projects" },
+  { key: "roadmap", label: "Roadmap" },
   { key: "cycles", label: "Cycles" },
   { key: "initiatives", label: "Initiatives" },
   { key: "milestones", label: "Milestones" },
@@ -29,6 +31,10 @@ type Project = {
   name: string;
   color?: string;
   progress: number;
+  startDate?: string;
+  priority: number;
+  priorityLabel: string;
+  labels: Array<{ id: string; name: string; color: string }>;
   status: { name: string; color: string; type: string };
   targetDate?: string;
   teams: Array<{ id: string }>;
@@ -129,6 +135,13 @@ export function TeamTabs({
       params.delete("view");
       params.delete("project");
       params.delete("cycle");
+      params.delete("groupBy");
+      // Clear roadmap-specific params when leaving roadmap tab
+      params.delete("roadmapView");
+      params.delete("roadmapGroup");
+      params.delete("rs");
+      params.delete("rp");
+      params.delete("rl");
     }
     const qs = params.toString();
     router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
@@ -142,6 +155,7 @@ export function TeamTabs({
           if (tab.key === "issues") return true;
           if (tab.key === "activity") return true;
           if (tab.key === "projects") return projects.length > 0;
+          if (tab.key === "roadmap") return projects.length > 0;
           if (tab.key === "cycles") return (cycleDetails?.length ?? 0) > 0;
           if (tab.key === "initiatives") return initiatives.length > 0;
           if (tab.key === "milestones") return milestones.length > 0;
@@ -153,13 +167,15 @@ export function TeamTabs({
               ? issues.length
               : tab.key === "projects"
                 ? projects.length
-                : tab.key === "cycles"
-                  ? (cycleDetails?.length ?? 0)
-                  : tab.key === "initiatives"
-                    ? initiatives.length
-                    : tab.key === "activity"
-                      ? null
-                      : milestones.length;
+                : tab.key === "roadmap"
+                  ? projects.length
+                  : tab.key === "cycles"
+                    ? (cycleDetails?.length ?? 0)
+                    : tab.key === "initiatives"
+                      ? initiatives.length
+                      : tab.key === "activity"
+                        ? null
+                        : milestones.length;
 
           return (
             <button
@@ -229,6 +245,10 @@ export function TeamTabs({
             </div>
           )}
         </div>
+      )}
+
+      {activeTab === "roadmap" && (
+        <RoadmapView projects={projects} />
       )}
 
       {activeTab === "cycles" && (

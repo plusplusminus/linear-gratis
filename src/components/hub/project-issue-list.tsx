@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   ChevronDown,
@@ -21,7 +21,6 @@ import {
   List,
   Columns3,
   Search,
-  Check,
   FolderKanban,
   Tag,
   IterationCw,
@@ -30,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { useCanInteract } from "@/hooks/use-can-interact";
 import { IssueDetailPanel } from "./issue-detail-panel";
 import { HubKanban } from "./hub-kanban";
+import { CheckboxFilterDropdown } from "./filter-dropdown";
 
 type Issue = {
   id: string;
@@ -58,6 +58,7 @@ type FilterState = {
 };
 
 type ViewMode = "list" | "kanban";
+type GroupBy = "status" | "label";
 type SortField = "priority" | "dueDate" | "createdAt";
 type SortDir = "asc" | "desc";
 
@@ -113,6 +114,10 @@ export function ProjectIssueList({
     () => (searchParams.get("view") as ViewMode) || "list"
   );
 
+  const [groupBy, setGroupBy] = useState<GroupBy>(
+    () => (searchParams.get("groupBy") as GroupBy) || "status"
+  );
+
   const [sort, setSort] = useState<{ field: SortField; dir: SortDir }>({
     field: "priority",
     dir: "asc",
@@ -128,8 +133,8 @@ export function ProjectIssueList({
   );
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
 
-  // Update URL params when filters/view change
-  function updateUrl(next: FilterState, view: ViewMode) {
+  // Update URL params when filters/view/groupBy change
+  function updateUrl(next: FilterState, view: ViewMode, group: GroupBy = groupBy) {
     const params = new URLSearchParams(window.location.search);
     // Preserve tab param
     const tab = params.get("tab");
@@ -142,6 +147,7 @@ export function ProjectIssueList({
     next.projectIds.forEach((id) => newParams.append("project", id));
     next.cycleIds.forEach((id) => newParams.append("cycle", id));
     if (view !== "list") newParams.set("view", view);
+    if (group !== "status") newParams.set("groupBy", group);
     const qs = newParams.toString();
     router.replace(qs ? `?${qs}` : "?", { scroll: false });
   }
@@ -154,6 +160,12 @@ export function ProjectIssueList({
   function changeView(view: ViewMode) {
     setViewMode(view);
     updateUrl(filters, view);
+  }
+
+  function changeGroupBy(group: GroupBy) {
+    setGroupBy(group);
+    setCollapsedGroups(new Set());
+    updateUrl(filters, viewMode, group);
   }
 
   // Filter issues
@@ -222,27 +234,66 @@ export function ProjectIssueList({
     return copy;
   }, [filtered, sort]);
 
-  // Group by status type (for list view)
-  const groups = useMemo(() => {
-    const map = new Map<
-      string,
-      { state: { name: string; color: string; type: string }; issues: Issue[] }
-    >();
+  // Group issues by status or label
+  type GroupInfo = {
+    label: string;
+    color: string;
+    type: "status" | "label";
+    statusType?: string;
+    issues: Issue[];
+  };
 
+  const groups = useMemo((): [string, GroupInfo][] => {
+    if (groupBy === "label") {
+      const map = new Map<string, GroupInfo>();
+
+      for (const issue of sorted) {
+        if (issue.labels.length === 0) {
+          const key = "__no_label__";
+          if (!map.has(key)) {
+            map.set(key, { label: "No Label", color: "var(--muted-foreground)", type: "label", issues: [] });
+          }
+          map.get(key)!.issues.push(issue);
+        } else {
+          for (const lbl of issue.labels) {
+            if (!map.has(lbl.id)) {
+              map.set(lbl.id, { label: lbl.name, color: lbl.color, type: "label", issues: [] });
+            }
+            map.get(lbl.id)!.issues.push(issue);
+          }
+        }
+      }
+
+      // Sort: named labels alphabetically, "No Label" last
+      return Array.from(map.entries()).sort(([keyA, a], [keyB, b]) => {
+        if (keyA === "__no_label__") return 1;
+        if (keyB === "__no_label__") return -1;
+        return a.label.localeCompare(b.label);
+      });
+    }
+
+    // Default: group by status
+    const map = new Map<string, GroupInfo>();
     for (const issue of sorted) {
       const key = issue.state.name;
       if (!map.has(key)) {
-        map.set(key, { state: issue.state, issues: [] });
+        map.set(key, {
+          label: issue.state.name,
+          color: issue.state.color,
+          type: "status",
+          statusType: issue.state.type,
+          issues: [],
+        });
       }
       map.get(key)!.issues.push(issue);
     }
 
     return Array.from(map.entries()).sort(([, a], [, b]) => {
-      const oa = STATUS_ORDER[a.state.type] ?? 1;
-      const ob = STATUS_ORDER[b.state.type] ?? 1;
+      const oa = STATUS_ORDER[a.statusType ?? ""] ?? 1;
+      const ob = STATUS_ORDER[b.statusType ?? ""] ?? 1;
       return oa - ob;
     });
-  }, [sorted]);
+  }, [sorted, groupBy]);
 
   const hasActiveFilters =
     filters.search.length > 0 ||
@@ -320,6 +371,36 @@ export function ProjectIssueList({
         )}
 
         <div className="flex-1" />
+
+        {/* Group by toggle */}
+        {labels.length > 0 && (
+          <div className="flex items-center border border-border rounded-md overflow-hidden">
+            <button
+              onClick={() => changeGroupBy("status")}
+              className={cn(
+                "flex items-center gap-1 px-2 py-1 text-xs transition-colors",
+                groupBy === "status"
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+              title="Group by status"
+            >
+              <CircleDot className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => changeGroupBy("label")}
+              className={cn(
+                "flex items-center gap-1 px-2 py-1 text-xs transition-colors",
+                groupBy === "label"
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+              title="Group by label"
+            >
+              <Tag className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* View toggle */}
         <div className="flex items-center border border-border rounded-md overflow-hidden">
@@ -435,7 +516,7 @@ export function ProjectIssueList({
       {/* Content area */}
       {viewMode === "kanban" ? (
         <div className="flex-1 overflow-x-auto overflow-y-auto p-4">
-          <HubKanban issues={sorted} onIssueClick={setSelectedIssueId} />
+          <HubKanban issues={sorted} groupBy={groupBy} onIssueClick={setSelectedIssueId} />
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto">
@@ -450,13 +531,13 @@ export function ProjectIssueList({
               </p>
             </div>
           ) : (
-            groups.map(([groupName, group]) => {
-              const isCollapsed = collapsedGroups.has(groupName);
+            groups.map(([groupKey, group]) => {
+              const isCollapsed = collapsedGroups.has(groupKey);
               return (
-                <div key={groupName}>
+                <div key={groupKey}>
                   {/* Group header */}
                   <button
-                    onClick={() => toggleGroup(groupName)}
+                    onClick={() => toggleGroup(groupKey)}
                     className="w-full flex items-center gap-2 px-6 py-2 text-xs font-medium hover:bg-accent/30 transition-colors sticky top-0 bg-background z-10 border-b border-border"
                   >
                     {isCollapsed ? (
@@ -464,8 +545,15 @@ export function ProjectIssueList({
                     ) : (
                       <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
                     )}
-                    <StatusIcon type={group.state.type} color={group.state.color} />
-                    <span>{groupName}</span>
+                    {group.type === "status" ? (
+                      <StatusIcon type={group.statusType ?? ""} color={group.color} />
+                    ) : (
+                      <span
+                        className="w-3 h-3 rounded-full shrink-0"
+                        style={{ backgroundColor: group.color }}
+                      />
+                    )}
+                    <span>{group.label}</span>
                     <span className="text-muted-foreground tabular-nums">
                       {group.issues.length}
                     </span>
@@ -506,107 +594,6 @@ export function ProjectIssueList({
 }
 
 // -- Sub-components ──────────────────────────────────────────────────────────
-
-function CheckboxFilterDropdown({
-  items,
-  selected,
-  onChange,
-  label,
-  icon,
-}: {
-  items: Array<{ id: string; name: string; color?: string }>;
-  selected: string[];
-  onChange: (ids: string[]) => void;
-  label: string;
-  icon: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [open]);
-
-  function toggle(id: string) {
-    onChange(
-      selected.includes(id)
-        ? selected.filter((x) => x !== id)
-        : [...selected, id]
-    );
-  }
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen(!open)}
-        className={cn(
-          "flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-medium transition-colors",
-          selected.length > 0
-            ? "bg-accent text-foreground ring-1 ring-ring"
-            : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
-        )}
-      >
-        {icon}
-        {label}
-        {selected.length > 0 && (
-          <span className="px-1 py-0 rounded bg-primary text-primary-foreground text-[10px]">
-            {selected.length}
-          </span>
-        )}
-        <ChevronDown className="w-3 h-3" />
-      </button>
-
-      {open && (
-        <div className="absolute top-full left-0 mt-1 z-50 w-56 max-h-64 overflow-y-auto rounded-md border border-border bg-popover shadow-md py-1">
-          {items.map((item) => {
-            const isSelected = selected.includes(item.id);
-            return (
-              <button
-                key={item.id}
-                onClick={() => toggle(item.id)}
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-accent/50 transition-colors text-left"
-              >
-                <div
-                  className={cn(
-                    "w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors",
-                    isSelected
-                      ? "bg-primary border-primary"
-                      : "border-border"
-                  )}
-                >
-                  {isSelected && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
-                </div>
-                <span
-                  className="w-2 h-2 rounded-full shrink-0"
-                  style={{ backgroundColor: item.color || "var(--muted-foreground)" }}
-                />
-                <span className="truncate">{item.name}</span>
-              </button>
-            );
-          })}
-          {selected.length > 0 && (
-            <>
-              <div className="border-t border-border my-1" />
-              <button
-                onClick={() => onChange([])}
-                className="w-full px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors text-left"
-              >
-                Clear selection
-              </button>
-            </>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function IssueRow({
   issue,
