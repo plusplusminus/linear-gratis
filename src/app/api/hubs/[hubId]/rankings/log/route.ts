@@ -27,13 +27,15 @@ export async function GET(request: Request, { params }: Params) {
     const url = new URL(request.url);
     const projectLinearId = url.searchParams.get("project") ?? undefined;
     const userId = url.searchParams.get("user") ?? undefined;
-    const limit = parseInt(url.searchParams.get("limit") ?? "50", 10);
-    const offset = parseInt(url.searchParams.get("offset") ?? "0", 10);
+    const rawLimit = parseInt(url.searchParams.get("limit") ?? "50", 10);
+    const rawOffset = parseInt(url.searchParams.get("offset") ?? "0", 10);
+    const limit = Math.min(Math.max(isNaN(rawLimit) ? 50 : rawLimit, 1), 100);
+    const offset = Math.max(isNaN(rawOffset) ? 0 : rawOffset, 0);
 
     const log = await fetchRankingLog(hubId, {
       projectLinearId,
       userId,
-      limit: Math.min(limit, 100),
+      limit,
       offset,
     });
 

@@ -145,6 +145,18 @@ export async function saveUserRanking(
     current.map((r) => [r.project_linear_id, r.rank])
   );
 
+  // Delete any previously ranked projects not in the new ranking
+  const currentIds = current.map((r) => r.project_linear_id);
+  const staleIds = currentIds.filter((id) => !orderedProjectIds.includes(id));
+  if (staleIds.length > 0) {
+    await supabaseAdmin
+      .from("hub_project_rankings")
+      .delete()
+      .eq("hub_id", hubId)
+      .eq("user_id", userId)
+      .in("project_linear_id", staleIds);
+  }
+
   // Build upsert rows
   const rows = orderedProjectIds.map((projectLinearId, index) => ({
     hub_id: hubId,
@@ -257,11 +269,16 @@ export async function reconcileRankings(
       .in("id", toDelete);
   }
 
-  // Update compressed ranks
-  for (const update of toUpdate) {
-    await supabaseAdmin
-      .from("hub_project_rankings")
-      .update({ rank: update.rank, updated_at: new Date().toISOString() })
-      .eq("id", update.id);
+  // Update compressed ranks in parallel
+  if (toUpdate.length > 0) {
+    const now = new Date().toISOString();
+    await Promise.all(
+      toUpdate.map((u) =>
+        supabaseAdmin
+          .from("hub_project_rankings")
+          .update({ rank: u.rank, updated_at: now })
+          .eq("id", u.id)
+      )
+    );
   }
 }

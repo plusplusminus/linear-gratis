@@ -5,6 +5,7 @@ import {
   fetchCompositeRanking,
   saveUserRanking,
 } from "@/lib/hub-rankings";
+import { fetchHubProjects } from "@/lib/hub-read";
 
 type Params = { params: Promise<{ hubId: string }> };
 
@@ -57,7 +58,16 @@ export async function PUT(request: Request, { params }: Params) {
       );
     }
 
-    const body = (await request.json()) as { ranking?: string[] };
+    let body: { ranking?: string[] };
+    try {
+      body = (await request.json()) as { ranking?: string[] };
+    } catch {
+      return NextResponse.json(
+        { error: "Malformed JSON body" },
+        { status: 400 }
+      );
+    }
+
     if (!body.ranking || !Array.isArray(body.ranking)) {
       return NextResponse.json(
         { error: "ranking must be an array of project IDs" },
@@ -77,6 +87,17 @@ export async function PUT(request: Request, { params }: Params) {
     if (uniqueIds.size !== body.ranking.length) {
       return NextResponse.json(
         { error: "ranking contains duplicate project IDs" },
+        { status: 400 }
+      );
+    }
+
+    // Validate all IDs are visible projects for this hub
+    const visibleProjects = await fetchHubProjects(hubId);
+    const visibleIds = new Set(visibleProjects.map((p) => p.id));
+    const invalidIds = body.ranking.filter((id) => !visibleIds.has(id));
+    if (invalidIds.length > 0) {
+      return NextResponse.json(
+        { error: "ranking contains invalid project IDs" },
         { status: 400 }
       );
     }

@@ -91,6 +91,15 @@ export function HubRankings({
     return entries.sort((a, b) => a.averageRank - b.averageRank);
   }, [composite, sortBy]);
 
+  const logByProject = useMemo(() => {
+    const map = new Map<string, LogEntry[]>();
+    for (const entry of log) {
+      if (!map.has(entry.projectLinearId)) map.set(entry.projectLinearId, []);
+      map.get(entry.projectLinearId)!.push(entry);
+    }
+    return map;
+  }, [log]);
+
   function toggleExpand(id: string) {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -108,7 +117,7 @@ export function HubRankings({
     );
   }
 
-  if (composite.length === 0) {
+  if (composite.length === 0 && log.length === 0) {
     return (
       <div className="p-6">
         <div className="border border-border rounded-lg p-8 text-center bg-card">
@@ -227,16 +236,12 @@ export function HubRankings({
                   </span>
                 </button>
 
-                {isExpanded && (
-                  <div className="px-4 pb-3 pl-14">
-                    <div className="text-xs text-muted-foreground space-y-1">
-                      {log
-                        .filter(
-                          (l) =>
-                            l.projectLinearId === entry.projectLinearId
-                        )
-                        .slice(0, 5)
-                        .map((l) => (
+                {isExpanded && (() => {
+                  const projectLog = logByProject.get(entry.projectLinearId) ?? [];
+                  return (
+                    <div className="px-4 pb-3 pl-14">
+                      <div className="text-xs text-muted-foreground space-y-1">
+                        {projectLog.slice(0, 5).map((l) => (
                           <div key={l.id} className="flex items-center gap-2">
                             <Clock className="w-3 h-3 shrink-0" />
                             <span>
@@ -248,16 +253,15 @@ export function HubRankings({
                             </span>
                           </div>
                         ))}
-                      {log.filter(
-                        (l) => l.projectLinearId === entry.projectLinearId
-                      ).length === 0 && (
-                        <span className="text-[10px]">
-                          No ranking changes recorded
-                        </span>
-                      )}
+                        {projectLog.length === 0 && (
+                          <span className="text-[10px]">
+                            No ranking changes recorded
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             );
           })}

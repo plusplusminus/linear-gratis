@@ -335,7 +335,7 @@ export function RoadmapView({ projects }: { projects: Project[] }) {
           </p>
         </div>
       ) : viewMode === "priority" ? (
-        <RankingView projects={filtered} />
+        <RankingView projects={projects} />
       ) : viewMode === "timeline" ? (
         <div className="flex-1 overflow-auto p-6">
           <RoadmapTimeline projects={filtered} />

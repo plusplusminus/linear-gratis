@@ -48,6 +48,7 @@ export function RankingView({ projects }: { projects: Project[] }) {
   const [isLoading, setIsLoading] = useState(true);
   const [showBanner, setShowBanner] = useState(false);
   const savingRef = useRef(false);
+  const pendingRef = useRef<Project[] | null>(null);
 
   // Track view
   useEffect(() => {
@@ -63,6 +64,8 @@ export function RankingView({ projects }: { projects: Project[] }) {
         const res = await fetch(`/api/hubs/${hubId}/rankings`);
         if (!res.ok) {
           setRanked([...projects].sort((a, b) => a.priority - b.priority));
+          setUnranked([]);
+          setShowBanner(false);
           setIsLoading(false);
           return;
         }
@@ -96,6 +99,8 @@ export function RankingView({ projects }: { projects: Project[] }) {
         setUnranked(newProjects);
       } catch {
         setRanked([...projects].sort((a, b) => a.priority - b.priority));
+        setUnranked([]);
+        setShowBanner(false);
       }
       setIsLoading(false);
     }
@@ -104,7 +109,11 @@ export function RankingView({ projects }: { projects: Project[] }) {
 
   const saveRanking = useCallback(
     async (items: Project[]) => {
-      if (savingRef.current) return;
+      if (savingRef.current) {
+        // Queue the latest ranking — will flush after current save completes
+        pendingRef.current = items;
+        return;
+      }
       savingRef.current = true;
       try {
         const res = await fetch(`/api/hubs/${hubId}/rankings`, {
@@ -126,6 +135,12 @@ export function RankingView({ projects }: { projects: Project[] }) {
         // Silent — optimistic UI already updated
       } finally {
         savingRef.current = false;
+        // Flush queued ranking if a newer drag happened during save
+        const pending = pendingRef.current;
+        if (pending) {
+          pendingRef.current = null;
+          saveRanking(pending);
+        }
       }
     },
     [hubId]
