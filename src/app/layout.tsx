@@ -53,17 +53,17 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <PostHogProvider>
-          <ThemeProvider
-            defaultTheme="system"
-            storageKey="linear-integration-theme"
-          >
-            <AuthKitProvider>
+        <ThemeProvider
+          defaultTheme="system"
+          storageKey="linear-integration-theme"
+        >
+          <AuthKitProvider>
+            <PostHogProvider>
               {children}
-            </AuthKitProvider>
-            <Toaster richColors position="bottom-right" />
-          </ThemeProvider>
-        </PostHogProvider>
+            </PostHogProvider>
+          </AuthKitProvider>
+          <Toaster richColors position="bottom-right" />
+        </ThemeProvider>
       </body>
     </html>
   );
