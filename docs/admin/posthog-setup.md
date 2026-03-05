@@ -85,7 +85,7 @@ Create a new dashboard at **Dashboards > New dashboard** named "Product Overview
 | Active Hubs | Trends | `$pageview` > unique `hub` groups > last 30 days |
 | Admin vs Client Split | Trends | `$pageview` > unique users > breakdown by `userType` |
 | Top Pages | Trends | `$pageview` > total count > breakdown by `$current_url` |
-| Feature Usage | Trends | Multiple series: `form_submitted`, `comment_created`, `vote_cast`, `issue_viewed` > total count |
+| Feature Usage | Trends | Multiple series: `form_submitted`, `comment_created`, `vote_cast`, `ranking_updated`, `issue_viewed` > total count |
 
 ### Client Engagement Dashboard
 
@@ -95,6 +95,7 @@ Create a new dashboard at **Dashboards > New dashboard** named "Product Overview
 | Comments Created | Trends | `comment_created` > total > last 30 days |
 | Issues Viewed | Trends | `issue_viewed` > unique users > last 30 days |
 | Votes Cast | Trends | `vote_cast` > total > last 30 days |
+| Rankings Updated | Trends | `ranking_updated` > total > last 30 days |
 | Hub Activity Ranking | Trends | `$pageview` > unique users > breakdown by `hub` group |
 | Notification Engagement | Funnel | `notification_clicked` > any action within 5 min |
 
@@ -116,7 +117,7 @@ Actions group related events for cleaner dashboard building.
 
 | Action | Events Included |
 |--------|----------------|
-| Client Engagement | `comment_created`, `form_submitted`, `vote_cast` |
+| Client Engagement | `comment_created`, `form_submitted`, `vote_cast`, `ranking_updated` |
 | Admin Management | `hub_settings_updated`, `member_invited`, `sync_triggered` |
 | Content Viewed | `issue_viewed`, `project_viewed`, `roadmap_viewed` |
 
