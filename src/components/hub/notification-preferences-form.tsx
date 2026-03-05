@@ -146,7 +146,7 @@ export function NotificationPreferencesForm() {
       const data = (await res.json()) as { preferences: Preference[] };
       setPreferences(data.preferences);
       setDirty(false);
-      captureEvent(POSTHOG_EVENTS.notification_preferences_updated);
+      captureEvent(POSTHOG_EVENTS.notification_preferences_updated, { hubId });
       setFeedback({ type: "success", message: "Preferences saved" });
       setTimeout(() => setFeedback(null), 3000);
     } catch (err) {

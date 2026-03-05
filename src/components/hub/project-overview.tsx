@@ -76,9 +76,10 @@ function formatDate(dateStr: string): string {
 }
 
 export function ProjectOverview({ project }: ProjectOverviewProps) {
+  const projectStatus = project.status.name;
   useEffect(() => {
     captureEvent(POSTHOG_EVENTS.project_viewed);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [projectStatus]);
 
   const hasMetadata = project.priority > 0 || project.health || project.lead;
   const hasContent = project.content || project.description;

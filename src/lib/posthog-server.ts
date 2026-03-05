@@ -27,5 +27,9 @@ export function captureServerEvent(
 export async function flushPostHog() {
   const client = getPostHogClient();
   if (!client) return;
-  await client.flush();
+  try {
+    await client.flush();
+  } catch (err) {
+    console.error('[PostHog] flush failed:', err);
+  }
 }

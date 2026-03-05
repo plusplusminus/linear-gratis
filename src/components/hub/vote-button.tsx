@@ -34,7 +34,6 @@ export function HubVoteButton({
     const previousVoted = hasVoted;
 
     // Optimistic update
-    captureEvent(POSTHOG_EVENTS.vote_cast);
     setCount(willVote ? count + 1 : count - 1);
     setHasVoted(willVote);
     setIsAnimating(true);
@@ -54,6 +53,8 @@ export function HubVoteButton({
       if (!response.ok && response.status !== 409) {
         setCount(previousCount);
         setHasVoted(previousVoted);
+      } else {
+        captureEvent(POSTHOG_EVENTS.vote_cast);
       }
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;

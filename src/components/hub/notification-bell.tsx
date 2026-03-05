@@ -242,7 +242,10 @@ export function NotificationBell({
                   hubSlug={hubSlug}
                   onRead={() => {
                     if (!event.read) markAsRead(event.id);
-                    captureEvent(POSTHOG_EVENTS.notification_clicked);
+                    captureEvent(POSTHOG_EVENTS.notification_clicked, {
+                      eventType: event.event_type,
+                      wasUnread: !event.read,
+                    });
                     setOpen(false);
                   }}
                 />

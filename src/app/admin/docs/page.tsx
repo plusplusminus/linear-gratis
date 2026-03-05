@@ -8,15 +8,19 @@ const docsDir = path.join(process.cwd(), "docs", "admin");
 function getAdminDocs() {
   if (!fs.existsSync(docsDir)) return [];
   const files = fs.readdirSync(docsDir).filter((f) => f.endsWith(".md"));
-  return files.map((f) => {
-    const content = fs.readFileSync(path.join(docsDir, f), "utf-8");
-    const titleMatch = content.match(/^#\s+(.+)$/m);
-    const descMatch = content.match(/^#\s+.+\n+(.+)$/m);
-    return {
-      slug: f.replace(/\.md$/, ""),
-      title: titleMatch ? titleMatch[1] : f.replace(/[-_]/g, " ").replace(/\.md$/, ""),
-      description: descMatch ? descMatch[1] : "",
-    };
+  return files.flatMap((f) => {
+    try {
+      const content = fs.readFileSync(path.join(docsDir, f), "utf-8");
+      const titleMatch = content.match(/^#\s+(.+)$/m);
+      const descMatch = content.match(/^#\s+.+\n+(.+)$/m);
+      return {
+        slug: f.replace(/\.md$/, ""),
+        title: titleMatch ? titleMatch[1] : f.replace(/[-_]/g, " ").replace(/\.md$/, ""),
+        description: descMatch ? descMatch[1] : "",
+      };
+    } catch {
+      return [];
+    }
   });
 }
 

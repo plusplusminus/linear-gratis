@@ -347,7 +347,11 @@ export function FormBuilder({ form, hubId, hubTeams }: FormBuilderProps) {
 
         const saved = (await res.json()) as { id: string };
         toast.success(isNew ? "Form created" : "Form saved");
-        captureEvent(POSTHOG_EVENTS.form_builder_saved);
+        captureEvent(POSTHOG_EVENTS.form_builder_saved, {
+          isNewForm: isNew,
+          formType: body.type,
+          fieldCount: body.fields?.length ?? 0,
+        });
 
         if (isNew) {
           if (hubId) {

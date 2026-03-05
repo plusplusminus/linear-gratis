@@ -78,7 +78,12 @@ export async function POST(
       startedAt,
     });
 
-    captureServerEvent(auth.user?.id || "system", POSTHOG_EVENTS.sync_completed, { hubId });
+    captureServerEvent(auth.user?.id || "system", POSTHOG_EVENTS.sync_completed, {
+      hubId,
+      success: result.success,
+      error: result.error,
+      teamCount: result.teamCount,
+    });
 
     return NextResponse.json({
       success: result.success,

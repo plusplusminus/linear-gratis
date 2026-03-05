@@ -80,9 +80,10 @@ export function RoadmapView({ projects }: { projects: Project[] }) {
     () => searchParams.get("rl")?.split(",").filter(Boolean) ?? []
   );
 
+  // Track initial roadmap load only — view mode changes are navigation, not distinct views
   useEffect(() => {
     captureEvent(POSTHOG_EVENTS.roadmap_viewed, { viewType: viewMode });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   function updateUrl(
     view: RoadmapViewMode,

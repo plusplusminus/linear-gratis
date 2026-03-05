@@ -78,6 +78,8 @@ function PostHogIdentify() {
 
     if (hubSlug) {
       ph.group('hub', hubSlug);
+    } else {
+      ph.resetGroups();
     }
   }, [user, ph, pathname]);
 

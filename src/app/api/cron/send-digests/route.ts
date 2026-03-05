@@ -25,10 +25,14 @@ export async function POST(request: NextRequest) {
       `send-digests cron completed in ${durationMs}ms — daily: ${daily.sent} sent, ${daily.skipped} skipped, ${daily.errors} errors; weekly: ${weekly.sent} sent, ${weekly.skipped} skipped, ${weekly.errors} errors`
     );
 
-    captureServerEvent("system", POSTHOG_EVENTS.digest_sent, {
-      recipientCount: daily.sent + weekly.sent,
-    });
-    await flushPostHog();
+    try {
+      captureServerEvent("system", POSTHOG_EVENTS.digest_sent, {
+        recipientCount: daily.sent + weekly.sent,
+      });
+      await flushPostHog();
+    } catch (err) {
+      console.error("PostHog telemetry error:", err);
+    }
 
     return NextResponse.json({
       success: true,

@@ -227,7 +227,7 @@ export function FormModal({
 
       setResponseMessage(data.confirmationMessage || form?.confirmation_message || "Submitted successfully");
       setSubmitState("success");
-      captureEvent(POSTHOG_EVENTS.form_submitted, { formName: 'modal' });
+      captureEvent(POSTHOG_EVENTS.form_submitted, { formName: 'modal', formId, hubId });
       onSubmitted();
     } catch {
       setResponseMessage(form?.error_message || "Something went wrong");

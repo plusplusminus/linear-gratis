@@ -71,7 +71,7 @@ Low-usage hubs may benefit from onboarding improvements or workflow changes.
 | Playlist | Purpose |
 |----------|---------|
 | Rage clicks | Filter by `$rageclick` event — users clicking repeatedly out of frustration |
-| Abandoned forms | Has `form_viewed` but NOT `form_submitted` in same session |
+| Abandoned forms | Has `$pageview` on a form URL but NOT `form_submitted` in same session |
 | Short sessions (<30s) | Users who bounce immediately — is the landing page unclear? |
 | First-time users | Filter by `$initial_pageview` — how do new users experience the product? |
 

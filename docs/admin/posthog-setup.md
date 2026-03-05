@@ -51,7 +51,7 @@ Cohorts allow you to filter any dashboard, insight, or replay by user type.
 
 | Setting | Recommended Value | Notes |
 |---------|------------------|-------|
-| Recording rate | 100% | Low volume app, adjust down later if costs increase |
+| Recording rate | 100% | Low-volume app, adjust down later if costs increase |
 | Minimum duration | 2 seconds | Filters out bounces |
 | Network recording | Enabled | Helps debug API issues |
 | Console log recording | Disabled | Already off in code config |

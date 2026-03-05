@@ -171,7 +171,11 @@ export function WorkflowRules({ hubId, mappingId, teamId, visibleLabelIds }: Wor
       }
 
       toast.success(editingRule ? "Rule updated" : "Rule created");
-      captureEvent(POSTHOG_EVENTS.workflow_rule_changed);
+      captureEvent(POSTHOG_EVENTS.workflow_rule_changed, {
+        hubId,
+        action: editingRule ? "update" : "create",
+        triggerType,
+      });
       resetForm();
       fetchRules();
     } catch (e) {

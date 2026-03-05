@@ -13,10 +13,15 @@ export async function POST(request: NextRequest) {
 
   try {
     const result = await retryFailedEmails(3);
-    captureServerEvent("system", POSTHOG_EVENTS.email_queued, {
-      count: result.retried,
-    });
-    await flushPostHog();
+
+    try {
+      captureServerEvent("system", POSTHOG_EVENTS.email_queued, {
+        count: result.retried,
+      });
+      await flushPostHog();
+    } catch (err) {
+      console.error("PostHog telemetry error:", err);
+    }
 
     return NextResponse.json({
       success: true,

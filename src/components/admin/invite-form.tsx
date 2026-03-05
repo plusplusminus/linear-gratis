@@ -7,8 +7,8 @@ import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import { Send } from "lucide-react";
 
 interface InviteFormProps {
-  onInvite: (email: string, role: "default" | "view_only") => void;
-  onBulkInvite: (emails: string[], role: "default" | "view_only") => void;
+  onInvite: (email: string, role: "default" | "view_only") => Promise<void> | void;
+  onBulkInvite: (emails: string[], role: "default" | "view_only") => Promise<void> | void;
   isPending: boolean;
 }
 
@@ -16,7 +16,7 @@ export function InviteForm({ onInvite, onBulkInvite, isPending }: InviteFormProp
   const [input, setInput] = useState("");
   const [role, setRole] = useState<"default" | "view_only">("default");
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const raw = input.trim();
     if (!raw) return;
@@ -29,13 +29,16 @@ export function InviteForm({ onInvite, onBulkInvite, isPending }: InviteFormProp
 
     if (emails.length === 0) return;
 
-    if (emails.length === 1) {
-      onInvite(emails[0], role);
-    } else {
-      onBulkInvite(emails, role);
+    try {
+      if (emails.length === 1) {
+        await onInvite(emails[0], role);
+      } else {
+        await onBulkInvite(emails, role);
+      }
+      captureEvent(POSTHOG_EVENTS.member_invited, { emailCount: emails.length });
+    } catch {
+      // Invite failed — don't track
     }
-
-    captureEvent(POSTHOG_EVENTS.member_invited, { emailCount: emails.length });
     setInput("");
   }
 

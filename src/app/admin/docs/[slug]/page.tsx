@@ -13,14 +13,25 @@ export async function generateStaticParams() {
   return files.map((f) => ({ slug: f.replace(/\.md$/, "") }));
 }
 
+function isValidSlug(slug: string): boolean {
+  return /^[a-z0-9-]+$/i.test(slug);
+}
+
+function resolveDocPath(slug: string): string | null {
+  if (!isValidSlug(slug)) return null;
+  const filePath = path.resolve(docsDir, `${slug}.md`);
+  if (!filePath.startsWith(path.resolve(docsDir))) return null;
+  return filePath;
+}
+
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const filePath = path.join(docsDir, `${slug}.md`);
-  if (!fs.existsSync(filePath)) return { title: "Not Found" };
+  const filePath = resolveDocPath(slug);
+  if (!filePath || !fs.existsSync(filePath)) return { title: "Not Found" };
 
   const content = fs.readFileSync(filePath, "utf-8");
   const titleMatch = content.match(/^#\s+(.+)$/m);
@@ -35,9 +46,9 @@ export default async function AdminDocPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const filePath = path.join(docsDir, `${slug}.md`);
+  const filePath = resolveDocPath(slug);
 
-  if (!fs.existsSync(filePath)) {
+  if (!filePath || !fs.existsSync(filePath)) {
     notFound();
   }
 
