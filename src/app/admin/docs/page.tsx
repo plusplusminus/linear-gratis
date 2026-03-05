@@ -7,7 +7,7 @@ const docsDir = path.join(process.cwd(), "docs", "admin");
 
 function getAdminDocs() {
   if (!fs.existsSync(docsDir)) return [];
-  const files = fs.readdirSync(docsDir).filter((f) => f.endsWith(".md"));
+  const files = fs.readdirSync(docsDir).filter((f) => f.endsWith(".md")).sort();
   return files.flatMap((f) => {
     try {
       const content = fs.readFileSync(path.join(docsDir, f), "utf-8");
@@ -18,7 +18,8 @@ function getAdminDocs() {
         title: titleMatch ? titleMatch[1] : f.replace(/[-_]/g, " ").replace(/\.md$/, ""),
         description: descMatch ? descMatch[1] : "",
       };
-    } catch {
+    } catch (err) {
+      console.error(`Failed to parse doc ${f}:`, err);
       return [];
     }
   });
@@ -40,7 +41,7 @@ export default function AdminDocsPage() {
         {docs.map((doc) => (
           <Link
             key={doc.slug}
-            href={`/admin/docs/${doc.slug}`}
+            href={`/admin/docs/${encodeURIComponent(doc.slug)}`}
             className="flex items-start gap-3 px-3 py-3 rounded-md text-sm transition-colors hover:bg-accent/50 group"
           >
             <FileText className="w-4 h-4 mt-0.5 text-muted-foreground shrink-0 group-hover:text-foreground transition-colors" />

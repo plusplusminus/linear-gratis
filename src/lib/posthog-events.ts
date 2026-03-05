@@ -52,7 +52,7 @@ export const POSTHOG_EVENTS = {
   webhook_received: 'webhook_received',
   issue_created_via_api: 'issue_created_via_api',
   digest_sent: 'digest_sent',
-  email_queued: 'email_queued',
+  email_queue_processed: 'email_queue_processed',
 } as const;
 
 export type PostHogEvent = (typeof POSTHOG_EVENTS)[keyof typeof POSTHOG_EVENTS];

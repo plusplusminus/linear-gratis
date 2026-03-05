@@ -54,7 +54,11 @@ export function HubVoteButton({
         setCount(previousCount);
         setHasVoted(previousVoted);
       } else {
-        captureEvent(POSTHOG_EVENTS.vote_cast);
+        captureEvent(POSTHOG_EVENTS.vote_cast, {
+          action: willVote ? "cast" : "remove",
+          issueLinearId,
+          hubId,
+        });
       }
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;

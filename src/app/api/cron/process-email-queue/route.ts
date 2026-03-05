@@ -15,8 +15,9 @@ export async function POST(request: NextRequest) {
     const result = await retryFailedEmails(3);
 
     try {
-      captureServerEvent("system", POSTHOG_EVENTS.email_queued, {
-        count: result.retried,
+      captureServerEvent("system", POSTHOG_EVENTS.email_queue_processed, {
+        retried: result.retried,
+        succeeded: result.succeeded,
       });
       await flushPostHog();
     } catch (err) {

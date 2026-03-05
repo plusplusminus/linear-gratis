@@ -173,4 +173,4 @@ All custom events tracked by the application:
 | `issue_created_via_api` | Server | Issue created in Linear via API |
 | `sync_completed` | Server | Hub sync finished |
 | `digest_sent` | Server | Email digest batch sent |
-| `email_queued` | Server | Email queue processed |
+| `email_queue_processed` | Server | Email retry queue processed |
