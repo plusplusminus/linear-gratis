@@ -38,7 +38,6 @@ export default async function HubSettingsPage({
           name: hub.name,
           slug: hub.slug,
           is_active: hub.is_active,
-          request_forms_enabled: hub.request_forms_enabled ?? false,
         }}
         mappings={mappings}
       />
