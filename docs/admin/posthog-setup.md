@@ -163,6 +163,8 @@ All custom events tracked by the application:
 | `notification_clicked` | Client | Notification item clicked |
 | `notification_preferences_updated` | Client | Notification preferences saved |
 | `vote_cast` | Client | Vote button clicked |
+| `ranking_viewed` | Client | Priority ranking tab opened |
+| `ranking_updated` | Client | Project ranking saved after drag |
 | `tab_switched` | Client | Hub or team tab changed |
 | `hub_settings_updated` | Client | Hub settings form saved |
 | `hub_created` | Client | New hub created via wizard |

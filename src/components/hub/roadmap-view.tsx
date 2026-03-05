@@ -5,6 +5,7 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
   GanttChart,
   LayoutGrid,
+  ListOrdered,
   CircleDot,
   SignalHigh,
   Tag,
@@ -17,6 +18,7 @@ import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import { CheckboxFilterDropdown } from "./filter-dropdown";
 import { RoadmapTimeline } from "./roadmap-timeline";
 import { RoadmapBoard } from "./roadmap-board";
+import { RankingView } from "./ranking-view";
 
 type Project = {
   id: string;
@@ -37,7 +39,7 @@ type Project = {
   }>;
 };
 
-type RoadmapViewMode = "timeline" | "board";
+type RoadmapViewMode = "timeline" | "board" | "priority";
 type BoardGroupBy = "status" | "priority" | "label";
 
 const PRIORITY_LABELS: Record<number, string> = {
@@ -56,7 +58,7 @@ export function RoadmapView({ projects }: { projects: Project[] }) {
   const [viewMode, setViewMode] = useState<RoadmapViewMode>(
     () => {
       const v = searchParams.get("roadmapView");
-      if (v === "timeline" || v === "board") return v;
+      if (v === "timeline" || v === "board" || v === "priority") return v;
       return "timeline";
     }
   );
@@ -233,6 +235,18 @@ export function RoadmapView({ projects }: { projects: Project[] }) {
             <LayoutGrid className="w-3.5 h-3.5" />
             Board
           </button>
+          <button
+            onClick={() => changeView("priority")}
+            className={cn(
+              "flex items-center gap-1 px-2 py-1 text-xs transition-colors",
+              viewMode === "priority"
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <ListOrdered className="w-3.5 h-3.5" />
+            Priority
+          </button>
         </div>
 
         {/* Board group by selector */}
@@ -320,6 +334,8 @@ export function RoadmapView({ projects }: { projects: Project[] }) {
               : "No projects to display"}
           </p>
         </div>
+      ) : viewMode === "priority" ? (
+        <RankingView projects={filtered} />
       ) : viewMode === "timeline" ? (
         <div className="flex-1 overflow-auto p-6">
           <RoadmapTimeline projects={filtered} />
