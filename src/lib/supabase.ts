@@ -65,34 +65,6 @@ export type PublicView = {
   updated_at: string
 }
 
-export type CustomDomain = {
-  id: string
-  user_id: string
-  domain: string
-  subdomain?: string
-  verification_token: string
-  verification_status: 'pending' | 'verified' | 'failed'
-  verified_at?: string
-  dns_records?: {
-    type: string
-    name: string
-    value: string
-    purpose?: 'routing' | 'ownership' | 'ssl'
-  }[]
-  ssl_status: 'pending' | 'active' | 'failed'
-  ssl_issued_at?: string
-  redirect_to_https?: boolean
-  is_active: boolean
-  target_type?: 'hub'
-  target_slug?: string
-  last_checked_at?: string
-  error_message?: string
-  cloudflare_hostname_id?: string
-  cloudflare_hostname_status?: 'pending' | 'active' | 'pending_deletion' | 'moved' | 'deleted'
-  created_at: string
-  updated_at: string
-}
-
 export type KanbanColumn = {
   key: string
   label: string
