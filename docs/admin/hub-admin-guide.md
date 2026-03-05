@@ -10,6 +10,9 @@ How to set up and manage client hubs in Linear Gratis.
 4. Configure scoping (projects, labels) per team
 5. Invite members
 
+![Admin dashboard showing the sidebar with hub list and hub overview with quick actions](screenshots/admin-sidebar.png)
+*The admin dashboard — sidebar lists all hubs, main area shows hub stats and quick actions.*
+
 ## Forms
 
 Forms let clients submit requests (bugs, features, custom) that create Linear issues automatically.
@@ -21,6 +24,9 @@ Forms let clients submit requests (bugs, features, custom) that create Linear is
   - Enable/disable individual forms per hub
   - Override the confirmation message
   - Auto-apply specific Linear labels to submissions from that hub
+
+![Global forms list showing Bug Report and Feature Request forms](screenshots/forms-list.png)
+*Global forms page — manage forms available to all hubs.*
 
 ### Form Types
 
@@ -43,13 +49,26 @@ Each form has configurable fields (text, textarea, select, radio, checkbox, file
 
 Fields can be marked required, hidden from clients, or given default values.
 
+![Form builder showing settings for name, type, description, and messages](screenshots/form-builder.png)
+*Form builder — configure form settings, fields, and Linear field mapping.*
+
 ### Button Customisation
 
 Each form has a customisable sidebar button with configurable label and icon (bug, lightbulb, flag, star, zap, etc.).
 
+### Hub-Specific Form Overrides
+
+In each hub's **Settings > Forms** tab, you can enable/disable forms per hub and set hub-specific labels that auto-apply to submissions.
+
+![Hub settings Forms tab showing per-hub form configuration](screenshots/settings-forms.png)
+*Per-hub form overrides — enable/disable forms and set auto-apply labels.*
+
 ## Project Visibility
 
 Controlled per team mapping in **Settings > Teams & Scoping**.
+
+![Teams & Scoping tab showing project list with checkboxes and overview-only section](screenshots/settings-scoping.png)
+*Teams & Scoping — select visible projects, overview-only projects, and configure labels.*
 
 ### Auto-Include Projects
 
@@ -116,6 +135,9 @@ Available at **Admin > Sync Monitor** (sidebar). Shows:
 - **Run history**: Manual sync runs with duration and entity counts
 - **Email delivery**: Notification queue stats
 
+![Sync Monitor dashboard showing health status, event counts, and error rates](screenshots/sync-monitor.png)
+*Sync Monitor — real-time health status with event log, run history, and email delivery tabs.*
+
 ## Adding Members
 
 ### Inviting
@@ -124,6 +146,9 @@ Available at **Admin > Sync Monitor** (sidebar). Shows:
 2. Enter one or more email addresses (comma, semicolon, or newline separated)
 3. Select a role
 4. Click invite — WorkOS sends a branded invitation email
+
+![Members panel showing invite form and member list](screenshots/members-panel.png)
+*Members panel — invite users by email and manage existing members.*
 
 ### Roles
 
@@ -150,13 +175,22 @@ Available tabs on each hub's settings page:
 | Teams & Scoping | Project visibility, label visibility, workflow rules per team |
 | Forms | Enable/disable global forms, label overrides, confirmation messages |
 
+![Hub settings General tab with name field and request forms toggle](screenshots/settings-general.png)
+*General settings — hub name and request forms toggle.*
+
 ### Deactivating a Hub
 
-In the **Danger Zone** section of General settings. Deactivated hubs are hidden from clients but no data is deleted. Can be reactivated at any time.
+In the **Danger Zone** tab. Deactivated hubs are hidden from clients but no data is deleted. Can be reactivated at any time.
+
+![Danger Zone tab with deactivate hub option](screenshots/settings-danger-zone.png)
+*Danger Zone — deactivate or reactivate a hub.*
 
 ## Workflow Rules
 
-Automate Linear issue status changes based on label activity. Configured per team mapping.
+Automate Linear issue status changes based on label activity. Configured per team mapping in **Settings > Teams & Scoping**.
+
+![Workflow rules section showing an existing rule and Add rule button](screenshots/workflow-rules.png)
+*Workflow rules — automate status changes based on label triggers.*
 
 ### Trigger Types
 
