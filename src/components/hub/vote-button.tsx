@@ -50,15 +50,15 @@ export function HubVoteButton({
         signal: controller.signal,
       });
 
-      if (!response.ok && response.status !== 409) {
-        setCount(previousCount);
-        setHasVoted(previousVoted);
-      } else {
+      if (response.ok) {
         captureEvent(POSTHOG_EVENTS.vote_cast, {
           action: willVote ? "cast" : "remove",
           issueLinearId,
           hubId,
         });
+      } else if (response.status !== 409) {
+        setCount(previousCount);
+        setHasVoted(previousVoted);
       }
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;
