@@ -29,7 +29,6 @@ export type HubContextValue = {
   role: HubMemberRole;
   isViewOnly: boolean;
   isLoading: boolean;
-  requestFormsEnabled: boolean;
 };
 
 const HubContext = createContext<HubContextValue | null>(null);
@@ -60,7 +59,6 @@ export function HubProvider({
     role: HubMemberRole;
     isViewOnly: boolean;
     isLoading: boolean;
-    requestFormsEnabled: boolean;
   }>({
     userId: "",
     email: "",
@@ -69,7 +67,6 @@ export function HubProvider({
     role: "default",
     isViewOnly: false,
     isLoading: true,
-    requestFormsEnabled: false,
   });
 
   useEffect(() => {
@@ -84,7 +81,6 @@ export function HubProvider({
           lastName: string | null;
           role: HubMemberRole;
           isViewOnly: boolean;
-          requestFormsEnabled: boolean;
         };
         setAuthState({
           userId: data.userId,
@@ -94,7 +90,6 @@ export function HubProvider({
           role: data.role,
           isViewOnly: data.isViewOnly,
           isLoading: false,
-          requestFormsEnabled: data.requestFormsEnabled ?? false,
         });
       } catch {
         setAuthState((prev) => ({ ...prev, isLoading: false }));

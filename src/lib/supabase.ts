@@ -26,19 +26,6 @@ export type Profile = {
   updated_at: string
 }
 
-export type CustomerRequestForm = {
-  id: string
-  user_id: string
-  name: string
-  slug: string
-  project_id: string
-  project_name: string
-  form_title: string
-  description?: string
-  is_active: boolean
-  created_at: string
-  updated_at: string
-}
 
 export type PublicView = {
   id: string
