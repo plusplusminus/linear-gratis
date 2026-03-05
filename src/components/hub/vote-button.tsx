@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { captureEvent } from "@/lib/posthog-client";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import { ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -48,7 +50,13 @@ export function HubVoteButton({
         signal: controller.signal,
       });
 
-      if (!response.ok && response.status !== 409) {
+      if (response.ok) {
+        captureEvent(POSTHOG_EVENTS.vote_cast, {
+          action: willVote ? "cast" : "remove",
+          issueLinearId,
+          hubId,
+        });
+      } else if (response.status !== 409) {
         setCount(previousCount);
         setHasVoted(previousVoted);
       }

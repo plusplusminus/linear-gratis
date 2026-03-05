@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useHub } from "@/contexts/hub-context";
+import { captureEvent } from "@/lib/posthog-client";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -225,6 +227,7 @@ export function FormModal({
 
       setResponseMessage(data.confirmationMessage || form?.confirmation_message || "Submitted successfully");
       setSubmitState("success");
+      captureEvent(POSTHOG_EVENTS.form_submitted, { formName: 'modal', formId, hubId });
       onSubmitted();
     } catch {
       setResponseMessage(form?.error_message || "Something went wrong");

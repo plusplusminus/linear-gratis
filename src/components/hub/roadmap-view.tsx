@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
   GanttChart,
@@ -12,6 +12,8 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { captureEvent } from "@/lib/posthog-client";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import { CheckboxFilterDropdown } from "./filter-dropdown";
 import { RoadmapTimeline } from "./roadmap-timeline";
 import { RoadmapBoard } from "./roadmap-board";
@@ -77,6 +79,11 @@ export function RoadmapView({ projects }: { projects: Project[] }) {
   const [labelFilter, setLabelFilter] = useState<string[]>(
     () => searchParams.get("rl")?.split(",").filter(Boolean) ?? []
   );
+
+  // Track initial roadmap load only — view mode changes are navigation, not distinct views
+  useEffect(() => {
+    captureEvent(POSTHOG_EVENTS.roadmap_viewed, { viewType: viewMode });
+  }, []); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   function updateUrl(
     view: RoadmapViewMode,

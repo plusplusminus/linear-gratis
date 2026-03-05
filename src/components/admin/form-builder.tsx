@@ -4,6 +4,8 @@ import { useState, useTransition, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { captureEvent } from "@/lib/posthog-client";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import { useFetch } from "@/hooks/use-fetch";
 import {
   ChevronUp,
@@ -345,6 +347,11 @@ export function FormBuilder({ form, hubId, hubTeams }: FormBuilderProps) {
 
         const saved = (await res.json()) as { id: string };
         toast.success(isNew ? "Form created" : "Form saved");
+        captureEvent(POSTHOG_EVENTS.form_builder_saved, {
+          isNewForm: isNew,
+          formType: body.type,
+          fieldCount: body.fields?.length ?? 0,
+        });
 
         if (isNew) {
           if (hubId) {

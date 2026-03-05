@@ -5,10 +5,12 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { captureEvent } from "@/lib/posthog-client";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import { useFetch } from "@/hooks/use-fetch";
 import { ScopingEditor } from "./scoping-editor";
 import { LabelPicker } from "./pickers/label-picker";
-import { AlertTriangle, Globe, Loader2, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { AlertTriangle, Loader2, ChevronDown, ChevronRight } from "lucide-react";
 import type { FormTemplate, HubFormConfig } from "@/lib/supabase";
 
 interface TeamMapping {
@@ -35,7 +37,7 @@ interface HubSettingsFormProps {
   mappings: TeamMapping[];
 }
 
-type Tab = "general" | "scoping" | "forms" | "domain" | "danger";
+type Tab = "general" | "scoping" | "forms" | "danger";
 
 export function HubSettingsForm({ hub, mappings }: HubSettingsFormProps) {
   const router = useRouter();
@@ -83,6 +85,7 @@ export function HubSettingsForm({ hub, mappings }: HubSettingsFormProps) {
           throw new Error(err.error ?? "Failed to save");
         }
         toast.success("Hub settings saved");
+        captureEvent(POSTHOG_EVENTS.hub_settings_updated, { hubId: hub.id });
         setDirty(false);
         router.refresh();
       } catch (e) {
@@ -114,86 +117,10 @@ export function HubSettingsForm({ hub, mappings }: HubSettingsFormProps) {
     });
   }, [hub.id, hub.name, hub.is_active, router]);
 
-  // Custom domain state
-  const [domainInput, setDomainInput] = useState("");
-  const [currentDomain, setCurrentDomain] = useState<{
-    id: string;
-    domain: string;
-    verification_status: string;
-  } | null>(null);
-  const [domainLoading, setDomainLoading] = useState(false);
-  const [domainFetched, setDomainFetched] = useState(false);
-
-  const fetchDomain = useCallback(async () => {
-    setDomainLoading(true);
-    try {
-      const res = await fetch(`/api/admin/hubs/${hub.id}/domain`);
-      if (res.ok) {
-        const data = (await res.json()) as { domain: { id: string; domain: string; verification_status: string } | null };
-        setCurrentDomain(data.domain);
-        if (data.domain) setDomainInput(data.domain.domain);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setDomainLoading(false);
-      setDomainFetched(true);
-    }
-  }, [hub.id]);
-
-  // Fetch domain when switching to domain tab
-  useEffect(() => {
-    if (tab === "domain" && !domainFetched) {
-      fetchDomain();
-    }
-  }, [tab, domainFetched, fetchDomain]);
-
-  const saveDomain = useCallback(() => {
-    startTransition(async () => {
-      try {
-        const res = await fetch(`/api/admin/hubs/${hub.id}/domain`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ domain: domainInput.trim() }),
-        });
-        if (!res.ok) {
-          const err = (await res.json()) as { error?: string };
-          throw new Error(err.error ?? "Failed to save domain");
-        }
-        const data = (await res.json()) as { domain: { id: string; domain: string; verification_status: string } };
-        setCurrentDomain(data.domain);
-        toast.success("Custom domain saved");
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed to save domain");
-      }
-    });
-  }, [hub.id, domainInput]);
-
-  const removeDomain = useCallback(() => {
-    if (!confirm("Remove the custom domain from this hub?")) return;
-    startTransition(async () => {
-      try {
-        const res = await fetch(`/api/admin/hubs/${hub.id}/domain`, {
-          method: "DELETE",
-        });
-        if (!res.ok) {
-          const err = (await res.json()) as { error?: string };
-          throw new Error(err.error ?? "Failed to remove domain");
-        }
-        setCurrentDomain(null);
-        setDomainInput("");
-        toast.success("Custom domain removed");
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed to remove domain");
-      }
-    });
-  }, [hub.id]);
-
   const tabs: { key: Tab; label: string }[] = [
     { key: "general", label: "General" },
     { key: "scoping", label: "Teams & Scoping" },
     { key: "forms", label: "Forms" },
-    { key: "domain", label: "Custom Domain" },
     { key: "danger", label: "Danger Zone" },
   ];
 
@@ -293,112 +220,6 @@ export function HubSettingsForm({ hub, mappings }: HubSettingsFormProps) {
       {/* Forms tab */}
       {tab === "forms" && (
         <HubFormsTab hubId={hub.id} teamMappings={mappings} />
-      )}
-
-      {/* Custom domain tab */}
-      {tab === "domain" && (
-        <div className="space-y-6">
-          {domainLoading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Loading domain settings...
-            </div>
-          ) : (
-            <>
-              <div>
-                <label
-                  htmlFor="custom-domain"
-                  className="block text-sm font-medium mb-1.5"
-                >
-                  Custom Domain
-                </label>
-                <p className="text-xs text-muted-foreground mb-3">
-                  Point a custom domain to this hub so clients can access it at
-                  their own URL.
-                </p>
-                <div className="flex gap-2">
-                  <input
-                    id="custom-domain"
-                    type="text"
-                    value={domainInput}
-                    onChange={(e) => setDomainInput(e.target.value)}
-                    placeholder="hub.example.com"
-                    className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
-                  />
-                  <button
-                    onClick={saveDomain}
-                    disabled={
-                      !domainInput.trim() ||
-                      domainInput.trim() === currentDomain?.domain ||
-                      isPending
-                    }
-                    className={cn(
-                      "px-4 py-2 text-sm font-medium rounded-md transition-colors",
-                      domainInput.trim() &&
-                        domainInput.trim() !== currentDomain?.domain
-                        ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                        : "bg-muted text-muted-foreground cursor-not-allowed"
-                    )}
-                  >
-                    {isPending ? "Saving..." : "Save"}
-                  </button>
-                </div>
-              </div>
-
-              {currentDomain && (
-                <div className="border border-border rounded-lg p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Globe className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">
-                        {currentDomain.domain}
-                      </span>
-                      <span
-                        className={cn(
-                          "px-1.5 py-0.5 text-xs rounded-full font-medium",
-                          currentDomain.verification_status === "verified"
-                            ? "bg-green-500/10 text-green-500"
-                            : currentDomain.verification_status === "failed"
-                              ? "bg-red-500/10 text-red-500"
-                              : "bg-yellow-500/10 text-yellow-500"
-                        )}
-                      >
-                        {currentDomain.verification_status}
-                      </span>
-                    </div>
-                    <button
-                      onClick={removeDomain}
-                      disabled={isPending}
-                      className="p-1.5 text-muted-foreground hover:text-destructive rounded-md transition-colors"
-                      title="Remove domain"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  <div className="bg-muted/50 rounded-md p-3">
-                    <h4 className="text-xs font-medium mb-2">DNS Setup</h4>
-                    <p className="text-xs text-muted-foreground mb-2">
-                      Add the following CNAME record to your DNS provider:
-                    </p>
-                    <div className="font-mono text-xs bg-background border border-border rounded px-2 py-1.5 select-all">
-                      {"CNAME"} {currentDomain.domain} {"\u2192"}{" "}
-                      {"cname.vercel-dns.com"}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      After adding the record, add{" "}
-                      <span className="font-medium">
-                        {currentDomain.domain}
-                      </span>{" "}
-                      as a domain in your Vercel project settings for SSL to be
-                      provisioned automatically.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
       )}
 
       {/* Danger zone tab */}

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { captureServerEvent } from '@/lib/posthog-server';
+import { POSTHOG_EVENTS } from '@/lib/posthog-events';
 
 const LINEAR_API_URL = 'https://api.linear.app/graphql';
 
@@ -136,6 +138,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    captureServerEvent('system', POSTHOG_EVENTS.issue_created_via_api);
 
     return NextResponse.json({
       success: true,

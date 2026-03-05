@@ -6,6 +6,8 @@ import {
 } from "@/lib/hub-auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { processFormSubmission } from "@/lib/form-submit";
+import { captureServerEvent } from "@/lib/posthog-server";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 
 /**
  * POST: Submit a form.
@@ -63,6 +65,8 @@ export async function POST(
       body.teamId,
       body.projectId,
     );
+
+    captureServerEvent(user.id || "anonymous", POSTHOG_EVENTS.form_submission_created, { hubId });
 
     return NextResponse.json(result, { status: 201 });
   } catch (error) {

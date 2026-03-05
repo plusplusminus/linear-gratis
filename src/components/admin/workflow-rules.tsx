@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { captureEvent } from "@/lib/posthog-client";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import { Plus, Trash2, Pencil, X, Loader2, Zap, ArrowRight } from "lucide-react";
 import type { WorkflowTriggerType, WorkflowActionType } from "@/lib/supabase";
 
@@ -169,6 +171,11 @@ export function WorkflowRules({ hubId, mappingId, teamId, visibleLabelIds }: Wor
       }
 
       toast.success(editingRule ? "Rule updated" : "Rule created");
+      captureEvent(POSTHOG_EVENTS.workflow_rule_changed, {
+        hubId,
+        action: editingRule ? "update" : "create",
+        triggerType,
+      });
       resetForm();
       fetchRules();
     } catch (e) {

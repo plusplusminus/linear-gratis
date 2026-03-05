@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useHub } from "@/contexts/hub-context";
+import { captureEvent } from "@/lib/posthog-client";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -144,6 +146,7 @@ export function NotificationPreferencesForm() {
       const data = (await res.json()) as { preferences: Preference[] };
       setPreferences(data.preferences);
       setDirty(false);
+      captureEvent(POSTHOG_EVENTS.notification_preferences_updated, { hubId });
       setFeedback({ type: "success", message: "Preferences saved" });
       setTimeout(() => setFeedback(null), 3000);
     } catch (err) {

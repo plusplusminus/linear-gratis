@@ -2,6 +2,8 @@
 
 import { useState, useCallback } from "react";
 import { useHub } from "@/contexts/hub-context";
+import { captureEvent } from "@/lib/posthog-client";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -62,6 +64,7 @@ export function RequestFormModal({
       }
 
       toast.success("Request submitted");
+      captureEvent(POSTHOG_EVENTS.form_submitted, { formName: 'request' });
       onClose();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to submit request");

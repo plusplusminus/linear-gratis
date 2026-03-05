@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { captureEvent } from "@/lib/posthog-client";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import {
   Bell,
   MessageSquare,
@@ -240,6 +242,10 @@ export function NotificationBell({
                   hubSlug={hubSlug}
                   onRead={() => {
                     if (!event.read) markAsRead(event.id);
+                    captureEvent(POSTHOG_EVENTS.notification_clicked, {
+                      eventType: event.event_type,
+                      wasUnread: !event.read,
+                    });
                     setOpen(false);
                   }}
                 />
