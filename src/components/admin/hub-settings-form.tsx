@@ -50,7 +50,7 @@ export function HubSettingsForm({ hub, mappings }: HubSettingsFormProps) {
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
-    setDirty(name !== hub.name);
+    setDirty(name.trim() !== hub.name);
   }, [name, hub.name]);
 
   // Warn on navigation with unsaved changes

@@ -171,9 +171,10 @@ Available tabs on each hub's settings page:
 
 | Tab | Controls |
 |-----|----------|
-| General | Hub name, deactivate/reactivate |
+| General | Hub name |
 | Teams & Scoping | Project visibility, label visibility, workflow rules per team |
 | Forms | Enable/disable global forms, label overrides, confirmation messages |
+| Danger Zone | Deactivate/reactivate hub |
 
 ![Hub settings General tab with name field](screenshots/settings-general.png)
 *General settings — hub name.*
