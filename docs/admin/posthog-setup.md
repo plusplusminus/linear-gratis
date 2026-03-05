@@ -9,16 +9,20 @@ Step-by-step guide to configure PostHog for Linear Gratis analytics.
 - Select **US** region (matches the `https://us.i.posthog.com` host)
 - Copy the **Project API Key** and set it as `NEXT_PUBLIC_POSTHOG_KEY` in your Vercel environment variables
 
-## 2. Configure Group Analytics
+## 2. Configure Group Analytics (Required)
 
-Group analytics lets you see usage **per hub** instead of just per user. This must be configured before events start flowing — retroactive grouping doesn't work.
+**You must complete this step before hub-level breakdowns will work.** Without it, `hub` won't appear as a breakdown option in insights — you'll only see `hubId` as a plain event property.
 
-- Navigate to **Settings > Project > Group analytics**
-- Add a new group type:
-  - **Type name:** `hub`
-  - **Display name:** `Hub`
+Group analytics lets you see usage **per hub** instead of just per user. Retroactive grouping doesn't work, so configure this before events start flowing.
 
-This maps to the `posthog.group('hub', slug)` calls in the codebase.
+1. Navigate to **Settings > Project > Group analytics**
+2. Add a new group type:
+   - **Group type index:** `0`
+   - **Type name:** `hub`
+   - **Display name:** `Hub`
+3. Save
+
+This maps to the `posthog.group('hub', slug)` calls in the codebase. Once configured, you can break down any insight by `hub` group.
 
 ## 3. Define Person Properties
 
