@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { captureEvent } from "@/lib/posthog-client";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import { Send } from "lucide-react";
 
 interface InviteFormProps {
@@ -33,6 +35,7 @@ export function InviteForm({ onInvite, onBulkInvite, isPending }: InviteFormProp
       onBulkInvite(emails, role);
     }
 
+    captureEvent(POSTHOG_EVENTS.member_invited, { emailCount: emails.length });
     setInput("");
   }
 

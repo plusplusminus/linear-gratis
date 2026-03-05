@@ -3,6 +3,8 @@
 import { useState, useEffect, useTransition, useCallback } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { captureEvent } from "@/lib/posthog-client";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import { Shield, Trash2 } from "lucide-react";
 
 interface PPMAdmin {
@@ -56,6 +58,7 @@ export function AdminPanel({ currentUserEmail }: AdminPanelProps) {
           throw new Error(err.error ?? "Failed to add admin");
         }
         toast.success(`Added ${trimmed} as admin`);
+        captureEvent(POSTHOG_EVENTS.admin_added);
         setEmail("");
         await fetchAdmins();
       } catch (e) {
@@ -77,6 +80,7 @@ export function AdminPanel({ currentUserEmail }: AdminPanelProps) {
           throw new Error(err.error ?? "Failed to remove admin");
         }
         toast.success(`Removed ${admin.email}`);
+        captureEvent(POSTHOG_EVENTS.admin_removed);
         await fetchAdmins();
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Failed to remove admin");

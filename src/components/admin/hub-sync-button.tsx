@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { captureEvent } from "@/lib/posthog-client";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 
 interface HubSyncButtonProps {
   hubId: string;
@@ -12,6 +14,7 @@ export function HubSyncButton({ hubId }: HubSyncButtonProps) {
   const [syncing, setSyncing] = useState(false);
 
   async function handleSync() {
+    captureEvent(POSTHOG_EVENTS.sync_triggered);
     setSyncing(true);
     try {
       const res = await fetch(`/api/admin/hubs/${hubId}/sync`, {

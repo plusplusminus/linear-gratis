@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { captureEvent } from "@/lib/posthog-client";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import { useFetch } from "@/hooks/use-fetch";
 import { ScopingEditor } from "./scoping-editor";
 import { LabelPicker } from "./pickers/label-picker";
@@ -83,6 +85,7 @@ export function HubSettingsForm({ hub, mappings }: HubSettingsFormProps) {
           throw new Error(err.error ?? "Failed to save");
         }
         toast.success("Hub settings saved");
+        captureEvent(POSTHOG_EVENTS.hub_settings_updated, { hubId: hub.id });
         setDirty(false);
         router.refresh();
       } catch (e) {
