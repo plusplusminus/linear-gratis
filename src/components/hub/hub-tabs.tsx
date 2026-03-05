@@ -2,6 +2,8 @@
 
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
+import { captureEvent } from "@/lib/posthog-client";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import { Layers, FolderKanban, CircleDot, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HubUpdates } from "./hub-updates";
@@ -38,6 +40,7 @@ export function HubTabs({
   const activeTab = (searchParams.get("tab") as Tab) || "projects";
 
   function setTab(tab: Tab) {
+    captureEvent(POSTHOG_EVENTS.tab_switched, { tab });
     const params = new URLSearchParams(searchParams.toString());
     if (tab === "projects") {
       params.delete("tab");

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useTransition, useEffect } from "react";
+import { captureEvent } from "@/lib/posthog-client";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import { Send, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -72,6 +74,7 @@ export function CommentComposer({
           push_error: data.push_error,
         });
         setBody("");
+        captureEvent(POSTHOG_EVENTS.comment_created);
         onCancelReply?.();
 
         // Reset textarea height

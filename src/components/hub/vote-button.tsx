@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { captureEvent } from "@/lib/posthog-client";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import { ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +34,7 @@ export function HubVoteButton({
     const previousVoted = hasVoted;
 
     // Optimistic update
+    captureEvent(POSTHOG_EVENTS.vote_cast);
     setCount(willVote ? count + 1 : count - 1);
     setHasVoted(willVote);
     setIsAnimating(true);

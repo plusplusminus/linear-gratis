@@ -1,6 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
 import ReactMarkdown from "react-markdown";
+import { captureEvent } from "@/lib/posthog-client";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 
@@ -73,6 +76,10 @@ function formatDate(dateStr: string): string {
 }
 
 export function ProjectOverview({ project }: ProjectOverviewProps) {
+  useEffect(() => {
+    captureEvent(POSTHOG_EVENTS.project_viewed);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const hasMetadata = project.priority > 0 || project.health || project.lead;
   const hasContent = project.content || project.description;
 

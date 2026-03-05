@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { captureEvent } from "@/lib/posthog-client";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
@@ -215,6 +217,13 @@ export function IssueDetailPanel({
       setDescOverflows(descRef.current.scrollHeight > 300);
     }
   }, [issue?.description]);
+
+  // Track issue view
+  useEffect(() => {
+    if (issue) {
+      captureEvent(POSTHOG_EVENTS.issue_viewed, { issueId: issue.identifier || issue.id });
+    }
+  }, [issue?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isOpen = !!activeId;
 

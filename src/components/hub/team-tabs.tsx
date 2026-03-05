@@ -2,6 +2,8 @@
 
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
+import { captureEvent } from "@/lib/posthog-client";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import {
   Target,
   Flag,
@@ -123,6 +125,7 @@ export function TeamTabs({
   const activeTab = requestedTab === "issues" && issues.length === 0 ? "projects" : requestedTab;
 
   function setTab(tab: Tab) {
+    captureEvent(POSTHOG_EVENTS.tab_switched, { tab });
     const params = new URLSearchParams(searchParams.toString());
     if (tab === "issues") {
       params.delete("tab");
