@@ -10,6 +10,7 @@ import {
   Settings,
   UserPlus,
   ExternalLink,
+  ListOrdered,
   CheckCircle2,
   Circle,
 } from "lucide-react";
@@ -172,6 +173,12 @@ export default async function HubDashboardPage({
           icon={<UserPlus className="w-4 h-4" />}
           label="Manage Members"
           description="Invite and manage users"
+        />
+        <QuickAction
+          href={`/admin/hubs/${hub.id}/rankings`}
+          icon={<ListOrdered className="w-4 h-4" />}
+          label="Client Priority"
+          description="View client rankings"
         />
         <QuickAction
           href={`/admin/hubs/${hub.id}/settings`}
