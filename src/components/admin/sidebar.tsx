@@ -165,19 +165,6 @@ export function AdminSidebar() {
           {!collapsed && <span>Sync Monitor</span>}
         </Link>
         <Link
-          href="/admin/docs"
-          className={cn(
-            "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-colors",
-            pathname.startsWith("/admin/docs")
-              ? "bg-accent text-foreground"
-              : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
-          )}
-          title={collapsed ? "Docs" : undefined}
-        >
-          <BookOpen className="w-4 h-4 shrink-0" />
-          {!collapsed && <span>Docs</span>}
-        </Link>
-        <Link
           href="/admin/settings"
           className={cn(
             "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-colors",
@@ -197,6 +184,19 @@ export function AdminSidebar() {
             />
           </div>
           {!collapsed && <span>Settings</span>}
+        </Link>
+        <Link
+          href="/admin/docs"
+          className={cn(
+            "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-colors",
+            pathname.startsWith("/admin/docs")
+              ? "bg-accent text-foreground"
+              : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+          )}
+          title={collapsed ? "Docs" : undefined}
+        >
+          <BookOpen className="w-4 h-4 shrink-0" />
+          {!collapsed && <span>Docs</span>}
         </Link>
       </div>
     </aside>

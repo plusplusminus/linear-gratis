@@ -198,28 +198,6 @@ export function HubSidebar() {
         </nav>
       </div>
 
-      {/* Footer actions */}
-      <div className="border-t border-border py-1.5 px-1.5 space-y-0.5 shrink-0">
-        {(() => {
-          const isDocsActive = pathname.startsWith(`${basePath}/docs`);
-          return (
-            <Link
-              href={`${basePath}/docs`}
-              className={cn(
-                "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-colors",
-                isDocsActive
-                  ? "bg-accent text-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
-              )}
-              title={collapsed ? "Docs" : undefined}
-            >
-              <BookOpen className="w-4 h-4 shrink-0" />
-              {!collapsed && <span>Docs</span>}
-            </Link>
-          );
-        })()}
-      </div>
-
       {/* Form buttons + submissions */}
       {canInteract && (
         <div className="px-1.5 py-2 border-t border-border shrink-0 space-y-0.5">
@@ -256,6 +234,28 @@ export function HubSidebar() {
           </button>
         </div>
       )}
+
+      {/* Docs */}
+      <div className="border-t border-border py-1.5 px-1.5 space-y-0.5 shrink-0">
+        {(() => {
+          const isDocsActive = pathname.startsWith(`${basePath}/docs`);
+          return (
+            <Link
+              href={`${basePath}/docs`}
+              className={cn(
+                "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-colors",
+                isDocsActive
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+              )}
+              title={collapsed ? "Docs" : undefined}
+            >
+              <BookOpen className="w-4 h-4 shrink-0" />
+              {!collapsed && <span>Docs</span>}
+            </Link>
+          );
+        })()}
+      </div>
 
       {/* Form modal */}
       {activeFormId && (
