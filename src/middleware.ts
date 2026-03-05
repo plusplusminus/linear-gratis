@@ -79,7 +79,7 @@ export default async function middleware(request: NextRequest) {
 
   // Check if this is a custom domain (not the main domain)
   const mainDomains = [
-    'linear.gratis',
+    'clienthub.plusplusminus.co.za',
     'localhost:3000',
     'localhost',
     'workers.dev',
