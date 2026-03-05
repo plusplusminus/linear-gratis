@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { retryFailedEmails } from "@/lib/notification-delivery";
+import { captureServerEvent, flushPostHog } from "@/lib/posthog-server";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 
 export async function POST(request: NextRequest) {
   const cronSecret = request.headers.get("authorization");
@@ -11,6 +13,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const result = await retryFailedEmails(3);
+    captureServerEvent("system", POSTHOG_EVENTS.email_queued, {
+      count: result.retried,
+    });
+    await flushPostHog();
+
     return NextResponse.json({
       success: true,
       retried: result.retried,

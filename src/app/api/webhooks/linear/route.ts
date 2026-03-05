@@ -7,6 +7,8 @@ import {
 } from "@/lib/webhook-handlers";
 import { logSyncEvent } from "@/lib/sync-logger";
 import { emitNotificationEventsForWebhook } from "@/lib/notification-events";
+import { captureServerEvent, flushPostHog } from "@/lib/posthog-server";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 
 type WebhookPayload = {
   action: "create" | "update" | "remove";
@@ -179,6 +181,12 @@ export async function POST(request: NextRequest) {
         payloadSummary: summary,
       });
     }
+
+    captureServerEvent("system", POSTHOG_EVENTS.webhook_received, {
+      action: payload.action,
+      type: payload.type,
+    });
+    await flushPostHog();
 
     return NextResponse.json({ success: true });
   } catch (error) {

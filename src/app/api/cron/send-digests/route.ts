@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { processDigests } from "@/lib/notification-digest";
+import { captureServerEvent, flushPostHog } from "@/lib/posthog-server";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 
 export async function POST(request: NextRequest) {
   const cronSecret = request.headers.get("authorization");
@@ -22,6 +24,11 @@ export async function POST(request: NextRequest) {
     console.log(
       `send-digests cron completed in ${durationMs}ms — daily: ${daily.sent} sent, ${daily.skipped} skipped, ${daily.errors} errors; weekly: ${weekly.sent} sent, ${weekly.skipped} skipped, ${weekly.errors} errors`
     );
+
+    captureServerEvent("system", POSTHOG_EVENTS.digest_sent, {
+      recipientCount: daily.sent + weekly.sent,
+    });
+    await flushPostHog();
 
     return NextResponse.json({
       success: true,

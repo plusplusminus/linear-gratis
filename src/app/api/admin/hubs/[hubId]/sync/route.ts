@@ -3,6 +3,8 @@ import { withAdminAuth } from "@/lib/admin-auth";
 import { supabaseAdmin, type HubTeamMapping } from "@/lib/supabase";
 import { runHubSync } from "@/lib/initial-sync";
 import { startSyncRun, completeSyncRun } from "@/lib/sync-logger";
+import { captureServerEvent } from "@/lib/posthog-server";
+import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 
 // POST: Trigger initial sync for a hub
 export async function POST(
@@ -75,6 +77,8 @@ export async function POST(
       errorsCount: result.success ? 0 : 1,
       startedAt,
     });
+
+    captureServerEvent(auth.user?.id || "system", POSTHOG_EVENTS.sync_completed, { hubId });
 
     return NextResponse.json({
       success: result.success,
