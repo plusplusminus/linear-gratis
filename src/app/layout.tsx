@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthKitProvider } from "@workos-inc/authkit-nextjs/components";
 import { ThemeProvider } from "@/contexts/theme-context";
 import { Toaster } from "sonner";
+import { PostHogProvider } from "@/components/posthog-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -52,15 +53,17 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ThemeProvider
-          defaultTheme="system"
-          storageKey="linear-integration-theme"
-        >
-          <AuthKitProvider>
-            {children}
-          </AuthKitProvider>
-          <Toaster richColors position="bottom-right" />
-        </ThemeProvider>
+        <PostHogProvider>
+          <ThemeProvider
+            defaultTheme="system"
+            storageKey="linear-integration-theme"
+          >
+            <AuthKitProvider>
+              {children}
+            </AuthKitProvider>
+            <Toaster richColors position="bottom-right" />
+          </ThemeProvider>
+        </PostHogProvider>
       </body>
     </html>
   );
