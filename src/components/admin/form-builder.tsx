@@ -909,6 +909,7 @@ function SortableFieldRow({
         onClick={onToggleExpand}
       >
         <button
+          aria-label="Drag to reorder"
           className="cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground shrink-0 touch-none"
           {...attributes}
           {...listeners}
