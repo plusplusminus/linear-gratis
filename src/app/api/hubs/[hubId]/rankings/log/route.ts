@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withHubAuth, type HubAuthError } from "@/lib/hub-auth";
 import { fetchRankingLog } from "@/lib/hub-rankings";
+import { supabaseAdmin } from "@/lib/supabase";
 
 type Params = { params: Promise<{ hubId: string }> };
 
@@ -39,7 +40,20 @@ export async function GET(request: Request, { params }: Params) {
       offset,
     });
 
-    return NextResponse.json({ log });
+    // Collect unique user IDs and resolve to emails
+    const userIds = [...new Set(log.map((l) => l.userId))];
+    const { data: members } = await supabaseAdmin
+      .from("hub_members")
+      .select("user_id, email")
+      .eq("hub_id", hubId)
+      .in("user_id", userIds.length > 0 ? userIds : ["__none__"]);
+
+    const memberMap: Record<string, string> = {};
+    for (const m of members ?? []) {
+      if (m.user_id && m.email) memberMap[m.user_id] = m.email;
+    }
+
+    return NextResponse.json({ log, members: memberMap });
   } catch (error) {
     console.error("GET /api/hubs/[hubId]/rankings/log error:", error);
     return NextResponse.json(
