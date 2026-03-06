@@ -145,19 +145,21 @@ export async function saveUserRanking(
     current.map((r) => [r.project_linear_id, r.rank])
   );
 
-  // Delete any previously ranked projects not in the new ranking
-  const currentIds = current.map((r) => r.project_linear_id);
-  const staleIds = currentIds.filter((id) => !orderedProjectIds.includes(id));
-  if (staleIds.length > 0) {
-    await supabaseAdmin
-      .from("hub_project_rankings")
-      .delete()
-      .eq("hub_id", hubId)
-      .eq("user_id", userId)
-      .in("project_linear_id", staleIds);
+  // Delete all existing rankings for this user/hub, then insert fresh.
+  // This avoids UNIQUE(hub_id, user_id, rank) conflicts that occur with
+  // upsert when ranks are being reassigned across projects.
+  const { error: deleteError } = await supabaseAdmin
+    .from("hub_project_rankings")
+    .delete()
+    .eq("hub_id", hubId)
+    .eq("user_id", userId);
+
+  if (deleteError) {
+    console.error("saveUserRanking delete error:", deleteError);
+    throw deleteError;
   }
 
-  // Build upsert rows
+  // Insert new rankings
   const rows = orderedProjectIds.map((projectLinearId, index) => ({
     hub_id: hubId,
     user_id: userId,
@@ -166,16 +168,13 @@ export async function saveUserRanking(
     updated_at: new Date().toISOString(),
   }));
 
-  // Upsert all rankings
-  const { error: upsertError } = await supabaseAdmin
+  const { error: insertError } = await supabaseAdmin
     .from("hub_project_rankings")
-    .upsert(rows, {
-      onConflict: "hub_id,user_id,project_linear_id",
-    });
+    .insert(rows);
 
-  if (upsertError) {
-    console.error("saveUserRanking upsert error:", upsertError);
-    throw upsertError;
+  if (insertError) {
+    console.error("saveUserRanking insert error:", insertError);
+    throw insertError;
   }
 
   // Calculate diffs
