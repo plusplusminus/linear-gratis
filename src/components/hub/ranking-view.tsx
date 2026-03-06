@@ -48,6 +48,7 @@ export function RankingView({ projects }: { projects: Project[] }) {
   const [isLoading, setIsLoading] = useState(true);
   const [showBanner, setShowBanner] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Track view
   useEffect(() => {
@@ -112,11 +113,16 @@ export function RankingView({ projects }: { projects: Project[] }) {
       // This prevents log spam while the client is still rearranging.
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(async () => {
+        // Abort any in-flight save so an older request can't overwrite newer state
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
         try {
           const res = await fetch(`/api/hubs/${hubId}/rankings`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ ranking: items.map((p) => p.id) }),
+            signal: controller.signal,
           });
           if (res.ok) {
             const data = (await res.json()) as { changedCount: number };
