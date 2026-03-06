@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo } from "react";
 import {
-  AlertTriangle,
   ArrowUpDown,
   ChevronDown,
   ChevronRight,
@@ -32,6 +31,74 @@ type ProjectInfo = {
   color?: string;
 };
 
+type LogBatch = {
+  key: string;
+  userId: string;
+  timestamp: string;
+  entries: LogEntry[];
+};
+
+/** Group log entries into batches by user + time proximity (within 5s = same save) */
+function groupIntoBatches(log: LogEntry[]): LogBatch[] {
+  const batches: LogBatch[] = [];
+  let current: LogBatch | null = null;
+
+  for (const entry of log) {
+    const entryTime = new Date(entry.createdAt).getTime();
+    const currentTime = current
+      ? new Date(current.timestamp).getTime()
+      : 0;
+
+    if (
+      current &&
+      current.userId === entry.userId &&
+      Math.abs(entryTime - currentTime) < 5000
+    ) {
+      current.entries.push(entry);
+    } else {
+      current = {
+        key: entry.id,
+        userId: entry.userId,
+        timestamp: entry.createdAt,
+        entries: [entry],
+      };
+      batches.push(current);
+    }
+  }
+
+  return batches;
+}
+
+function formatUserName(
+  userId: string,
+  members: Record<string, string>
+): string {
+  const email = members[userId];
+  if (email) {
+    const local = email.split("@")[0];
+    return local.charAt(0).toUpperCase() + local.slice(1);
+  }
+  return userId.slice(0, 12) + "...";
+}
+
+function formatRelativeTime(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffMs = now - then;
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHr = Math.floor(diffMs / 3600000);
+  const diffDay = Math.floor(diffMs / 86400000);
+
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffHr < 24) return `${diffHr}h ago`;
+  if (diffDay < 7) return `${diffDay}d ago`;
+  return new Date(dateStr).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
 export function HubRankings({
   hubId,
   projects,
@@ -41,6 +108,7 @@ export function HubRankings({
 }) {
   const [composite, setComposite] = useState<CompositeEntry[]>([]);
   const [log, setLog] = useState<LogEntry[]>([]);
+  const [members, setMembers] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState<"rankings" | "activity">(
     "rankings"
   );
@@ -69,8 +137,12 @@ export function HubRankings({
         }
 
         if (logRes.ok) {
-          const data = (await logRes.json()) as { log: LogEntry[] };
+          const data = (await logRes.json()) as {
+            log: LogEntry[];
+            members: Record<string, string>;
+          };
           setLog(data.log);
+          setMembers(data.members ?? {});
         }
       } catch {
         // Non-critical
@@ -83,7 +155,6 @@ export function HubRankings({
   const sorted = useMemo(() => {
     const entries = [...composite];
     if (sortBy === "variance") {
-      // Higher variance first (most disagreement)
       return entries.sort(
         (a, b) => b.rankerCount - a.rankerCount || a.averageRank - b.averageRank
       );
@@ -99,6 +170,8 @@ export function HubRankings({
     }
     return map;
   }, [log]);
+
+  const batches = useMemo(() => groupIntoBatches(log), [log]);
 
   function toggleExpand(id: string) {
     setExpanded((prev) => {
@@ -161,7 +234,7 @@ export function HubRankings({
           Activity Log
           {log.length > 0 && (
             <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-muted text-[10px] tabular-nums">
-              {log.length}
+              {batches.length}
             </span>
           )}
         </button>
@@ -245,11 +318,11 @@ export function HubRankings({
                           <div key={l.id} className="flex items-center gap-2">
                             <Clock className="w-3 h-3 shrink-0" />
                             <span>
-                              User {l.userId.slice(0, 8)}... moved from{" "}
+                              {formatUserName(l.userId, members)} moved from{" "}
                               {l.previousRank ?? "—"} → {l.newRank}
                             </span>
                             <span className="ml-auto text-[10px]">
-                              {new Date(l.createdAt).toLocaleDateString()}
+                              {formatRelativeTime(l.createdAt)}
                             </span>
                           </div>
                         ))}
@@ -267,54 +340,94 @@ export function HubRankings({
           })}
         </div>
       ) : (
-        // Activity log tab
+        // Activity log tab — grouped by batch
         <div className="border border-border rounded-lg overflow-hidden bg-card">
-          {log.length === 0 ? (
+          {batches.length === 0 ? (
             <div className="p-6 text-center text-sm text-muted-foreground">
               No ranking activity yet
             </div>
           ) : (
             <div className="divide-y divide-border">
-              {log.map((entry) => {
-                const project = projectMap.get(entry.projectLinearId);
+              {batches.map((batch) => {
+                const userName = formatUserName(batch.userId, members);
+                const email = members[batch.userId];
+                const isExpanded = expanded.has(batch.key);
+
                 return (
-                  <div
-                    key={entry.id}
-                    className="flex items-center gap-3 px-4 py-2.5"
-                  >
-                    <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm truncate">
-                        <span className="font-medium">
-                          {project?.name ?? entry.projectLinearId}
+                  <div key={batch.key}>
+                    <button
+                      onClick={() => toggleExpand(batch.key)}
+                      className="flex items-center gap-3 px-4 py-2.5 w-full text-left hover:bg-accent/30 transition-colors"
+                    >
+                      <div className="w-7 h-7 rounded-full bg-accent flex items-center justify-center shrink-0">
+                        <span className="text-xs font-medium text-foreground">
+                          {userName.charAt(0).toUpperCase()}
                         </span>
-                        <span className="text-muted-foreground">
-                          {" "}
-                          moved from{" "}
-                          <span className="font-mono">
-                            #{entry.previousRank ?? "—"}
-                          </span>{" "}
-                          →{" "}
-                          <span className="font-mono">#{entry.newRank}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm">
+                          <span className="font-medium">{userName}</span>
+                          <span className="text-muted-foreground">
+                            {" "}reranked{" "}
+                            {batch.entries.length === 1
+                              ? "1 project"
+                              : `${batch.entries.length} projects`}
+                          </span>
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {email ?? batch.userId} · {formatRelativeTime(batch.timestamp)}
+                        </p>
+                      </div>
+                      <span className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-[10px] tabular-nums text-muted-foreground">
+                          {batch.entries.length}
                         </span>
-                      </p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {entry.userId.slice(0, 12)}... ·{" "}
-                        {new Date(entry.createdAt).toLocaleString()}
-                      </p>
-                    </div>
-                    {entry.previousRank !== null &&
-                      entry.newRank < entry.previousRank && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600">
-                          ↑ {entry.previousRank - entry.newRank}
-                        </span>
-                      )}
-                    {entry.previousRank !== null &&
-                      entry.newRank > entry.previousRank && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-600">
-                          ↓ {entry.newRank - entry.previousRank}
-                        </span>
-                      )}
+                        {isExpanded ? (
+                          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                        ) : (
+                          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+                        )}
+                      </span>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="px-4 pb-3 pl-14 space-y-1">
+                        {batch.entries.map((entry) => {
+                          const project = projectMap.get(entry.projectLinearId);
+                          return (
+                            <div
+                              key={entry.id}
+                              className="flex items-center gap-2 text-xs text-muted-foreground"
+                            >
+                              {project?.color && (
+                                <span
+                                  className="w-1.5 h-1.5 rounded-full shrink-0"
+                                  style={{ backgroundColor: project.color }}
+                                />
+                              )}
+                              <span className="truncate">
+                                {project?.name ?? entry.projectLinearId}
+                              </span>
+                              <span className="font-mono shrink-0">
+                                #{entry.previousRank ?? "—"} → #{entry.newRank}
+                              </span>
+                              {entry.previousRank !== null &&
+                                entry.newRank < entry.previousRank && (
+                                  <span className="text-[10px] px-1 rounded bg-emerald-500/10 text-emerald-600">
+                                    ↑{entry.previousRank - entry.newRank}
+                                  </span>
+                                )}
+                              {entry.previousRank !== null &&
+                                entry.newRank > entry.previousRank && (
+                                  <span className="text-[10px] px-1 rounded bg-red-500/10 text-red-600">
+                                    ↓{entry.newRank - entry.previousRank}
+                                  </span>
+                                )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
