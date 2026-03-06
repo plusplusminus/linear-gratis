@@ -156,17 +156,17 @@ export function mapRowToLinearIssue(row: {
   };
 }
 
-const CLIENT_FACING_PREFIX = /^@heyclient[\s\n]?/i;
+const CLIENT_FACING_PREFIX = /^@?heyclient[\s\n]?/i;
 
 /**
- * Check if a comment body is client-facing (starts with @heyclient).
+ * Check if a comment body is client-facing (starts with heyclient).
  */
 export function isClientFacing(body: string): boolean {
   return CLIENT_FACING_PREFIX.test(body.trimStart());
 }
 
 /**
- * Strip the @heyclient prefix from a comment body.
+ * Strip the heyclient prefix from a comment body.
  * Removes the prefix plus one optional trailing space or newline.
  */
 export function stripClientPrefix(body: string): string {
@@ -769,8 +769,8 @@ export async function fetchHubComments(
     return mapped;
   });
 
-  // Filter synced comments: only show @heyclient comments and their thread replies.
-  // Step 1: Identify client-facing root comments (those with @heyclient prefix)
+  // Filter synced comments: only show heyclient comments and their thread replies.
+  // Step 1: Identify client-facing root comments (those with heyclient prefix)
   const visibleLinearIds = new Set<string>();
   for (const c of allLinearComments) {
     if (isClientFacing(c.body)) {
@@ -797,7 +797,7 @@ export async function fetchHubComments(
     .map((c) => {
       if (isClientFacing(c.body)) {
         const stripped = stripClientPrefix(c.body);
-        // Hide comments that are just "@heyclient" with no actual content
+        // Hide comments that are just "heyclient" with no actual content
         if (!stripped) return null;
         return { ...c, body: stripped, isTeamComment: true };
       }

@@ -35,7 +35,7 @@ const featureInventory = [
       { name: 'Stakeholder read-only access', description: 'Give stakeholders visibility without edit permissions.', status: 'Available' },
       { name: 'Cycle support', description: 'View and track Linear cycles within the hub.', status: 'Available' },
       { name: 'Label-based issue grouping', description: 'Group and filter issues by label within projects.', status: 'Available' },
-      { name: 'Client-facing comments', description: 'Comments prefixed with @heyclient in Linear are visible to clients in the hub.', status: 'Available' },
+      { name: 'Client-facing comments', description: 'Comments prefixed with heyclient in Linear are visible to clients in the hub.', status: 'Available' },
       { name: 'Hub member roles', description: 'Assign default (full access) or view-only roles to hub members.', status: 'Available' },
     ],
   },

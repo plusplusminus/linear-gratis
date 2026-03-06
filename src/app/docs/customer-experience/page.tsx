@@ -211,7 +211,7 @@ export default function CustomerExperiencePage() {
                     <li><strong className="text-foreground">Activity log</strong> — status changes, assignee changes, priority changes, and comments (read-only)</li>
                   </ul>
                   <p>
-                    <strong className="text-foreground">Note:</strong> Only comments prefixed with <code className="text-foreground bg-muted px-1 rounded">@heyclient</code> in Linear are visible to clients. Internal team comments remain private.
+                    <strong className="text-foreground">Note:</strong> Only comments prefixed with <code className="text-foreground bg-muted px-1 rounded">heyclient</code> in Linear are visible to clients. Internal team comments remain private.
                   </p>
                 </CardContent>
               </Card>
