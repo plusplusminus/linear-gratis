@@ -735,6 +735,30 @@ export function FormBuilder({ form, hubId, hubTeams }: FormBuilderProps) {
                 }}
               />
             </div>
+            {fields.some((f) => f.linear_field === "priority") && (
+              <div className="flex items-center justify-between pl-4 border-l-2 border-border ml-1">
+                <div>
+                  <span className="text-sm font-medium">Require priority</span>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Submitters must select a priority level
+                  </p>
+                </div>
+                <ToggleSwitch
+                  label=""
+                  aria-label="Require priority selection"
+                  checked={fields.find((f) => f.linear_field === "priority")?.is_required ?? false}
+                  onChange={(required) => {
+                    setFields((prev) =>
+                      prev.map((f) =>
+                        f.linear_field === "priority"
+                          ? { ...f, is_required: required }
+                          : f
+                      )
+                    );
+                  }}
+                />
+              </div>
+            )}
           </div>
         </section>
 
