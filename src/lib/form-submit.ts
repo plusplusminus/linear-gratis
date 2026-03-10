@@ -57,9 +57,16 @@ function formatFieldValue(field: FormField, val: unknown): string {
 export function buildIssueDescription(
   fields: FormField[],
   fieldValues: Record<string, unknown>,
-  attachmentUrls: string[]
+  attachmentUrls: string[],
+  submitter?: { name?: string | null; email: string }
 ): string {
   const parts: string[] = [];
+
+  // Submitter attribution
+  if (submitter) {
+    const who = submitter.name ? `${submitter.name} (${submitter.email})` : submitter.email;
+    parts.push(`**Submitted by:** ${who}`);
+  }
 
   // Find the description-mapped field
   const descField = fields.find((f) => f.linear_field === "description");
@@ -204,7 +211,8 @@ export async function processFormSubmission(
   const description = buildIssueDescription(
     form.fields,
     fieldValues,
-    attachmentUrls
+    attachmentUrls,
+    { name: user.name, email: user.email }
   );
 
   // 5. Insert submission row
@@ -368,7 +376,8 @@ export async function retrySubmission(
   const description = buildIssueDescription(
     form.fields,
     submission.field_values,
-    attachmentUrls
+    attachmentUrls,
+    { name: submission.submitter_name, email: submission.submitter_email }
   );
 
   // Priority from hidden field (if any)
