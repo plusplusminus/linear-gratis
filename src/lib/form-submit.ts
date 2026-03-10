@@ -24,6 +24,31 @@ export type SubmissionResult = {
 
 // -- Description builder ─────────────────────────────────────────────────────
 
+const PRIORITY_LABELS: Record<number, string> = {
+  0: "No priority",
+  1: "Urgent",
+  2: "High",
+  3: "Medium",
+  4: "Low",
+};
+
+function formatFieldValue(field: FormField, val: unknown): string {
+  if (typeof val === "boolean") return val ? "Yes" : "No";
+  if (Array.isArray(val)) return val.join(", ");
+
+  const strVal = String(val).trim();
+
+  // Map priority numbers to labels
+  if (field.linear_field === "priority") {
+    const num = Number(strVal);
+    if (!isNaN(num) && num in PRIORITY_LABELS) {
+      return PRIORITY_LABELS[num];
+    }
+  }
+
+  return strVal;
+}
+
 /**
  * Build a markdown description for the Linear issue.
  * Linear-mapped fields (title, description) are handled separately.
@@ -61,30 +86,23 @@ export function buildIssueDescription(
     // Skip file fields (handled via attachments)
     if (field.field_type === "file") continue;
 
-    const displayVal =
-      typeof val === "boolean"
-        ? val
-          ? "Yes"
-          : "No"
-        : Array.isArray(val)
-          ? val.join(", ")
-          : String(val);
+    const displayVal = formatFieldValue(field, val);
 
-    if (displayVal.trim()) {
-      customParts.push(`**${field.label}**\n${displayVal.trim()}`);
+    if (displayVal) {
+      customParts.push(`### ${field.label}\n${displayVal}`);
     }
   }
 
   if (customParts.length > 0) {
     parts.push("---");
-    parts.push("**Additional Information**");
+    parts.push("## Additional Information");
     parts.push(customParts.join("\n\n"));
   }
 
   // Attachments
   if (attachmentUrls.length > 0) {
     parts.push("---");
-    parts.push("**Attachments**");
+    parts.push("## Attachments");
     for (const url of attachmentUrls) {
       parts.push(`![attachment](${url})`);
     }
