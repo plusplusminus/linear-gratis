@@ -72,6 +72,8 @@ export function FormModal({
   const [fileErrors, setFileErrors] = useState<Record<string, string | null>>({});
   const [, startTransition] = useTransition();
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const attachmentsRef = useRef(attachments);
+  attachmentsRef.current = attachments;
 
   const totalUploading = Object.values(uploadingCounts).reduce((sum, n) => sum + n, 0);
 
@@ -81,13 +83,12 @@ export function FormModal({
   // Clean up object URLs on unmount
   useEffect(() => {
     return () => {
-      for (const fieldAttachments of Object.values(attachments)) {
+      for (const fieldAttachments of Object.values(attachmentsRef.current)) {
         for (const att of fieldAttachments) {
           URL.revokeObjectURL(att.previewUrl);
         }
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Fetch projects for selected team
@@ -155,12 +156,7 @@ export function FormModal({
   }, []);
 
   const uploadSingleFile = useCallback(
-    async (field: FormField, file: File): Promise<Attachment | null> => {
-      if (file.size > MAX_FILE_SIZE) {
-        setFileErrors((prev) => ({ ...prev, [field.field_key]: "Each file must be under 10MB" }));
-        return null;
-      }
-
+    async (file: File): Promise<Attachment | null> => {
       try {
         const res = await fetch(`/api/hub/${hubId}/submissions/upload`, {
           method: "POST",
@@ -178,11 +174,14 @@ export function FormModal({
           publicUrl: string;
         };
 
-        await fetch(signedUrl, {
+        const uploadRes = await fetch(signedUrl, {
           method: "PUT",
           headers: { "Content-Type": file.type },
           body: file,
         });
+        if (!uploadRes.ok) {
+          throw new Error(`Storage upload failed: ${uploadRes.status}`);
+        }
 
         return {
           storagePath,
@@ -207,10 +206,29 @@ export function FormModal({
         return;
       }
 
-      const filesToUpload = Array.from(files).slice(0, remaining);
-      if (filesToUpload.length < files.length) {
+      // Pre-filter: reject oversized files before they consume upload slots
+      const allFiles = Array.from(files);
+      const oversized = allFiles.filter((f) => f.size > MAX_FILE_SIZE);
+      const validFiles = allFiles.filter((f) => f.size <= MAX_FILE_SIZE);
+
+      if (oversized.length > 0) {
+        setFileErrors((prev) => ({
+          ...prev,
+          [fieldKey]: `${oversized.length} file${oversized.length === 1 ? " was" : "s were"} over 10MB and skipped`,
+        }));
+      }
+
+      if (validFiles.length === 0) {
+        if (oversized.length === 0) {
+          setFileErrors((prev) => ({ ...prev, [fieldKey]: null }));
+        }
+        return;
+      }
+
+      const filesToUpload = validFiles.slice(0, remaining);
+      if (filesToUpload.length < validFiles.length) {
         setFileErrors((prev) => ({ ...prev, [fieldKey]: `Only ${remaining} more image${remaining === 1 ? "" : "s"} can be added (max ${MAX_FILES_PER_FIELD})` }));
-      } else {
+      } else if (oversized.length === 0) {
         setFileErrors((prev) => ({ ...prev, [fieldKey]: null }));
       }
 
@@ -226,7 +244,7 @@ export function FormModal({
 
       // Upload all files in parallel
       const results = await Promise.allSettled(
-        filesToUpload.map((file) => uploadSingleFile(field, file))
+        filesToUpload.map((file) => uploadSingleFile(file))
       );
 
       const newAttachments: Attachment[] = [];
@@ -462,8 +480,9 @@ export function FormModal({
                     />
                     <button
                       type="button"
+                      aria-label={`Remove ${att.fileName}`}
                       onClick={() => removeAttachment(fieldKey, idx)}
-                      className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                     >
                       <X className="w-3 h-3" />
                     </button>
