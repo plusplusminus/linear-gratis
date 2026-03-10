@@ -4,11 +4,12 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { captureEvent } from "@/lib/posthog-client";
 import { POSTHOG_EVENTS } from "@/lib/posthog-events";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import { CommentComposer } from "./comment-composer";
 import { LabelEditor } from "./label-editor";
+import { ImageLightbox } from "./image-lightbox";
 import {
   X,
   Circle,
@@ -35,6 +36,12 @@ import {
   IterationCw,
   Zap,
   RotateCcw,
+  FileText,
+  FileSpreadsheet,
+  Archive,
+  File,
+  Image,
+  ImageOff,
 } from "lucide-react";
 
 type IssueDetail = {
@@ -84,6 +91,96 @@ type HistoryEntry = {
   workflowTriggerLabelId?: string;
 };
 
+// -- Custom ReactMarkdown components ─────────────────────────────────────────
+
+const FILE_ICON_MAP: Record<string, typeof File> = {
+  pdf: FileText,
+  doc: FileText,
+  docx: FileText,
+  txt: FileText,
+  rtf: FileText,
+  xls: FileSpreadsheet,
+  xlsx: FileSpreadsheet,
+  csv: FileSpreadsheet,
+  zip: Archive,
+  rar: Archive,
+  "7z": Archive,
+  gz: Archive,
+  tar: Archive,
+  png: Image,
+  jpg: Image,
+  jpeg: Image,
+  gif: Image,
+  webp: Image,
+  svg: Image,
+};
+
+function getFileIcon(filename: string) {
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+  return FILE_ICON_MAP[ext] ?? File;
+}
+
+function useMarkdownComponents(onImageClick: (src: string, alt?: string) => void): Components {
+  return {
+    img: ({ src, alt, ...props }) => {
+      const [broken, setBroken] = useState(false);
+      const imgSrc = typeof src === "string" ? src : undefined;
+
+      if (broken || !imgSrc) {
+        return (
+          <span className="flex items-center justify-center gap-2 w-full max-h-[300px] min-h-[80px] bg-muted rounded-lg border border-border text-muted-foreground text-xs">
+            <ImageOff className="w-4 h-4" />
+            Image not found
+          </span>
+        );
+      }
+
+      return (
+        <img
+          {...props}
+          src={imgSrc}
+          alt={alt ?? ""}
+          onError={() => setBroken(true)}
+          onClick={(e) => {
+            e.preventDefault();
+            onImageClick(imgSrc, alt ?? undefined);
+          }}
+          className="max-w-full max-h-[300px] rounded-lg border border-border cursor-pointer hover:opacity-90 transition-opacity"
+        />
+      );
+    },
+    a: ({ href, children, ...props }) => {
+      // Detect Supabase storage file attachment links
+      if (href && href.includes("comment-attachments/")) {
+        const url = new URL(href, window.location.origin);
+        const pathParts = url.pathname.split("/");
+        const filename = decodeURIComponent(pathParts[pathParts.length - 1]);
+        const IconComponent = getFileIcon(filename);
+
+        return (
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-border bg-muted/50 hover:bg-muted text-foreground no-underline transition-colors text-xs"
+            {...props}
+          >
+            <IconComponent className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <span className="truncate max-w-[200px]">{filename}</span>
+          </a>
+        );
+      }
+
+      // Regular links
+      return (
+        <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+          {children}
+        </a>
+      );
+    },
+  };
+}
+
 export function IssueDetailPanel({
   issueId,
   hubId,
@@ -111,6 +208,9 @@ export function IssueDetailPanel({
   const [descOverflows, setDescOverflows] = useState(false);
   const descRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const [lightboxImage, setLightboxImage] = useState<{ src: string; alt?: string } | null>(null);
+
+  const mdComponents = useMarkdownComponents((src, alt) => setLightboxImage({ src, alt }));
 
   // Track whether panel is being explicitly closed to avoid URL-driven reopen
   const [closing, setClosing] = useState(false);
@@ -320,7 +420,7 @@ export function IssueDetailPanel({
                     )}
                   >
                     <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-sm prose-headings:font-semibold prose-p:text-[13px] prose-p:leading-relaxed prose-code:text-xs prose-pre:text-xs">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
                         {issue.description}
                       </ReactMarkdown>
                     </div>
@@ -352,6 +452,7 @@ export function IssueDetailPanel({
                 comments={comments}
                 hubId={hubId}
                 isViewOnly={isViewOnly ?? false}
+                mdComponents={mdComponents}
                 onReply={(parentId, authorName) => setReplyingTo({ parentId, authorName })}
                 onRetrySuccess={(commentId, linearCommentId) => {
                   setComments((prev) => {
@@ -399,6 +500,15 @@ export function IssueDetailPanel({
           </>
         ) : null}
       </div>
+
+      {/* Image lightbox */}
+      {lightboxImage && (
+        <ImageLightbox
+          src={lightboxImage.src}
+          alt={lightboxImage.alt}
+          onClose={() => setLightboxImage(null)}
+        />
+      )}
     </>
   );
 }
@@ -497,11 +607,13 @@ function CommentThread({
   comment,
   onReply,
   hubId,
+  mdComponents,
   onRetrySuccess,
 }: {
   comment: Comment;
   onReply?: (parentId: string, authorName: string) => void;
   hubId: string;
+  mdComponents: Components;
   onRetrySuccess?: (commentId: string, linearCommentId: string) => void;
 }) {
   const replies = comment.children ?? [];
@@ -514,12 +626,13 @@ function CommentThread({
         comment={comment}
         onReply={onReply ? () => onReply(parentLinearId, comment.user.name) : undefined}
         hubId={hubId}
+        mdComponents={mdComponents}
         onRetrySuccess={onRetrySuccess}
       />
       {replies.length > 0 && (
         <div className="ml-4 mt-1 border-l-2 border-border pl-3 space-y-1">
           {replies.map((reply) => (
-            <CommentBubble key={reply.id} comment={reply} compact hubId={hubId} onRetrySuccess={onRetrySuccess} />
+            <CommentBubble key={reply.id} comment={reply} compact hubId={hubId} mdComponents={mdComponents} onRetrySuccess={onRetrySuccess} />
           ))}
         </div>
       )}
@@ -532,12 +645,14 @@ function CommentBubble({
   compact,
   onReply,
   hubId,
+  mdComponents,
   onRetrySuccess,
 }: {
   comment: Comment;
   compact?: boolean;
   onReply?: () => void;
   hubId: string;
+  mdComponents: Components;
   onRetrySuccess?: (commentId: string, linearCommentId: string) => void;
 }) {
   const isHub = comment.isHubComment;
@@ -613,7 +728,7 @@ function CommentBubble({
         )}
       </div>
       <div className="prose prose-sm dark:prose-invert max-w-none prose-p:text-[13px] prose-p:leading-relaxed prose-p:my-1">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
           {comment.body}
         </ReactMarkdown>
       </div>
@@ -642,12 +757,14 @@ function CollapsibleComments({
   comments,
   hubId,
   isViewOnly,
+  mdComponents,
   onReply,
   onRetrySuccess,
 }: {
   comments: Comment[];
   hubId: string;
   isViewOnly: boolean;
+  mdComponents: Components;
   onReply: (parentId: string, authorName: string) => void;
   onRetrySuccess: (commentId: string, linearCommentId: string) => void;
 }) {
@@ -687,6 +804,7 @@ function CollapsibleComments({
                   key={comment.id}
                   comment={comment}
                   hubId={hubId}
+                  mdComponents={mdComponents}
                   onReply={isViewOnly ? undefined : (parentId, authorName) => onReply(parentId, authorName)}
                   onRetrySuccess={onRetrySuccess}
                 />

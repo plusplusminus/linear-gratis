@@ -7,6 +7,16 @@ if (process.env.NODE_ENV === "development") {
 }
 
 const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      // Linear CDN domains (images embedded in comments/descriptions)
+      { protocol: "https", hostname: "uploads.linear.app" },
+      { protocol: "https", hostname: "linear-uploads.s3.amazonaws.com" },
+      { protocol: "https", hostname: "public-files.linear.app" },
+      // Supabase Storage (hub comment attachments)
+      { protocol: "https", hostname: "kzxhksvvyfpkicodyzdi.supabase.co" },
+    ],
+  },
   webpack: (config, { isServer }) => {
     if (isServer) {
       config.resolve.fallback = {
