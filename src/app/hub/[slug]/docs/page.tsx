@@ -1,8 +1,13 @@
+import type { Metadata } from "next";
 import { resolveHubBySlug } from "@/lib/hub-auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { BookOpen, ChevronRight } from "lucide-react";
 import { getHubDocs } from "@/lib/hub-docs";
+
+export const metadata: Metadata = {
+  title: "Documentation",
+};
 
 export default async function HubDocsPage({
   params,

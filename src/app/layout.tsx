@@ -17,7 +17,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PPM Client Hub",
+  title: {
+    default: "PPM Client Hub",
+    template: "%s | PPM Client Hub",
+  },
   description: "Client hub portal for Linear",
   icons: {
     icon: [

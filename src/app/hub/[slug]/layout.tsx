@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { withAuth } from "@workos-inc/authkit-nextjs";
 import { redirect } from "next/navigation";
 import { resolveHubBySlug, getHubMembership } from "@/lib/hub-auth";
@@ -5,6 +6,23 @@ import { isPPMAdmin } from "@/lib/ppm-admin";
 import { fetchHubTeams } from "@/lib/hub-read";
 import { HubProvider, type HubTeam } from "@/contexts/hub-context";
 import { HubShell } from "@/components/hub/hub-shell";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const hub = await resolveHubBySlug(slug);
+  const hubName = hub?.name ?? slug;
+
+  return {
+    title: {
+      default: hubName,
+      template: `%s — ${hubName} | PPM Client Hub`,
+    },
+  };
+}
 
 export default async function HubLayout({
   children,

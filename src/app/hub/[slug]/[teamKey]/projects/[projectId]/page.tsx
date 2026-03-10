@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { resolveHubBySlug } from "@/lib/hub-auth";
 import {
   fetchHubTeams,
@@ -9,6 +10,19 @@ import {
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { ProjectTabs } from "@/components/hub/project-tabs";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string; teamKey: string; projectId: string }>;
+}): Promise<Metadata> {
+  const { slug, projectId } = await params;
+  const hub = await resolveHubBySlug(slug);
+  if (!hub) return { title: "Project" };
+  const projects = await fetchHubProjects(hub.id);
+  const project = projects.find((p) => p.id === projectId);
+  return { title: project?.name ?? "Project" };
+}
 
 export default async function ProjectViewPage({
   params,

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { resolveHubBySlug } from "@/lib/hub-auth";
 import {
   fetchHubTeams,
@@ -7,6 +8,10 @@ import {
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { IterationCw } from "lucide-react";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: "Cycles" };
+}
 
 function formatCycleDate(dateStr: string): string {
   const d = new Date(dateStr);

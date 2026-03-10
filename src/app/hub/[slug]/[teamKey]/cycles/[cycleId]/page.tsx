@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { resolveHubBySlug } from "@/lib/hub-auth";
 import {
   fetchHubTeams,
@@ -9,6 +10,19 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { IterationCw } from "lucide-react";
 import { ProjectIssueList } from "@/components/hub/project-issue-list";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string; teamKey: string; cycleId: string }>;
+}): Promise<Metadata> {
+  const { slug, cycleId } = await params;
+  const hub = await resolveHubBySlug(slug);
+  if (!hub) return { title: "Cycle" };
+  const cycles = await fetchHubCycles(hub.id);
+  const cycle = cycles.find((c) => c.id === cycleId);
+  return { title: cycle ? (cycle.name || `Cycle ${cycle.number}`) : "Cycle" };
+}
 
 export default async function CycleDetailPage({
   params,
