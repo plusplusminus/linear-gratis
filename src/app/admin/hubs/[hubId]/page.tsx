@@ -12,6 +12,7 @@ import {
   ExternalLink,
   CheckCircle2,
   Circle,
+  MessageSquare,
 } from "lucide-react";
 import { HubSyncButton } from "@/components/admin/hub-sync-button";
 
@@ -178,6 +179,12 @@ export default async function HubDashboardPage({
           icon={<Settings className="w-4 h-4" />}
           label="Edit Settings"
           description="Name, scoping, danger zone"
+        />
+        <QuickAction
+          href={`/admin/hubs/${hub.id}/widget`}
+          icon={<MessageSquare className="w-4 h-4" />}
+          label="Pulse Widget"
+          description="Feedback widget config"
         />
         <QuickAction
           href={`/hub/${hub.slug}`}
