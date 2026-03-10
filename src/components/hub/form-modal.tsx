@@ -15,8 +15,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { X, Loader2, Upload, CheckCircle2, AlertCircle } from "lucide-react";
+import { X, Loader2, Upload, CheckCircle2, AlertCircle, Plus } from "lucide-react";
 import type { FormField, FormFieldType } from "@/lib/supabase";
+
+const MAX_FILES_PER_FIELD = 10;
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+type Attachment = {
+  storagePath: string;
+  previewUrl: string;
+  fileName: string;
+};
 
 type FormData = {
   id: string;
@@ -50,8 +59,8 @@ export function FormModal({
   const [form, setForm] = useState<FormData | null>(null);
   const [loading, setLoading] = useState(true);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
-  const [attachmentPaths, setAttachmentPaths] = useState<Record<string, string>>({});
-  const [uploadingFields, setUploadingFields] = useState<Set<string>>(new Set());
+  const [attachments, setAttachments] = useState<Record<string, Attachment[]>>({});
+  const [uploadingCounts, setUploadingCounts] = useState<Record<string, number>>({});
   const [selectedTeamId, setSelectedTeamId] = useState<string>(
     contextTeamId ?? (teams.length === 1 ? teams[0].id : "")
   );
@@ -60,11 +69,27 @@ export function FormModal({
   const [submitState, setSubmitState] = useState<SubmitState>("idle");
   const [responseMessage, setResponseMessage] = useState("");
   const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
+  const [fileErrors, setFileErrors] = useState<Record<string, string | null>>({});
   const [, startTransition] = useTransition();
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const attachmentsRef = useRef(attachments);
+  attachmentsRef.current = attachments;
+
+  const totalUploading = Object.values(uploadingCounts).reduce((sum, n) => sum + n, 0);
 
   const displayName =
     [firstName, lastName].filter(Boolean).join(" ") || email;
+
+  // Clean up object URLs on unmount
+  useEffect(() => {
+    return () => {
+      for (const fieldAttachments of Object.values(attachmentsRef.current)) {
+        for (const att of fieldAttachments) {
+          URL.revokeObjectURL(att.previewUrl);
+        }
+      }
+    };
+  }, []);
 
   // Fetch projects for selected team
   useEffect(() => {
@@ -130,15 +155,8 @@ export function FormModal({
     });
   }, []);
 
-  const handleFileUpload = useCallback(
-    async (field: FormField, file: File) => {
-      if (file.size > 10 * 1024 * 1024) {
-        setValidationErrors((prev) => new Set(prev).add(field.field_key));
-        return;
-      }
-
-      setUploadingFields((prev) => new Set(prev).add(field.field_key));
-
+  const uploadSingleFile = useCallback(
+    async (file: File): Promise<Attachment | null> => {
       try {
         const res = await fetch(`/api/hub/${hubId}/submissions/upload`, {
           method: "POST",
@@ -156,26 +174,122 @@ export function FormModal({
           publicUrl: string;
         };
 
-        await fetch(signedUrl, {
+        const uploadRes = await fetch(signedUrl, {
           method: "PUT",
           headers: { "Content-Type": file.type },
           body: file,
         });
+        if (!uploadRes.ok) {
+          throw new Error(`Storage upload failed: ${uploadRes.status}`);
+        }
 
-        setAttachmentPaths((prev) => ({ ...prev, [field.field_key]: storagePath }));
-        setFieldValue(field.field_key, file.name);
+        return {
+          storagePath,
+          previewUrl: URL.createObjectURL(file),
+          fileName: file.name,
+        };
       } catch {
-        setValidationErrors((prev) => new Set(prev).add(field.field_key));
-      } finally {
-        setUploadingFields((prev) => {
-          const next = new Set(prev);
-          next.delete(field.field_key);
-          return next;
-        });
+        return null;
       }
     },
-    [hubId, setFieldValue]
+    [hubId]
   );
+
+  const handleFileUpload = useCallback(
+    async (field: FormField, files: FileList) => {
+      const fieldKey = field.field_key;
+      const existing = attachments[fieldKey] ?? [];
+      const remaining = MAX_FILES_PER_FIELD - existing.length;
+
+      if (remaining <= 0) {
+        setFileErrors((prev) => ({ ...prev, [fieldKey]: `Maximum ${MAX_FILES_PER_FIELD} images allowed` }));
+        return;
+      }
+
+      // Pre-filter: reject oversized files before they consume upload slots
+      const allFiles = Array.from(files);
+      const oversized = allFiles.filter((f) => f.size > MAX_FILE_SIZE);
+      const validFiles = allFiles.filter((f) => f.size <= MAX_FILE_SIZE);
+
+      if (oversized.length > 0) {
+        setFileErrors((prev) => ({
+          ...prev,
+          [fieldKey]: `${oversized.length} file${oversized.length === 1 ? " was" : "s were"} over 10MB and skipped`,
+        }));
+      }
+
+      if (validFiles.length === 0) {
+        if (oversized.length === 0) {
+          setFileErrors((prev) => ({ ...prev, [fieldKey]: null }));
+        }
+        return;
+      }
+
+      const filesToUpload = validFiles.slice(0, remaining);
+      if (filesToUpload.length < validFiles.length) {
+        setFileErrors((prev) => ({ ...prev, [fieldKey]: `Only ${remaining} more image${remaining === 1 ? "" : "s"} can be added (max ${MAX_FILES_PER_FIELD})` }));
+      } else if (oversized.length === 0) {
+        setFileErrors((prev) => ({ ...prev, [fieldKey]: null }));
+      }
+
+      // Clear validation error for this field since user is uploading
+      setValidationErrors((prev) => {
+        const next = new Set(prev);
+        next.delete(fieldKey);
+        return next;
+      });
+
+      // Track uploading count
+      setUploadingCounts((prev) => ({ ...prev, [fieldKey]: (prev[fieldKey] ?? 0) + filesToUpload.length }));
+
+      // Upload all files in parallel
+      const results = await Promise.allSettled(
+        filesToUpload.map((file) => uploadSingleFile(file))
+      );
+
+      const newAttachments: Attachment[] = [];
+      let failCount = 0;
+      for (const result of results) {
+        if (result.status === "fulfilled" && result.value) {
+          newAttachments.push(result.value);
+        } else {
+          failCount++;
+        }
+      }
+
+      if (failCount > 0 && newAttachments.length === 0) {
+        setFileErrors((prev) => ({ ...prev, [fieldKey]: "Upload failed. Please try again." }));
+      } else if (failCount > 0) {
+        setFileErrors((prev) => ({ ...prev, [fieldKey]: `${failCount} file${failCount === 1 ? "" : "s"} failed to upload` }));
+      }
+
+      // Append new attachments
+      setAttachments((prev) => ({
+        ...prev,
+        [fieldKey]: [...(prev[fieldKey] ?? []), ...newAttachments],
+      }));
+
+      // Decrement uploading count
+      setUploadingCounts((prev) => ({
+        ...prev,
+        [fieldKey]: Math.max(0, (prev[fieldKey] ?? 0) - filesToUpload.length),
+      }));
+    },
+    [attachments, uploadSingleFile]
+  );
+
+  const removeAttachment = useCallback((fieldKey: string, index: number) => {
+    setAttachments((prev) => {
+      const current = prev[fieldKey] ?? [];
+      const removed = current[index];
+      if (removed) {
+        URL.revokeObjectURL(removed.previewUrl);
+      }
+      const updated = current.filter((_, i) => i !== index);
+      return { ...prev, [fieldKey]: updated };
+    });
+    setFileErrors((prev) => ({ ...prev, [fieldKey]: null }));
+  }, []);
 
   const needsTeamPicker = !contextTeamId && teams.length > 1;
 
@@ -188,28 +302,37 @@ export function FormModal({
     for (const field of form.fields) {
       if (field.is_hidden) continue;
       if (field.is_required) {
-        const val = fieldValues[field.field_key]?.trim();
-        if (!val || val === "false") {
-          errors.add(field.field_key);
+        if (field.field_type === "file") {
+          if (!attachments[field.field_key]?.length) {
+            errors.add(field.field_key);
+          }
+        } else {
+          const val = fieldValues[field.field_key]?.trim();
+          if (!val || val === "false") {
+            errors.add(field.field_key);
+          }
         }
       }
     }
     setValidationErrors(errors);
     return errors.size === 0;
-  }, [form, fieldValues, needsTeamPicker, selectedTeamId]);
+  }, [form, fieldValues, attachments, needsTeamPicker, selectedTeamId]);
 
   const handleSubmit = useCallback(async () => {
     if (!validate()) return;
     setSubmitState("submitting");
 
     try {
+      // Flatten all attachment paths from all fields
+      const allPaths = Object.values(attachments).flat().map((a) => a.storagePath);
+
       const res = await fetch(`/api/hub/${hubId}/submissions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           formId,
           fieldValues,
-          attachmentPaths: Object.values(attachmentPaths),
+          attachmentPaths: allPaths,
           teamId: selectedTeamId || null,
           projectId: selectedProjectId && selectedProjectId !== "__none__" ? selectedProjectId : null,
         }),
@@ -234,7 +357,7 @@ export function FormModal({
       setResponseMessage(form?.error_message || "Something went wrong");
       setSubmitState("error");
     }
-  }, [validate, hubId, formId, fieldValues, attachmentPaths, form, onSubmitted, selectedTeamId, selectedProjectId]);
+  }, [validate, hubId, formId, fieldValues, attachments, form, onSubmitted, selectedTeamId, selectedProjectId]);
 
   const renderField = (field: FormField) => {
     if (field.is_hidden) return null;
@@ -317,38 +440,110 @@ export function FormModal({
           )}
         </div>
       ),
-      file: () => (
-        <div>
-          <input
-            ref={(el) => { fileInputRefs.current[field.field_key] = el; }}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleFileUpload(field, file);
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRefs.current[field.field_key]?.click()}
-            className="flex items-center gap-2 px-3 py-2 text-sm border border-input rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors w-full"
-          >
-            {uploadingFields.has(field.field_key) ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Upload className="w-4 h-4" />
+      file: () => {
+        const fieldKey = field.field_key;
+        const fieldAttachments = attachments[fieldKey] ?? [];
+        const uploading = uploadingCounts[fieldKey] ?? 0;
+        const fileError = fileErrors[fieldKey];
+        const canAddMore = fieldAttachments.length < MAX_FILES_PER_FIELD;
+
+        return (
+          <div>
+            <input
+              ref={(el) => { fileInputRefs.current[fieldKey] = el; }}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                const files = e.target.files;
+                if (files && files.length > 0) {
+                  handleFileUpload(field, files);
+                }
+                // Reset input so selecting the same files again works
+                e.target.value = "";
+              }}
+            />
+
+            {/* Thumbnail grid */}
+            {(fieldAttachments.length > 0 || uploading > 0) && (
+              <div className="grid grid-cols-5 gap-1.5 mb-2">
+                {fieldAttachments.map((att, idx) => (
+                  <div
+                    key={att.storagePath}
+                    className="relative group aspect-square rounded-md overflow-hidden border border-border bg-accent/30"
+                  >
+                    <img
+                      src={att.previewUrl}
+                      alt={att.fileName}
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      aria-label={`Remove ${att.fileName}`}
+                      onClick={() => removeAttachment(fieldKey, idx)}
+                      className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+
+                {/* Uploading placeholders */}
+                {Array.from({ length: uploading }).map((_, i) => (
+                  <div
+                    key={`uploading-${i}`}
+                    className="aspect-square rounded-md border border-border bg-accent/30 flex items-center justify-center"
+                  >
+                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                  </div>
+                ))}
+
+                {/* Add more button */}
+                {canAddMore && uploading === 0 && (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRefs.current[fieldKey]?.click()}
+                    className="aspect-square rounded-md border border-dashed border-border hover:border-foreground/30 bg-accent/20 hover:bg-accent/40 flex items-center justify-center transition-colors"
+                  >
+                    <Plus className="w-4 h-4 text-muted-foreground" />
+                  </button>
+                )}
+              </div>
             )}
-            {value || "Choose image..."}
-          </button>
-          {hasError && !value && (
-            <p className="text-xs text-destructive mt-1">File is required</p>
-          )}
-          {hasError && value && (
-            <p className="text-xs text-destructive mt-1">File must be under 10MB</p>
-          )}
-        </div>
-      ),
+
+            {/* Initial upload button (empty state) */}
+            {fieldAttachments.length === 0 && uploading === 0 && (
+              <button
+                type="button"
+                onClick={() => fileInputRefs.current[fieldKey]?.click()}
+                className="flex items-center gap-2 px-3 py-2 text-sm border border-input rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors w-full"
+              >
+                <Upload className="w-4 h-4" />
+                Choose images...
+              </button>
+            )}
+
+            {/* File count */}
+            {fieldAttachments.length > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {fieldAttachments.length} image{fieldAttachments.length === 1 ? "" : "s"} attached
+                {fieldAttachments.length < MAX_FILES_PER_FIELD && (
+                  <span className="text-muted-foreground/60"> ({MAX_FILES_PER_FIELD - fieldAttachments.length} remaining)</span>
+                )}
+              </p>
+            )}
+
+            {/* Errors */}
+            {hasError && fieldAttachments.length === 0 && (
+              <p className="text-xs text-destructive mt-1">At least one image is required</p>
+            )}
+            {fileError && (
+              <p className="text-xs text-destructive mt-1">{fileError}</p>
+            )}
+          </div>
+        );
+      },
     };
 
     return (
@@ -535,7 +730,7 @@ export function FormModal({
               </Button>
               <Button
                 size="sm"
-                disabled={submitState === "submitting" || uploadingFields.size > 0}
+                disabled={submitState === "submitting" || totalUploading > 0}
                 onClick={handleSubmit}
               >
                 {submitState === "submitting" && (
