@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useTransition } from "react";
 import { useHub } from "@/contexts/hub-context";
 import { captureEvent } from "@/lib/posthog-client";
 import { POSTHOG_EVENTS } from "@/lib/posthog-events";
@@ -60,6 +60,7 @@ export function FormModal({
   const [submitState, setSubmitState] = useState<SubmitState>("idle");
   const [responseMessage, setResponseMessage] = useState("");
   const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
+  const [, startTransition] = useTransition();
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const displayName =
@@ -270,7 +271,7 @@ export function FormModal({
         />
       ),
       select: () => (
-        <Select value={value} onValueChange={(v) => setFieldValue(field.field_key, v)}>
+        <Select value={value} onValueChange={(v) => startTransition(() => setFieldValue(field.field_key, v))}>
           <SelectTrigger className="w-full" aria-invalid={hasError || undefined}>
             <SelectValue placeholder={field.placeholder || "Select an option"} />
           </SelectTrigger>
@@ -467,8 +468,10 @@ export function FormModal({
                     <Select
                       value={selectedTeamId}
                       onValueChange={(v) => {
-                        setSelectedTeamId(v);
-                        setSelectedProjectId("");
+                        startTransition(() => {
+                          setSelectedTeamId(v);
+                          setSelectedProjectId("");
+                        });
                       }}
                     >
                       <SelectTrigger
@@ -503,7 +506,7 @@ export function FormModal({
                     Project
                     <span className="text-muted-foreground/60 font-normal ml-1">(optional)</span>
                   </label>
-                  <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+                  <Select value={selectedProjectId} onValueChange={(v) => startTransition(() => setSelectedProjectId(v))}>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="No project" />
                     </SelectTrigger>
