@@ -54,9 +54,16 @@ export async function POST(
       fileSize?: number;
     };
 
-    if (!body.filename || !body.contentType) {
+    if (!body.filename || !body.contentType || typeof body.fileSize !== "number") {
       return NextResponse.json(
-        { error: "filename and contentType are required" },
+        { error: "filename, contentType, and fileSize are required" },
+        { status: 400 }
+      );
+    }
+
+    if (!Number.isFinite(body.fileSize) || body.fileSize <= 0) {
+      return NextResponse.json(
+        { error: "fileSize must be a positive number" },
         { status: 400 }
       );
     }
@@ -94,8 +101,8 @@ export async function POST(
       ? IMAGE_MAX_SIZE
       : OTHER_MAX_SIZE;
 
-    // Server-side file size validation (if client declares size)
-    if (body.fileSize && body.fileSize > maxSize) {
+    // Server-side file size validation
+    if (body.fileSize > maxSize) {
       const limitMB = Math.round(maxSize / 1024 / 1024);
       return NextResponse.json(
         { error: `File exceeds the ${limitMB}MB size limit` },

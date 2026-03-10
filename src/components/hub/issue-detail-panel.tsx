@@ -165,10 +165,13 @@ function useMarkdownComponents(onImageClick: (src: string, alt?: string) => void
       // Detect Supabase storage file attachment links
       if (href && href.includes("comment-attachments/")) {
         try {
+          // Prefer the markdown link text (e.g. "report.pdf") over the UUID storage key
+          const childText = typeof children === "string" ? children.trim() : "";
           const url = new URL(href, window.location.origin);
           const pathParts = url.pathname.split("/");
-          const filename = decodeURIComponent(pathParts[pathParts.length - 1]);
-          const IconComponent = getFileIcon(filename);
+          const storageFilename = decodeURIComponent(pathParts[pathParts.length - 1]);
+          const displayName = childText || storageFilename;
+          const IconComponent = getFileIcon(displayName);
 
           return (
             <a
@@ -179,7 +182,7 @@ function useMarkdownComponents(onImageClick: (src: string, alt?: string) => void
               {...props}
             >
               <IconComponent className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-              <span className="truncate max-w-[200px]">{filename}</span>
+              <span className="truncate max-w-[200px]">{displayName}</span>
             </a>
           );
         } catch {
@@ -317,15 +320,15 @@ export function IssueDetailPanel({
     }
   }, [issueId, router, searchParams]);
 
-  // Escape key closes panel
+  // Escape key closes panel (skip if lightbox is open — it handles its own Escape)
   useEffect(() => {
     if (!activeId) return;
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") handleClose();
+      if (e.key === "Escape" && !lightboxImage) handleClose();
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [activeId, handleClose]);
+  }, [activeId, handleClose, lightboxImage]);
 
   // Check description overflow
   useEffect(() => {

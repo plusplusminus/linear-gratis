@@ -100,8 +100,9 @@ export function CommentComposer({
       }
       const start = el.selectionStart;
       const end = el.selectionEnd;
-      const before = body.slice(0, start);
-      const after = body.slice(end);
+      const current = el.value;
+      const before = current.slice(0, start);
+      const after = current.slice(end);
       // Add newline before if cursor isn't at start and previous char isn't newline
       const prefix = before.length > 0 && !before.endsWith("\n") ? "\n" : "";
       const newValue = before + prefix + text + "\n" + after;
@@ -112,7 +113,7 @@ export function CommentComposer({
         el.setSelectionRange(cursorPos, cursorPos);
       });
     },
-    [body]
+    []
   );
 
   const uploadFile = useCallback(
@@ -226,6 +227,18 @@ export function CommentComposer({
     setUploads((prev) => {
       const upload = prev.find((u) => u.id === id);
       if (upload?.previewUrl) URL.revokeObjectURL(upload.previewUrl);
+      // Remove the inserted markdown from the body
+      if (upload?.publicUrl) {
+        const imgMarkdown = `![${upload.file.name}](${upload.publicUrl})`;
+        const linkMarkdown = `[${upload.file.name}](${upload.publicUrl})`;
+        setBody((prevBody) => {
+          let updated = prevBody.replace(imgMarkdown, "");
+          updated = updated.replace(linkMarkdown, "");
+          // Clean up leftover blank lines
+          updated = updated.replace(/\n{3,}/g, "\n\n").trim();
+          return updated;
+        });
+      }
       return prev.filter((u) => u.id !== id);
     });
   }, []);
@@ -375,12 +388,13 @@ export function CommentComposer({
       const el = textareaRef.current;
       if (!el) return;
 
+      const current = el.value;
       const start = el.selectionStart;
       const end = el.selectionEnd;
-      const selected = body.slice(start, end);
+      const selected = current.slice(start, end);
       const text = selected || placeholder;
       const newValue =
-        body.slice(0, start) + before + text + after + body.slice(end);
+        current.slice(0, start) + before + text + after + current.slice(end);
 
       setBody(newValue);
 
@@ -392,7 +406,7 @@ export function CommentComposer({
         el.setSelectionRange(cursorStart, cursorEnd);
       });
     },
-    [body]
+    []
   );
 
   const handleBold = useCallback(() => {
@@ -407,15 +421,16 @@ export function CommentComposer({
     const el = textareaRef.current;
     if (!el) return;
 
+    const current = el.value;
     const start = el.selectionStart;
     const end = el.selectionEnd;
-    const selected = body.slice(start, end);
+    const selected = current.slice(start, end);
 
     if (selected) {
       const url = prompt("Enter URL:");
       if (url === null) return;
       const replacement = `[${selected}](${url || "url"})`;
-      const newValue = body.slice(0, start) + replacement + body.slice(end);
+      const newValue = current.slice(0, start) + replacement + current.slice(end);
       setBody(newValue);
       requestAnimationFrame(() => {
         el.focus();
@@ -424,7 +439,7 @@ export function CommentComposer({
       });
     } else {
       const placeholder = "[link text](url)";
-      const newValue = body.slice(0, start) + placeholder + body.slice(end);
+      const newValue = current.slice(0, start) + placeholder + current.slice(end);
       setBody(newValue);
       requestAnimationFrame(() => {
         el.focus();
@@ -432,7 +447,7 @@ export function CommentComposer({
         el.setSelectionRange(start + 1, start + 10);
       });
     }
-  }, [body]);
+  }, []);
 
   const handleAttachClick = useCallback(() => {
     fileInputRef.current?.click();
@@ -488,6 +503,7 @@ export function CommentComposer({
               onClick={handleBold}
               className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
               title="Bold (Cmd+B)"
+              aria-label="Bold"
               tabIndex={-1}
             >
               <Bold className="w-3.5 h-3.5" />
@@ -497,6 +513,7 @@ export function CommentComposer({
               onClick={handleItalic}
               className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
               title="Italic (Cmd+I)"
+              aria-label="Italic"
               tabIndex={-1}
             >
               <Italic className="w-3.5 h-3.5" />
@@ -506,6 +523,7 @@ export function CommentComposer({
               onClick={handleLink}
               className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
               title="Link"
+              aria-label="Insert link"
               tabIndex={-1}
             >
               <Link className="w-3.5 h-3.5" />
@@ -516,6 +534,7 @@ export function CommentComposer({
               onClick={handleAttachClick}
               className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
               title="Attach file"
+              aria-label="Attach file"
               tabIndex={-1}
             >
               <Paperclip className="w-3.5 h-3.5" />
@@ -613,6 +632,7 @@ export function CommentComposer({
         <button
           onClick={handleSubmit}
           disabled={!body.trim() || isPending || hasActiveUploads}
+          aria-label="Submit comment"
           className={cn(
             "px-3 py-2 rounded-md transition-colors shrink-0 self-end",
             body.trim() && !hasActiveUploads
