@@ -1,7 +1,12 @@
+import type { Metadata } from "next";
 import { resolveHubBySlug } from "@/lib/hub-auth";
 import { redirect } from "next/navigation";
 import { NotificationPreferencesForm } from "@/components/hub/notification-preferences-form";
 import { Bell } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: "Settings",
+};
 
 export default async function HubSettingsPage({
   params,

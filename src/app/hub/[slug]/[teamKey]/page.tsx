@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { resolveHubBySlug } from "@/lib/hub-auth";
 import {
   fetchHubTeams,
@@ -12,6 +13,19 @@ import {
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { TeamTabs } from "@/components/hub/team-tabs";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string; teamKey: string }>;
+}): Promise<Metadata> {
+  const { slug, teamKey } = await params;
+  const hub = await resolveHubBySlug(slug);
+  if (!hub) return { title: teamKey };
+  const teams = await fetchHubTeams(hub.id);
+  const team = teams.find((t) => t.key === teamKey);
+  return { title: team?.name ?? teamKey };
+}
 
 export default async function TeamDashboardPage({
   params,

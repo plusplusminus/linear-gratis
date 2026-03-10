@@ -1,8 +1,19 @@
+import type { Metadata } from "next";
 import { resolveHubBySlug } from "@/lib/hub-auth";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { getHubDoc, getHubDocs } from "@/lib/hub-docs";
 import { HubDocRenderer } from "@/components/hub/hub-doc-renderer";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string; topic: string }>;
+}): Promise<Metadata> {
+  const { topic } = await params;
+  const doc = await getHubDoc(topic);
+  return { title: doc?.title ?? "Documentation" };
+}
 
 export default async function HubDocTopicPage({
   params,
