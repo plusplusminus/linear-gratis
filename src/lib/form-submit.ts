@@ -5,6 +5,7 @@ import {
   fetchHubFormConfig,
 } from "./form-read";
 import { logSyncEvent } from "./sync-logger";
+import { priorityToLabel } from "./hub-read";
 
 // -- Types ────────────────────────────────────────────────────────────────────
 
@@ -61,30 +62,32 @@ export function buildIssueDescription(
     // Skip file fields (handled via attachments)
     if (field.field_type === "file") continue;
 
-    const displayVal =
-      typeof val === "boolean"
-        ? val
-          ? "Yes"
-          : "No"
-        : Array.isArray(val)
-          ? val.join(", ")
-          : String(val);
+    let displayVal: string;
+    if (typeof val === "boolean") {
+      displayVal = val ? "Yes" : "No";
+    } else if (Array.isArray(val)) {
+      displayVal = val.join(", ");
+    } else if (field.linear_field === "priority") {
+      displayVal = priorityToLabel(Number(val));
+    } else {
+      displayVal = String(val);
+    }
 
     if (displayVal.trim()) {
-      customParts.push(`**${field.label}**\n${displayVal.trim()}`);
+      customParts.push(`### ${field.label}\n${displayVal.trim()}`);
     }
   }
 
   if (customParts.length > 0) {
     parts.push("---");
-    parts.push("**Additional Information**");
+    parts.push("## Additional Information");
     parts.push(customParts.join("\n\n"));
   }
 
   // Attachments
   if (attachmentUrls.length > 0) {
     parts.push("---");
-    parts.push("**Attachments**");
+    parts.push("## Attachments");
     for (const url of attachmentUrls) {
       parts.push(`![attachment](${url})`);
     }
