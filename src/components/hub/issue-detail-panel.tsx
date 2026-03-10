@@ -146,10 +146,19 @@ function MarkdownImage({
       {...props}
       src={imgSrc}
       alt={alt ?? ""}
+      role="button"
+      tabIndex={0}
+      aria-label={alt ? `View image: ${alt}` : "View image"}
       onError={() => setBroken(true)}
       onClick={(e) => {
         e.preventDefault();
         onImageClick(imgSrc, alt ?? undefined);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onImageClick(imgSrc, alt ?? undefined);
+        }
       }}
       className="max-w-full max-h-[300px] rounded-lg border border-border cursor-pointer hover:opacity-90 transition-opacity"
     />

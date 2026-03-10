@@ -203,6 +203,7 @@ export function CommentComposer({
 
   const processFiles = useCallback(
     (files: FileList | File[]) => {
+      if (isPending) return;
       const fileArray = Array.from(files);
       for (const file of fileArray) {
         if (!ACCEPTED_TYPES.includes(file.type)) {
@@ -220,7 +221,7 @@ export function CommentComposer({
         uploadFile(file);
       }
     },
-    [uploadFile]
+    [uploadFile, isPending]
   );
 
   const removeUpload = useCallback((id: string) => {
