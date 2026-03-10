@@ -89,6 +89,7 @@ export class Widget {
     if (this.state !== 'closed') return
     this.state = 'open'
     this.trigger.hide()
+    this.currentScreenshot = null
     this.panel.setScreenshot(null)
     this.panel.setState('open')
     this.config.onOpen?.()

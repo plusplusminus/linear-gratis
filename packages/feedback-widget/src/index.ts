@@ -57,13 +57,11 @@ export class Pulse {
   open(): void {
     if (this.destroyed) return
     this.widgetUI?.open()
-    this.config.onOpen?.()
   }
 
   close(): void {
     if (this.destroyed) return
     this.widgetUI?.close()
-    this.config.onClose?.()
   }
 
   destroy(): void {
