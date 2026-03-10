@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { captureEvent } from "@/lib/posthog-client";
 import { POSTHOG_EVENTS } from "@/lib/posthog-events";
@@ -120,55 +120,71 @@ function getFileIcon(filename: string) {
   return FILE_ICON_MAP[ext] ?? File;
 }
 
+function MarkdownImage({
+  src,
+  alt,
+  onImageClick,
+  ...props
+}: React.ImgHTMLAttributes<HTMLImageElement> & {
+  onImageClick: (src: string, alt?: string) => void;
+}) {
+  const [broken, setBroken] = useState(false);
+  const imgSrc = typeof src === "string" ? src : undefined;
+
+  if (broken || !imgSrc) {
+    return (
+      <span className="flex items-center justify-center gap-2 w-full max-h-[300px] min-h-[80px] bg-muted rounded-lg border border-border text-muted-foreground text-xs">
+        <ImageOff className="w-4 h-4" />
+        Image not found
+      </span>
+    );
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      {...props}
+      src={imgSrc}
+      alt={alt ?? ""}
+      onError={() => setBroken(true)}
+      onClick={(e) => {
+        e.preventDefault();
+        onImageClick(imgSrc, alt ?? undefined);
+      }}
+      className="max-w-full max-h-[300px] rounded-lg border border-border cursor-pointer hover:opacity-90 transition-opacity"
+    />
+  );
+}
+
 function useMarkdownComponents(onImageClick: (src: string, alt?: string) => void): Components {
-  return {
-    img: ({ src, alt, ...props }) => {
-      const [broken, setBroken] = useState(false);
-      const imgSrc = typeof src === "string" ? src : undefined;
-
-      if (broken || !imgSrc) {
-        return (
-          <span className="flex items-center justify-center gap-2 w-full max-h-[300px] min-h-[80px] bg-muted rounded-lg border border-border text-muted-foreground text-xs">
-            <ImageOff className="w-4 h-4" />
-            Image not found
-          </span>
-        );
-      }
-
-      return (
-        <img
-          {...props}
-          src={imgSrc}
-          alt={alt ?? ""}
-          onError={() => setBroken(true)}
-          onClick={(e) => {
-            e.preventDefault();
-            onImageClick(imgSrc, alt ?? undefined);
-          }}
-          className="max-w-full max-h-[300px] rounded-lg border border-border cursor-pointer hover:opacity-90 transition-opacity"
-        />
-      );
-    },
-    a: ({ href, children, ...props }) => {
+  return useMemo(() => ({
+    img: (props: React.ComponentPropsWithoutRef<"img">) => (
+      <MarkdownImage {...props} onImageClick={onImageClick} />
+    ),
+    a: ({ href, children, ...props }: React.ComponentPropsWithoutRef<"a">) => {
       // Detect Supabase storage file attachment links
       if (href && href.includes("comment-attachments/")) {
-        const url = new URL(href, window.location.origin);
-        const pathParts = url.pathname.split("/");
-        const filename = decodeURIComponent(pathParts[pathParts.length - 1]);
-        const IconComponent = getFileIcon(filename);
+        try {
+          const url = new URL(href, window.location.origin);
+          const pathParts = url.pathname.split("/");
+          const filename = decodeURIComponent(pathParts[pathParts.length - 1]);
+          const IconComponent = getFileIcon(filename);
 
-        return (
-          <a
-            href={href}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-border bg-muted/50 hover:bg-muted text-foreground no-underline transition-colors text-xs"
-            {...props}
-          >
-            <IconComponent className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-            <span className="truncate max-w-[200px]">{filename}</span>
-          </a>
-        );
+          return (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-border bg-muted/50 hover:bg-muted text-foreground no-underline transition-colors text-xs"
+              {...props}
+            >
+              <IconComponent className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              <span className="truncate max-w-[200px]">{filename}</span>
+            </a>
+          );
+        } catch {
+          // Malformed URL — fall through to regular link rendering
+        }
       }
 
       // Regular links
@@ -178,7 +194,7 @@ function useMarkdownComponents(onImageClick: (src: string, alt?: string) => void
         </a>
       );
     },
-  };
+  }), [onImageClick]);
 }
 
 export function IssueDetailPanel({

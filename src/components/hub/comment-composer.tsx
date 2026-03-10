@@ -139,6 +139,7 @@ export function CommentComposer({
           body: JSON.stringify({
             filename: file.name,
             contentType: file.type,
+            fileSize: file.size,
           }),
         });
 
@@ -570,6 +571,7 @@ export function CommentComposer({
                 >
                   {/* Thumbnail for images */}
                   {upload.previewUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={upload.previewUrl}
                       alt=""

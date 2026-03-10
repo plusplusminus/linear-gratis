@@ -51,6 +51,7 @@ export async function POST(
     const body = (await request.json()) as {
       filename?: string;
       contentType?: string;
+      fileSize?: number;
     };
 
     if (!body.filename || !body.contentType) {
@@ -84,11 +85,25 @@ export async function POST(
       );
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const publicUrl = `${supabaseUrl}/storage/v1/object/public/comment-attachments/${storagePath}`;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!supabaseUrl) {
+      throw new Error("NEXT_PUBLIC_SUPABASE_URL is not configured");
+    }
+
     const maxSize = isImageMimeType(body.contentType)
       ? IMAGE_MAX_SIZE
       : OTHER_MAX_SIZE;
+
+    // Server-side file size validation (if client declares size)
+    if (body.fileSize && body.fileSize > maxSize) {
+      const limitMB = Math.round(maxSize / 1024 / 1024);
+      return NextResponse.json(
+        { error: `File exceeds the ${limitMB}MB size limit` },
+        { status: 400 }
+      );
+    }
+
+    const publicUrl = `${supabaseUrl}/storage/v1/object/public/comment-attachments/${storagePath}`;
 
     return NextResponse.json({
       signedUrl: signedData.signedUrl,

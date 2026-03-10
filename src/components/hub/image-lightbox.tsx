@@ -41,6 +41,7 @@ export function ImageLightbox({
       {/* Close button */}
       <button
         onClick={onClose}
+        aria-label="Close"
         className={cn(
           "absolute top-4 right-4 z-[101] p-2 rounded-full",
           "bg-black/50 text-white/80 hover:text-white hover:bg-black/70",
@@ -50,7 +51,7 @@ export function ImageLightbox({
         <X className="w-5 h-5" />
       </button>
 
-      {/* Image */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={src}
         alt={alt ?? ""}
