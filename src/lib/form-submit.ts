@@ -177,7 +177,16 @@ export async function processFormSubmission(
 
   const projectId = clientProjectId ?? null;
   const hubConfig = await fetchHubFormConfig(hubId, formId);
-  const labelIds = hubConfig?.target_label_ids ?? form.target_label_ids ?? [];
+  const defaultLabelIds = hubConfig?.target_label_ids ?? form.target_label_ids ?? [];
+
+  // Merge user-selected labels from label_ids field with admin defaults
+  const labelIdsField = form.fields.find((f) => f.linear_field === "label_ids");
+  const userLabelIds = labelIdsField
+    ? String(fieldValues[labelIdsField.field_key] ?? "")
+        .split(",")
+        .filter(Boolean)
+    : [];
+  const labelIds = [...new Set([...defaultLabelIds, ...userLabelIds])];
 
   // 3. Extract Linear-mapped field values
   const titleField = form.fields.find((f) => f.linear_field === "title");

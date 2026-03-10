@@ -15,7 +15,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { X, Loader2, Upload, CheckCircle2, AlertCircle, Plus } from "lucide-react";
+import { X, Loader2, Upload, CheckCircle2, AlertCircle, Plus, Check, ChevronDown, Search } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { FormField, FormFieldType } from "@/lib/supabase";
 
 const MAX_FILES_PER_FIELD = 10;
@@ -25,6 +26,13 @@ type Attachment = {
   storagePath: string;
   previewUrl: string;
   fileName: string;
+};
+
+type LinearLabel = {
+  id: string;
+  name: string;
+  color: string;
+  parent?: { id: string; name: string } | null;
 };
 
 type FormData = {
@@ -71,6 +79,8 @@ export function FormModal({
   const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
   const [fileErrors, setFileErrors] = useState<Record<string, string | null>>({});
   const [, startTransition] = useTransition();
+  const [linearLabels, setLinearLabels] = useState<LinearLabel[]>([]);
+  const [labelsLoading, setLabelsLoading] = useState(false);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const attachmentsRef = useRef(attachments);
   attachmentsRef.current = attachments;
@@ -145,6 +155,28 @@ export function FormModal({
       cancelled = true;
     };
   }, [hubId, formId]);
+
+  // Fetch labels if any field uses label_ids mapping
+  const hasLabelField = form?.fields.some((f) => f.linear_field === "label_ids");
+  useEffect(() => {
+    if (!hasLabelField) return;
+    let cancelled = false;
+    setLabelsLoading(true);
+    async function loadLabels() {
+      try {
+        const res = await fetch(`/api/hub/${hubId}/labels`);
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as LinearLabel[];
+        if (!cancelled) setLinearLabels(data);
+      } catch {
+        // Non-critical
+      } finally {
+        if (!cancelled) setLabelsLoading(false);
+      }
+    }
+    loadLabels();
+    return () => { cancelled = true; };
+  }, [hubId, hasLabelField]);
 
   const setFieldValue = useCallback((key: string, value: string) => {
     setFieldValues((prev) => ({ ...prev, [key]: value }));
@@ -364,6 +396,38 @@ export function FormModal({
 
     const hasError = validationErrors.has(field.field_key);
     const value = fieldValues[field.field_key] || "";
+
+    // Label field with linear_field mapping — render multi-select label picker
+    if (field.linear_field === "label_ids") {
+      const selectedIds = value ? value.split(",").filter(Boolean) : [];
+      return (
+        <div key={field.id}>
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+            {field.label}
+            {!field.is_required && (
+              <span className="text-muted-foreground/60 font-normal ml-1">
+                (optional)
+              </span>
+            )}
+          </label>
+          {field.description && (
+            <p className="text-xs text-muted-foreground/70 mb-1.5">{field.description}</p>
+          )}
+          <LabelMultiSelect
+            labels={linearLabels}
+            loading={labelsLoading}
+            selected={selectedIds}
+            onChange={(ids) =>
+              startTransition(() => setFieldValue(field.field_key, ids.join(",")))
+            }
+            hasError={hasError}
+          />
+          {hasError && (
+            <p className="text-xs text-destructive mt-1">This field is required</p>
+          )}
+        </div>
+      );
+    }
 
     const fieldRenderers: Record<FormFieldType, () => React.ReactNode> = {
       text: () => (
@@ -746,6 +810,181 @@ export function FormModal({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// -- Label multi-select picker ────────────────────────────────────────────────
+
+function LabelMultiSelect({
+  labels,
+  loading,
+  selected,
+  onChange,
+  hasError,
+}: {
+  labels: LinearLabel[];
+  loading: boolean;
+  selected: string[];
+  onChange: (ids: string[]) => void;
+  hasError: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setSearch("");
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  const filtered = labels.filter((l) =>
+    l.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  // Group: parent labels first, then children indented
+  const parents = filtered.filter((l) => !l.parent);
+  const childrenByParent = new Map<string, LinearLabel[]>();
+  for (const l of filtered) {
+    if (l.parent) {
+      const arr = childrenByParent.get(l.parent.id) ?? [];
+      arr.push(l);
+      childrenByParent.set(l.parent.id, arr);
+    }
+  }
+
+  const ordered: Array<LinearLabel & { indent: boolean }> = [];
+  for (const p of parents) {
+    ordered.push({ ...p, indent: false });
+    const children = childrenByParent.get(p.id);
+    if (children) {
+      for (const c of children) ordered.push({ ...c, indent: true });
+      childrenByParent.delete(p.id);
+    }
+  }
+  // Orphan children (parent filtered out by search)
+  for (const children of childrenByParent.values()) {
+    for (const c of children) ordered.push({ ...c, indent: false });
+  }
+
+  const toggle = (id: string) => {
+    onChange(
+      selected.includes(id)
+        ? selected.filter((s) => s !== id)
+        : [...selected, id]
+    );
+  };
+
+  const selectedLabels = labels.filter((l) => selected.includes(l.id));
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={cn(
+          "w-full flex items-center justify-between px-3 py-2 text-sm border rounded-md bg-background transition-colors cursor-pointer",
+          hasError
+            ? "border-destructive ring-destructive/20 ring-[3px]"
+            : "border-input hover:bg-accent/30",
+        )}
+      >
+        <span className={cn("truncate", selected.length === 0 && "text-muted-foreground")}>
+          {loading
+            ? "Loading labels..."
+            : selected.length === 0
+              ? "Select labels..."
+              : `${selected.length} label${selected.length !== 1 ? "s" : ""} selected`}
+        </span>
+        <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform", open && "rotate-180")} />
+      </button>
+
+      {selectedLabels.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {selectedLabels.map((label) => (
+            <span
+              key={label.id}
+              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-foreground"
+            >
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ backgroundColor: label.color }}
+              />
+              {label.name}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggle(label.id);
+                }}
+                aria-label={`Remove ${label.name}`}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-full border border-border rounded-lg bg-popover shadow-lg">
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
+            <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Filter labels..."
+              className="flex-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground"
+              autoFocus
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto py-1">
+            {loading ? (
+              <div className="px-3 py-2 text-sm text-muted-foreground">Loading...</div>
+            ) : ordered.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-muted-foreground">No labels found</div>
+            ) : (
+              ordered.map((label) => {
+                const isSelected = selected.includes(label.id);
+                return (
+                  <button
+                    key={label.id}
+                    type="button"
+                    onClick={() => toggle(label.id)}
+                    className={cn(
+                      "w-full flex items-center gap-2.5 px-3 py-1.5 text-sm text-left hover:bg-accent/50 transition-colors",
+                      label.indent && "pl-7"
+                    )}
+                  >
+                    <span className={cn(
+                      "flex items-center justify-center w-4 h-4 rounded border shrink-0 transition-colors",
+                      isSelected
+                        ? "bg-primary border-primary text-primary-foreground"
+                        : "border-border"
+                    )}>
+                      {isSelected && <Check className="w-3 h-3" />}
+                    </span>
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: label.color }}
+                    />
+                    <span className="truncate">{label.name}</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
