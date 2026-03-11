@@ -384,9 +384,22 @@ async function linearRequest<T>(
       throw new Error(`Linear API ${res.status}: ${await res.text()}`);
     }
 
-    const json = (await res.json()) as { data?: T; errors?: Array<{ message: string }> };
+    const json = (await res.json()) as {
+      data?: T;
+      errors?: Array<{ message: string; extensions?: { code?: string } }>;
+    };
 
     if (json.errors) {
+      // GraphQL RATELIMITED — retry with backoff (same as HTTP 429)
+      const isRateLimited = json.errors.some((e) => e.extensions?.code === "RATELIMITED");
+      if (isRateLimited && attempt < MAX_RETRIES - 1) {
+        const waitMs = rateLimiter?.getWaitTime() || RETRY_DELAY_MS * Math.pow(2, attempt);
+        const cappedWaitMs = Math.min(waitMs, 30_000);
+        console.warn(`[rate-limit] GraphQL RATELIMITED — waiting ${cappedWaitMs}ms before retry (attempt ${attempt + 1}/${MAX_RETRIES})`);
+        lastError = new Error(`GraphQL RATELIMITED (attempt ${attempt + 1}/${MAX_RETRIES})`);
+        await sleep(cappedWaitMs);
+        continue;
+      }
       throw new Error(`GraphQL: ${json.errors.map((e) => e.message).join(", ")}`);
     }
 

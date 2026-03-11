@@ -35,14 +35,14 @@ const WORKSPACE_USER_ID = "workspace";
 
 /** Skip per-issue comment fetching during reconciliation.
  *  Comments are reliably synced via webhooks — this avoids N+1 API calls.
- *  Set to `false` to re-enable if webhook comment sync proves unreliable. */
-const SKIP_COMMENT_RECONCILE = true;
+ *  Toggle via SKIP_COMMENT_RECONCILE env var (defaults to true). */
+const SKIP_COMMENT_RECONCILE = process.env.SKIP_COMMENT_RECONCILE !== "false";
 
 /** When true, reconciliation uses lightweight diff-check: fetches only
- *  id + updatedAt from Linear, compares against local synced_at timestamps,
+ *  id + updatedAt from Linear, compares against local timestamps,
  *  and only fetches full payloads for stale/missing entities.
- *  When false, uses the original full-fetch behavior. */
-const DIFF_CHECK_MODE = true;
+ *  Toggle via DIFF_CHECK_MODE env var (defaults to true). */
+const DIFF_CHECK_MODE = process.env.DIFF_CHECK_MODE !== "false";
 
 type HubReconcileResult = {
   hubsReconciled: number;
@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET;
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

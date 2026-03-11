@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET;
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -37,8 +37,8 @@ export async function GET(request: NextRequest) {
   );
 
   try {
-    // Fetch failed comments, ordered oldest-first
-    const { data: failedComments, error: fetchError } = await supabaseAdmin
+    // 1. Fetch candidate failed comments, ordered oldest-first
+    const { data: candidates, error: fetchError } = await supabaseAdmin
       .from("hub_comments")
       .select(
         "id, issue_linear_id, author_name, body, parent_comment_id, push_retry_count, updated_at"
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
       throw new Error(`Failed to fetch failed comments: ${fetchError.message}`);
     }
 
-    if (!failedComments || failedComments.length === 0) {
+    if (!candidates || candidates.length === 0) {
       Sentry.captureCheckIn({
         checkInId,
         monitorSlug: "retry-pushes",
@@ -68,17 +68,45 @@ export async function GET(request: NextRequest) {
     }
 
     // Filter to comments whose backoff period has elapsed
-    const eligible = failedComments.filter((c) => {
-      const threshold = backoffThreshold(c.push_retry_count ?? 0);
-      return new Date(c.updated_at) <= threshold;
-    }).slice(0, MAX_COMMENTS_PER_RUN);
+    const eligibleIds = candidates
+      .filter((c) => {
+        const threshold = backoffThreshold(c.push_retry_count ?? 0);
+        return new Date(c.updated_at) <= threshold;
+      })
+      .slice(0, MAX_COMMENTS_PER_RUN)
+      .map((c) => c.id);
 
+    if (eligibleIds.length === 0) {
+      Sentry.captureCheckIn({ checkInId, monitorSlug: "retry-pushes", status: "ok" });
+      return NextResponse.json({ success: true, eligible: 0, retried: 0, succeeded: 0, failed: 0, abandoned: 0 });
+    }
+
+    // 2. Atomically claim eligible rows: flip status from "failed" to "retrying"
+    //    to prevent concurrent cron runs from processing the same comments
+    const { data: claimedRows, error: claimError } = await supabaseAdmin
+      .from("hub_comments")
+      .update({ push_status: "retrying", updated_at: new Date().toISOString() })
+      .eq("push_status", "failed")
+      .in("id", eligibleIds)
+      .select("id, issue_linear_id, author_name, body, parent_comment_id, push_retry_count");
+
+    if (claimError) {
+      throw new Error(`Failed to claim comments for retry: ${claimError.message}`);
+    }
+
+    if (!claimedRows || claimedRows.length === 0) {
+      // Another process already claimed them
+      Sentry.captureCheckIn({ checkInId, monitorSlug: "retry-pushes", status: "ok" });
+      return NextResponse.json({ success: true, eligible: 0, retried: 0, succeeded: 0, failed: 0, abandoned: 0 });
+    }
+
+    // 3. Process claimed comments
     let succeeded = 0;
     let failed = 0;
     let abandoned = 0;
     const rateLimiter = new LinearRateLimiter();
 
-    for (const comment of eligible) {
+    for (const comment of claimedRows) {
       const retryCount = (comment.push_retry_count ?? 0) + 1;
       const linearBody = `**${comment.author_name}:** ${comment.body}`;
 
@@ -90,7 +118,7 @@ export async function GET(request: NextRequest) {
           rateLimiter
         );
 
-        await supabaseAdmin
+        const { error: updateError } = await supabaseAdmin
           .from("hub_comments")
           .update({
             linear_comment_id: linearCommentId,
@@ -101,11 +129,22 @@ export async function GET(request: NextRequest) {
           })
           .eq("id", comment.id);
 
+        if (updateError) {
+          console.error(`[retry-pushes] Failed to mark comment ${comment.id} as pushed:`, updateError);
+        }
+
         succeeded++;
       } catch (pushError) {
-        // Rate limit deferred — stop processing remaining comments
+        // Rate limit deferred — release remaining claimed rows back to "failed"
         if (pushError instanceof RateLimitDeferredError) {
           console.warn("[retry-pushes] Rate limit approaching — deferring remaining comments");
+          const remainingIds = claimedRows
+            .slice(claimedRows.indexOf(comment))
+            .map((c) => c.id);
+          await supabaseAdmin
+            .from("hub_comments")
+            .update({ push_status: "failed" })
+            .in("id", remainingIds);
           break;
         }
 
@@ -114,7 +153,7 @@ export async function GET(request: NextRequest) {
 
         if (retryCount >= MAX_RETRY_COUNT) {
           // Exhausted retries — abandon and report to Sentry
-          await supabaseAdmin
+          const { error: updateError } = await supabaseAdmin
             .from("hub_comments")
             .update({
               push_status: "abandoned",
@@ -123,6 +162,10 @@ export async function GET(request: NextRequest) {
               updated_at: new Date().toISOString(),
             })
             .eq("id", comment.id);
+
+          if (updateError) {
+            console.error(`[retry-pushes] Failed to mark comment ${comment.id} as abandoned:`, updateError);
+          }
 
           Sentry.captureException(
             new Error(`Comment push abandoned after ${retryCount} retries: ${errorMsg}`),
@@ -138,15 +181,20 @@ export async function GET(request: NextRequest) {
 
           abandoned++;
         } else {
-          // Increment retry count, keep status as failed
-          await supabaseAdmin
+          // Increment retry count, set status back to failed for next run
+          const { error: updateError } = await supabaseAdmin
             .from("hub_comments")
             .update({
+              push_status: "failed",
               push_error: errorMsg,
               push_retry_count: retryCount,
               updated_at: new Date().toISOString(),
             })
             .eq("id", comment.id);
+
+          if (updateError) {
+            console.error(`[retry-pushes] Failed to update retry count for comment ${comment.id}:`, updateError);
+          }
 
           failed++;
         }
@@ -162,7 +210,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      eligible: eligible.length,
+      eligible: claimedRows.length,
       retried: succeeded + failed + abandoned,
       succeeded,
       failed,
