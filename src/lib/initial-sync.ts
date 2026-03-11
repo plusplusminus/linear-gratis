@@ -1,15 +1,20 @@
 import { supabaseAdmin, type HubTeamMapping } from "./supabase";
 import { getWorkspaceToken } from "./workspace";
+import { LinearRateLimiter } from "./linear-rate-limiter";
 
 const LINEAR_API = "https://api.linear.app/graphql";
 const PAGE_SIZE = 20;
 
 // -- GraphQL queries ---------------------------------------------------------
 
-const ISSUES_QUERY = `
+function buildIssuesQuery(since?: Date) {
+  const updatedAtFilter = since
+    ? `, updatedAt: { gt: "${since.toISOString()}" }`
+    : "";
+  return `
   query TeamIssues($teamId: ID!, $after: String) {
     issues(
-      filter: { team: { id: { eq: $teamId } } }
+      filter: { team: { id: { eq: $teamId } }${updatedAtFilter} }
       first: ${PAGE_SIZE}
       after: $after
       orderBy: updatedAt
@@ -39,6 +44,7 @@ const ISSUES_QUERY = `
     }
   }
 `;
+}
 
 const COMMENTS_QUERY = `
   query IssueComments($issueId: ID!, $after: String) {
@@ -92,10 +98,14 @@ const TEAMS_QUERY = `
   }
 `;
 
-const PROJECTS_QUERY = `
+function buildProjectsQuery(since?: Date) {
+  const updatedAtFilter = since
+    ? `, updatedAt: { gt: "${since.toISOString()}" }`
+    : "";
+  return `
   query TeamProjects($teamId: ID!, $after: String) {
     projects(
-      filter: { accessibleTeams: { id: { eq: $teamId } } }
+      filter: { accessibleTeams: { id: { eq: $teamId } }${updatedAtFilter} }
       first: ${PAGE_SIZE}
       after: $after
     ) {
@@ -129,10 +139,15 @@ const PROJECTS_QUERY = `
     }
   }
 `;
+}
 
-const INITIATIVES_QUERY = `
+function buildInitiativesQuery(since?: Date) {
+  const filter = since
+    ? `\n      filter: { updatedAt: { gt: "${since.toISOString()}" } }`
+    : "";
+  return `
   query ViewerInitiatives($after: String) {
-    initiatives(
+    initiatives(${filter}
       first: ${PAGE_SIZE}
       after: $after
     ) {
@@ -161,11 +176,16 @@ const INITIATIVES_QUERY = `
     }
   }
 `;
+}
 
-const CYCLES_QUERY = `
+function buildCyclesQuery(since?: Date) {
+  const updatedAtFilter = since
+    ? `, updatedAt: { gt: "${since.toISOString()}" }`
+    : "";
+  return `
   query TeamCycles($teamId: ID!, $after: String) {
     cycles(
-      filter: { team: { id: { eq: $teamId } } }
+      filter: { team: { id: { eq: $teamId } }${updatedAtFilter} }
       first: ${PAGE_SIZE}
       after: $after
       orderBy: createdAt
@@ -194,6 +214,7 @@ const CYCLES_QUERY = `
     }
   }
 `;
+}
 
 // -- Types -------------------------------------------------------------------
 
@@ -319,7 +340,8 @@ function sleep(ms: number) {
 async function linearRequest<T>(
   apiToken: string,
   query: string,
-  variables: Record<string, unknown>
+  variables: Record<string, unknown>,
+  rateLimiter?: LinearRateLimiter
 ): Promise<T> {
   let lastError: Error | null = null;
 
@@ -337,6 +359,21 @@ async function linearRequest<T>(
       body: JSON.stringify({ query, variables }),
     });
 
+    // Always track rate limit headers when a limiter is provided
+    if (rateLimiter) {
+      rateLimiter.updateFromResponse(res);
+    }
+
+    if (res.status === 429) {
+      // Rate limited — retry with backoff using reset header or exponential delay
+      const waitMs = rateLimiter?.getWaitTime() || RETRY_DELAY_MS * Math.pow(2, attempt);
+      const cappedWaitMs = Math.min(waitMs, 30_000); // Cap at 30s to avoid Vercel timeout
+      console.warn(`[rate-limit] Linear API 429 — waiting ${cappedWaitMs}ms before retry (attempt ${attempt + 1}/${MAX_RETRIES})`);
+      lastError = new Error(`Linear API 429: rate limited (attempt ${attempt + 1}/${MAX_RETRIES})`);
+      await sleep(cappedWaitMs);
+      continue;
+    }
+
     if (res.status >= 500) {
       lastError = new Error(`Linear API ${res.status} (attempt ${attempt + 1}/${MAX_RETRIES})`);
       console.warn(lastError.message);
@@ -347,9 +384,22 @@ async function linearRequest<T>(
       throw new Error(`Linear API ${res.status}: ${await res.text()}`);
     }
 
-    const json = (await res.json()) as { data?: T; errors?: Array<{ message: string }> };
+    const json = (await res.json()) as {
+      data?: T;
+      errors?: Array<{ message: string; extensions?: { code?: string } }>;
+    };
 
     if (json.errors) {
+      // GraphQL RATELIMITED — retry with backoff (same as HTTP 429)
+      const isRateLimited = json.errors.some((e) => e.extensions?.code === "RATELIMITED");
+      if (isRateLimited && attempt < MAX_RETRIES - 1) {
+        const waitMs = rateLimiter?.getWaitTime() || RETRY_DELAY_MS * Math.pow(2, attempt);
+        const cappedWaitMs = Math.min(waitMs, 30_000);
+        console.warn(`[rate-limit] GraphQL RATELIMITED — waiting ${cappedWaitMs}ms before retry (attempt ${attempt + 1}/${MAX_RETRIES})`);
+        lastError = new Error(`GraphQL RATELIMITED (attempt ${attempt + 1}/${MAX_RETRIES})`);
+        await sleep(cappedWaitMs);
+        continue;
+      }
       throw new Error(`GraphQL: ${json.errors.map((e) => e.message).join(", ")}`);
     }
 
@@ -367,16 +417,24 @@ async function linearRequest<T>(
 
 export async function fetchAllIssues(
   apiToken: string,
-  teamId: string
+  teamId: string,
+  rateLimiter?: LinearRateLimiter,
+  since?: Date
 ): Promise<LinearGqlIssue[]> {
   const allIssues: LinearGqlIssue[] = [];
   let cursor: string | undefined;
   let hasMore = true;
+  const query = buildIssuesQuery(since);
 
   while (hasMore) {
+    if (rateLimiter && !rateLimiter.canProceed()) {
+      console.warn(`[rate-limit] fetchAllIssues stopping early — ${allIssues.length} issues fetched so far`, rateLimiter.getStatus());
+      break;
+    }
+
     const data = await linearRequest<{
       issues: { pageInfo: PageInfo; nodes: LinearGqlIssue[] };
-    }>(apiToken, ISSUES_QUERY, { teamId, after: cursor });
+    }>(apiToken, query, { teamId, after: cursor }, rateLimiter);
 
     allIssues.push(...data.issues.nodes);
     hasMore = data.issues.pageInfo.hasNextPage;
@@ -389,16 +447,22 @@ export async function fetchAllIssues(
 
 export async function fetchCommentsForIssue(
   apiToken: string,
-  issueId: string
+  issueId: string,
+  rateLimiter?: LinearRateLimiter
 ): Promise<LinearGqlComment[]> {
   const allComments: LinearGqlComment[] = [];
   let cursor: string | undefined;
   let hasMore = true;
 
   while (hasMore) {
+    if (rateLimiter && !rateLimiter.canProceed()) {
+      console.warn(`[rate-limit] fetchCommentsForIssue stopping early — ${allComments.length} comments fetched so far`, rateLimiter.getStatus());
+      break;
+    }
+
     const data = await linearRequest<{
       comments: { pageInfo: PageInfo; nodes: LinearGqlComment[] };
-    }>(apiToken, COMMENTS_QUERY, { issueId, after: cursor });
+    }>(apiToken, COMMENTS_QUERY, { issueId, after: cursor }, rateLimiter);
 
     allComments.push(...data.comments.nodes);
     hasMore = data.comments.pageInfo.hasNextPage;
@@ -410,16 +474,22 @@ export async function fetchCommentsForIssue(
 }
 
 export async function fetchAllTeams(
-  apiToken: string
+  apiToken: string,
+  rateLimiter?: LinearRateLimiter
 ): Promise<LinearGqlTeam[]> {
   const all: LinearGqlTeam[] = [];
   let cursor: string | undefined;
   let hasMore = true;
 
   while (hasMore) {
+    if (rateLimiter && !rateLimiter.canProceed()) {
+      console.warn(`[rate-limit] fetchAllTeams stopping early — ${all.length} teams fetched so far`, rateLimiter.getStatus());
+      break;
+    }
+
     const data = await linearRequest<{
       teams: { pageInfo: PageInfo; nodes: LinearGqlTeam[] };
-    }>(apiToken, TEAMS_QUERY, { after: cursor });
+    }>(apiToken, TEAMS_QUERY, { after: cursor }, rateLimiter);
 
     all.push(...data.teams.nodes);
     hasMore = data.teams.pageInfo.hasNextPage;
@@ -432,16 +502,24 @@ export async function fetchAllTeams(
 
 export async function fetchAllProjects(
   apiToken: string,
-  teamId: string
+  teamId: string,
+  rateLimiter?: LinearRateLimiter,
+  since?: Date
 ): Promise<LinearGqlProject[]> {
   const all: LinearGqlProject[] = [];
   let cursor: string | undefined;
   let hasMore = true;
+  const query = buildProjectsQuery(since);
 
   while (hasMore) {
+    if (rateLimiter && !rateLimiter.canProceed()) {
+      console.warn(`[rate-limit] fetchAllProjects stopping early — ${all.length} projects fetched so far`, rateLimiter.getStatus());
+      break;
+    }
+
     const data = await linearRequest<{
       projects: { pageInfo: PageInfo; nodes: LinearGqlProject[] };
-    }>(apiToken, PROJECTS_QUERY, { teamId, after: cursor });
+    }>(apiToken, query, { teamId, after: cursor }, rateLimiter);
 
     all.push(...data.projects.nodes);
     hasMore = data.projects.pageInfo.hasNextPage;
@@ -453,16 +531,24 @@ export async function fetchAllProjects(
 }
 
 export async function fetchAllInitiatives(
-  apiToken: string
+  apiToken: string,
+  rateLimiter?: LinearRateLimiter,
+  since?: Date
 ): Promise<LinearGqlInitiative[]> {
   const all: LinearGqlInitiative[] = [];
   let cursor: string | undefined;
   let hasMore = true;
+  const query = buildInitiativesQuery(since);
 
   while (hasMore) {
+    if (rateLimiter && !rateLimiter.canProceed()) {
+      console.warn(`[rate-limit] fetchAllInitiatives stopping early — ${all.length} initiatives fetched so far`, rateLimiter.getStatus());
+      break;
+    }
+
     const data = await linearRequest<{
       initiatives: { pageInfo: PageInfo; nodes: LinearGqlInitiative[] };
-    }>(apiToken, INITIATIVES_QUERY, { after: cursor });
+    }>(apiToken, query, { after: cursor }, rateLimiter);
 
     all.push(...data.initiatives.nodes);
     hasMore = data.initiatives.pageInfo.hasNextPage;
@@ -475,21 +561,435 @@ export async function fetchAllInitiatives(
 
 export async function fetchAllCycles(
   apiToken: string,
-  teamId: string
+  teamId: string,
+  rateLimiter?: LinearRateLimiter,
+  since?: Date
 ): Promise<LinearGqlCycle[]> {
   const all: LinearGqlCycle[] = [];
   let cursor: string | undefined;
   let hasMore = true;
+  const query = buildCyclesQuery(since);
 
   while (hasMore) {
+    if (rateLimiter && !rateLimiter.canProceed()) {
+      console.warn(`[rate-limit] fetchAllCycles stopping early — ${all.length} cycles fetched so far`, rateLimiter.getStatus());
+      break;
+    }
+
     const data = await linearRequest<{
       cycles: { pageInfo: PageInfo; nodes: LinearGqlCycle[] };
-    }>(apiToken, CYCLES_QUERY, { teamId, after: cursor });
+    }>(apiToken, query, { teamId, after: cursor }, rateLimiter);
 
     all.push(...data.cycles.nodes);
     hasMore = data.cycles.pageInfo.hasNextPage;
     cursor = data.cycles.pageInfo.endCursor ?? undefined;
     if (hasMore) await sleep(PAGE_DELAY_MS);
+  }
+
+  return all;
+}
+
+// -- Diff-check: lightweight checksum fetches --------------------------------
+
+export type EntityChecksum = { id: string; updatedAt: string };
+
+const CHECKSUM_PAGE_SIZE = 250;
+
+/**
+ * Fetch only id + updatedAt for all issues in a team (paginated).
+ * Much lighter than full entity fetches — used for diff-check reconciliation.
+ */
+export async function fetchIssueChecksums(
+  teamId: string,
+  accessToken: string,
+  rateLimiter?: LinearRateLimiter
+): Promise<EntityChecksum[]> {
+  const query = `
+    query IssueChecksums($teamId: ID!, $after: String) {
+      issues(
+        filter: { team: { id: { eq: $teamId } } }
+        first: ${CHECKSUM_PAGE_SIZE}
+        after: $after
+        orderBy: updatedAt
+      ) {
+        pageInfo { hasNextPage endCursor }
+        nodes { id updatedAt }
+      }
+    }
+  `;
+  return fetchChecksumPages<{ issues: { pageInfo: PageInfo; nodes: EntityChecksum[] } }>(
+    accessToken, query, { teamId }, "issues", rateLimiter
+  );
+}
+
+/**
+ * Fetch only id + updatedAt for all projects accessible to a team (paginated).
+ */
+export async function fetchProjectChecksums(
+  teamId: string,
+  accessToken: string,
+  rateLimiter?: LinearRateLimiter
+): Promise<EntityChecksum[]> {
+  const query = `
+    query ProjectChecksums($teamId: ID!, $after: String) {
+      projects(
+        filter: { accessibleTeams: { id: { eq: $teamId } } }
+        first: ${CHECKSUM_PAGE_SIZE}
+        after: $after
+      ) {
+        pageInfo { hasNextPage endCursor }
+        nodes { id updatedAt }
+      }
+    }
+  `;
+  return fetchChecksumPages<{ projects: { pageInfo: PageInfo; nodes: EntityChecksum[] } }>(
+    accessToken, query, { teamId }, "projects", rateLimiter
+  );
+}
+
+/**
+ * Fetch only id + updatedAt for all cycles in a team (paginated).
+ */
+export async function fetchCycleChecksums(
+  teamId: string,
+  accessToken: string,
+  rateLimiter?: LinearRateLimiter
+): Promise<EntityChecksum[]> {
+  const query = `
+    query CycleChecksums($teamId: ID!, $after: String) {
+      cycles(
+        filter: { team: { id: { eq: $teamId } } }
+        first: ${CHECKSUM_PAGE_SIZE}
+        after: $after
+        orderBy: createdAt
+      ) {
+        pageInfo { hasNextPage endCursor }
+        nodes { id updatedAt }
+      }
+    }
+  `;
+  return fetchChecksumPages<{ cycles: { pageInfo: PageInfo; nodes: EntityChecksum[] } }>(
+    accessToken, query, { teamId }, "cycles", rateLimiter
+  );
+}
+
+/**
+ * Fetch only id + updatedAt for all initiatives (org-level, paginated).
+ */
+export async function fetchInitiativeChecksums(
+  accessToken: string,
+  rateLimiter?: LinearRateLimiter
+): Promise<EntityChecksum[]> {
+  const query = `
+    query InitiativeChecksums($after: String) {
+      initiatives(
+        first: ${CHECKSUM_PAGE_SIZE}
+        after: $after
+      ) {
+        pageInfo { hasNextPage endCursor }
+        nodes { id updatedAt }
+      }
+    }
+  `;
+  return fetchChecksumPages<{ initiatives: { pageInfo: PageInfo; nodes: EntityChecksum[] } }>(
+    accessToken, query, {}, "initiatives", rateLimiter
+  );
+}
+
+/** Generic paginator for checksum queries. */
+async function fetchChecksumPages<T extends Record<string, { pageInfo: PageInfo; nodes: EntityChecksum[] }>>(
+  accessToken: string,
+  query: string,
+  variables: Record<string, unknown>,
+  rootKey: string,
+  rateLimiter?: LinearRateLimiter
+): Promise<EntityChecksum[]> {
+  const all: EntityChecksum[] = [];
+  let cursor: string | undefined;
+  let hasMore = true;
+
+  while (hasMore) {
+    if (rateLimiter && !rateLimiter.canProceed()) {
+      console.warn(`[rate-limit] fetchChecksums(${rootKey}) stopping early — ${all.length} fetched so far`, rateLimiter.getStatus());
+      break;
+    }
+
+    const data = await linearRequest<T>(
+      accessToken, query, { ...variables, after: cursor }, rateLimiter
+    );
+
+    const page = data[rootKey as keyof T] as { pageInfo: PageInfo; nodes: EntityChecksum[] };
+    all.push(...page.nodes);
+    hasMore = page.pageInfo.hasNextPage;
+    cursor = page.pageInfo.endCursor ?? undefined;
+    if (hasMore) await sleep(PAGE_DELAY_MS);
+  }
+
+  return all;
+}
+
+// -- Diff-check: compare remote checksums against local DB -------------------
+
+export type DiffResult = {
+  stale: string[];
+  missing: string[];
+  deleted: string[];
+};
+
+/**
+ * Compare remote entity checksums against locally synced data.
+ *
+ * - `stale`: remote updatedAt is newer than local synced_at
+ * - `missing`: exists in remote but not in local DB
+ * - `deleted`: exists in local DB (for this team) but not in remote
+ *
+ * For team-scoped entities, pass `teamId` to scope the local query.
+ * For org-level entities (initiatives), pass `teamId = undefined`.
+ */
+export async function diffEntities(
+  tableName: string,
+  remoteChecksums: EntityChecksum[],
+  teamId?: string
+): Promise<DiffResult> {
+  // Fetch local entities: id + updated_at (Linear's updatedAt) for direct comparison
+  let query = supabaseAdmin
+    .from(tableName)
+    .select("linear_id, updated_at")
+    .eq("user_id", "workspace");
+
+  if (teamId) {
+    query = query.eq("team_id", teamId);
+  }
+
+  const { data: localRows, error } = await query;
+
+  if (error) {
+    console.error(`diffEntities: failed to query ${tableName}:`, error);
+    throw error;
+  }
+
+  // Build a map of local entities: linear_id -> updated_at (Linear's updatedAt)
+  const localMap = new Map<string, string>();
+  for (const row of localRows ?? []) {
+    localMap.set(row.linear_id, row.updated_at);
+  }
+
+  // Build set of remote IDs for deletion detection
+  const remoteIds = new Set<string>();
+
+  const stale: string[] = [];
+  const missing: string[] = [];
+
+  for (const remote of remoteChecksums) {
+    remoteIds.add(remote.id);
+    const localUpdatedAt = localMap.get(remote.id);
+
+    if (!localUpdatedAt) {
+      // Not in local DB at all
+      missing.push(remote.id);
+    } else if (new Date(remote.updatedAt) > new Date(localUpdatedAt)) {
+      // Remote updatedAt is newer than what we stored
+      stale.push(remote.id);
+    }
+  }
+
+  // Deleted: in local but not in remote
+  const deleted: string[] = [];
+  for (const localId of localMap.keys()) {
+    if (!remoteIds.has(localId)) {
+      deleted.push(localId);
+    }
+  }
+
+  return { stale, missing, deleted };
+}
+
+// -- Batch-fetch-by-ID: fetch full entities for specific IDs -----------------
+
+const BATCH_IDS_SIZE = 50;
+
+/**
+ * Fetch full issue data for specific IDs using Linear's `nodes` query.
+ * Batches in groups of 50 to avoid query size limits.
+ */
+export async function fetchIssuesByIds(
+  ids: string[],
+  accessToken: string,
+  rateLimiter?: LinearRateLimiter
+): Promise<LinearGqlIssue[]> {
+  if (ids.length === 0) return [];
+
+  const query = `
+    query IssuesByIds($ids: [ID!]!) {
+      nodes(ids: $ids) {
+        ... on Issue {
+          id
+          identifier
+          title
+          description
+          priority
+          priorityLabel
+          url
+          dueDate
+          state { id name color type }
+          assignee { id name }
+          labels { nodes { id name color } }
+          team { id name key }
+          project { id name }
+          cycle { id name number }
+          createdAt
+          updatedAt
+        }
+      }
+    }
+  `;
+
+  return batchFetchByIds<LinearGqlIssue>(ids, accessToken, query, rateLimiter);
+}
+
+/**
+ * Fetch full project data for specific IDs using Linear's `nodes` query.
+ */
+export async function fetchProjectsByIds(
+  ids: string[],
+  accessToken: string,
+  rateLimiter?: LinearRateLimiter
+): Promise<LinearGqlProject[]> {
+  if (ids.length === 0) return [];
+
+  const query = `
+    query ProjectsByIds($ids: [ID!]!) {
+      nodes(ids: $ids) {
+        ... on Project {
+          id
+          name
+          description
+          content
+          icon
+          color
+          url
+          priority
+          priorityLabel
+          progress
+          health
+          startDate
+          targetDate
+          status { id name color type }
+          lead { id name }
+          labels { nodes { id name color } }
+          teams { nodes { id name key } }
+          initiatives { nodes { id name } }
+          projectMilestones { nodes { id name targetDate } }
+          createdAt
+          updatedAt
+        }
+      }
+    }
+  `;
+
+  return batchFetchByIds<LinearGqlProject>(ids, accessToken, query, rateLimiter);
+}
+
+/**
+ * Fetch full cycle data for specific IDs using Linear's `nodes` query.
+ */
+export async function fetchCyclesByIds(
+  ids: string[],
+  accessToken: string,
+  rateLimiter?: LinearRateLimiter
+): Promise<LinearGqlCycle[]> {
+  if (ids.length === 0) return [];
+
+  const query = `
+    query CyclesByIds($ids: [ID!]!) {
+      nodes(ids: $ids) {
+        ... on Cycle {
+          id
+          name
+          number
+          description
+          startsAt
+          endsAt
+          completedAt
+          progress
+          completedIssueCountHistory
+          issueCountHistory
+          completedScopeHistory
+          scopeHistory
+          team { id name key }
+          createdAt
+          updatedAt
+        }
+      }
+    }
+  `;
+
+  return batchFetchByIds<LinearGqlCycle>(ids, accessToken, query, rateLimiter);
+}
+
+/**
+ * Fetch full initiative data for specific IDs using Linear's `nodes` query.
+ */
+export async function fetchInitiativesByIds(
+  ids: string[],
+  accessToken: string,
+  rateLimiter?: LinearRateLimiter
+): Promise<LinearGqlInitiative[]> {
+  if (ids.length === 0) return [];
+
+  const query = `
+    query InitiativesByIds($ids: [ID!]!) {
+      nodes(ids: $ids) {
+        ... on Initiative {
+          id
+          name
+          description
+          icon
+          color
+          url
+          status
+          health
+          healthUpdatedAt
+          targetDate
+          owner { id name }
+          projects { nodes { id name } }
+          subInitiatives { nodes { id name } }
+          parentInitiative { id name }
+          createdAt
+          updatedAt
+        }
+      }
+    }
+  `;
+
+  return batchFetchByIds<LinearGqlInitiative>(ids, accessToken, query, rateLimiter);
+}
+
+/** Generic batch-fetch-by-ID using Linear's `nodes` query. */
+async function batchFetchByIds<T extends { id: string }>(
+  ids: string[],
+  accessToken: string,
+  query: string,
+  rateLimiter?: LinearRateLimiter
+): Promise<T[]> {
+  const all: T[] = [];
+
+  for (let i = 0; i < ids.length; i += BATCH_IDS_SIZE) {
+    if (rateLimiter && !rateLimiter.canProceed()) {
+      console.warn(`[rate-limit] batchFetchByIds stopping early — ${all.length}/${ids.length} fetched`, rateLimiter.getStatus());
+      break;
+    }
+
+    const batch = ids.slice(i, i + BATCH_IDS_SIZE);
+    const data = await linearRequest<{ nodes: (T | null)[] }>(
+      accessToken, query, { ids: batch }, rateLimiter
+    );
+
+    // Filter out nulls (nodes query can return null for deleted/inaccessible entities)
+    const valid = data.nodes.filter((n): n is T => n !== null && "id" in n);
+    all.push(...valid);
+
+    if (i + BATCH_IDS_SIZE < ids.length) await sleep(PAGE_DELAY_MS);
   }
 
   return all;
@@ -682,7 +1182,8 @@ export type HubSyncResult = {
  */
 export async function runHubSync(
   hubId: string,
-  teamMappings: HubTeamMapping[]
+  teamMappings: HubTeamMapping[],
+  rateLimiter?: LinearRateLimiter
 ): Promise<HubSyncResult> {
   const result: HubSyncResult = {
     success: false,
@@ -696,7 +1197,7 @@ export async function runHubSync(
     const apiToken = await getWorkspaceToken();
 
     // 1. Teams — org-level, fetch once
-    const teams = await fetchAllTeams(apiToken);
+    const teams = await fetchAllTeams(apiToken, rateLimiter);
     if (teams.length > 0) {
       await batchUpsert(
         "synced_teams",
@@ -708,7 +1209,7 @@ export async function runHubSync(
 
     // 2. Initiatives — org-level, fetch once
     try {
-      const initiatives = await fetchAllInitiatives(apiToken);
+      const initiatives = await fetchAllInitiatives(apiToken, rateLimiter);
       if (initiatives.length > 0) {
         await batchUpsert(
           "synced_initiatives",
@@ -723,6 +1224,11 @@ export async function runHubSync(
 
     // 3. Per-team: projects, issues, comments
     for (const mapping of teamMappings) {
+      // Check rate limit before starting a new team
+      if (rateLimiter && !rateLimiter.canProceed()) {
+        console.warn(`[rate-limit] runHubSync stopping team loop early — rate limit approaching`, rateLimiter.getStatus());
+        break;
+      }
       const teamResult: HubTeamSyncResult = {
         teamId: mapping.linear_team_id,
         teamName: mapping.linear_team_name,
@@ -734,7 +1240,7 @@ export async function runHubSync(
 
       try {
         // Projects for this team
-        const projects = await fetchAllProjects(apiToken, mapping.linear_team_id);
+        const projects = await fetchAllProjects(apiToken, mapping.linear_team_id, rateLimiter);
         if (projects.length > 0) {
           await batchUpsert(
             "synced_projects",
@@ -745,7 +1251,7 @@ export async function runHubSync(
         teamResult.projectCount = projects.length;
 
         // Cycles for this team
-        const cycles = await fetchAllCycles(apiToken, mapping.linear_team_id);
+        const cycles = await fetchAllCycles(apiToken, mapping.linear_team_id, rateLimiter);
         if (cycles.length > 0) {
           await batchUpsert(
             "synced_cycles",
@@ -756,7 +1262,7 @@ export async function runHubSync(
         teamResult.cycleCount = cycles.length;
 
         // Issues for this team
-        const issues = await fetchAllIssues(apiToken, mapping.linear_team_id);
+        const issues = await fetchAllIssues(apiToken, mapping.linear_team_id, rateLimiter);
         if (issues.length > 0) {
           await batchUpsert(
             "synced_issues",
@@ -768,7 +1274,11 @@ export async function runHubSync(
 
         // Comments for each issue
         for (const issue of issues) {
-          const comments = await fetchCommentsForIssue(apiToken, issue.id);
+          if (rateLimiter && !rateLimiter.canProceed()) {
+            console.warn(`[rate-limit] Skipping remaining comment fetches — rate limit approaching`, rateLimiter.getStatus());
+            break;
+          }
+          const comments = await fetchCommentsForIssue(apiToken, issue.id, rateLimiter);
           if (comments.length > 0) {
             const rows = comments.map((c) =>
               mapCommentToRow(c, issue.id, WORKSPACE_USER_ID)
