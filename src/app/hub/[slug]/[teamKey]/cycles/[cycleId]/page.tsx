@@ -129,7 +129,7 @@ export default async function CycleDetailPage({
           )}
 
           <span className="text-[10px] text-muted-foreground">
-            {completedCount} / {issues.length} issues completed
+            {completedCount} / {issues.length} tasks completed
           </span>
         </div>
       </div>
@@ -144,6 +144,7 @@ export default async function CycleDetailPage({
         teamKey={teamKey}
         teamId={team.id}
         hubId={hub.id}
+        isCycleView
       />
     </div>
   );

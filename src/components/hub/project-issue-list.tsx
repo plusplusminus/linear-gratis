@@ -80,6 +80,7 @@ export function ProjectIssueList({
   hubId,
   projectId,
   projects,
+  isCycleView,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   teamId,
 }: {
@@ -93,6 +94,7 @@ export function ProjectIssueList({
   projectId?: string;
   hubId: string;
   projects?: ProjectInfo[];
+  isCycleView?: boolean;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -332,7 +334,7 @@ export function ProjectIssueList({
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Search issues..."
+            placeholder="Search tasks..."
             value={filters.search}
             onChange={(e) => updateFilters({ ...filters, search: e.target.value })}
             className="pl-7 pr-2 py-1 w-40 rounded-md border border-border bg-background text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
@@ -484,7 +486,7 @@ export function ProjectIssueList({
               items={projects.map((p) => ({ id: p.id, name: p.name, color: p.color }))}
               selected={filters.projectIds}
               onChange={(next) => updateFilters({ ...filters, projectIds: next })}
-              label="Project"
+              label="Epic"
               icon={<FolderKanban className="w-3 h-3" />}
             />
           )}
@@ -524,10 +526,12 @@ export function ProjectIssueList({
             <div className="p-10 text-center">
               <p className="text-sm text-muted-foreground">
                 {hasActiveFilters
-                  ? "No issues match the current filters"
-                  : projectId
-                    ? "No issues in this project"
-                    : "No issues in this team"}
+                  ? "No tasks match the current filters"
+                  : isCycleView
+                    ? "No tasks in this cycle"
+                    : projectId
+                      ? "No tasks in this epic"
+                      : "No tasks in this project"}
               </p>
             </div>
           ) : (

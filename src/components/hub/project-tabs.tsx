@@ -67,7 +67,7 @@ export function ProjectTabs({
           ? [{ id: "overview" as const, label: "Overview" }]
           : []),
         ...(issues.length > 0
-          ? [{ id: "issues" as const, label: "Issues", count: issues.length }]
+          ? [{ id: "issues" as const, label: "Tasks", count: issues.length }]
           : []),
       ];
 
