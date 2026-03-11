@@ -68,8 +68,15 @@ export function CommentComposer({
   const [isPending, startTransition] = useTransition();
   const [uploads, setUploads] = useState<FileUpload[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [linkInput, setLinkInput] = useState<{
+    visible: boolean;
+    selectedText: string;
+    selectionStart: number;
+    selectionEnd: number;
+  } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const linkInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
 
   const hasActiveUploads = uploads.some((u) => u.status === "uploading");
@@ -422,32 +429,57 @@ export function CommentComposer({
     const el = textareaRef.current;
     if (!el) return;
 
-    const current = el.value;
     const start = el.selectionStart;
     const end = el.selectionEnd;
-    const selected = current.slice(start, end);
+    const selected = el.value.slice(start, end);
 
     if (selected) {
-      const url = prompt("Enter URL:");
-      if (url === null) return;
-      const replacement = `[${selected}](${url || "url"})`;
-      const newValue = current.slice(0, start) + replacement + current.slice(end);
-      setBody(newValue);
-      requestAnimationFrame(() => {
-        el.focus();
-        const cursorPos = start + replacement.length;
-        el.setSelectionRange(cursorPos, cursorPos);
+      // Has selection — show inline URL input
+      setLinkInput({
+        visible: true,
+        selectedText: selected,
+        selectionStart: start,
+        selectionEnd: end,
       });
+      requestAnimationFrame(() => linkInputRef.current?.focus());
     } else {
+      // No selection — insert placeholder markdown
+      const current = el.value;
       const placeholder = "[link text](url)";
       const newValue = current.slice(0, start) + placeholder + current.slice(end);
       setBody(newValue);
       requestAnimationFrame(() => {
         el.focus();
-        // Select "link text" portion
         el.setSelectionRange(start + 1, start + 10);
       });
     }
+  }, []);
+
+  const handleLinkSubmit = useCallback(
+    (url: string) => {
+      if (!linkInput) return;
+      const el = textareaRef.current;
+      const current = el?.value ?? body;
+      const { selectedText, selectionStart, selectionEnd } = linkInput;
+      const replacement = `[${selectedText}](${url || "url"})`;
+      const newValue =
+        current.slice(0, selectionStart) + replacement + current.slice(selectionEnd);
+      setBody(newValue);
+      setLinkInput(null);
+      requestAnimationFrame(() => {
+        if (el) {
+          el.focus();
+          const cursorPos = selectionStart + replacement.length;
+          el.setSelectionRange(cursorPos, cursorPos);
+        }
+      });
+    },
+    [linkInput, body]
+  );
+
+  const handleLinkCancel = useCallback(() => {
+    setLinkInput(null);
+    requestAnimationFrame(() => textareaRef.current?.focus());
   }, []);
 
   const handleAttachClick = useCallback(() => {
@@ -498,57 +530,90 @@ export function CommentComposer({
           onDragOver={handleDragOver}
           onDrop={handleDrop}
         >
-          <div className="flex items-center gap-0.5 px-2 pt-1.5 pb-0.5">
-            <button
-              type="button"
-              onClick={handleBold}
-              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-              title="Bold (Cmd+B)"
-              aria-label="Bold"
-              tabIndex={-1}
-            >
-              <Bold className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={handleItalic}
-              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-              title="Italic (Cmd+I)"
-              aria-label="Italic"
-              tabIndex={-1}
-            >
-              <Italic className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={handleLink}
-              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-              title="Link"
-              aria-label="Insert link"
-              tabIndex={-1}
-            >
-              <Link className="w-3.5 h-3.5" />
-            </button>
-            <div className="w-px h-3.5 bg-border mx-0.5" />
-            <button
-              type="button"
-              onClick={handleAttachClick}
-              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-              title="Attach file"
-              aria-label="Attach file"
-              tabIndex={-1}
-            >
-              <Paperclip className="w-3.5 h-3.5" />
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept={ACCEPT_STRING}
-              multiple
-              className="hidden"
-              onChange={handleFileInputChange}
-            />
-          </div>
+          {linkInput?.visible ? (
+            <div className="flex items-center gap-1.5 px-2 pt-1.5 pb-0.5">
+              <Link className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              <input
+                ref={linkInputRef}
+                type="url"
+                placeholder="Paste or type URL..."
+                className="flex-1 text-xs bg-transparent outline-none placeholder:text-muted-foreground/60"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleLinkSubmit(e.currentTarget.value);
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    handleLinkCancel();
+                  }
+                }}
+                onBlur={(e) => {
+                  // Submit if there's a value, otherwise cancel
+                  if (e.currentTarget.value.trim()) {
+                    handleLinkSubmit(e.currentTarget.value);
+                  } else {
+                    handleLinkCancel();
+                  }
+                }}
+              />
+              <span className="text-[10px] text-muted-foreground shrink-0">
+                Enter to apply · Esc to cancel
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-0.5 px-2 pt-1.5 pb-0.5">
+              <button
+                type="button"
+                onClick={handleBold}
+                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                title="Bold (Cmd+B)"
+                aria-label="Bold"
+                tabIndex={-1}
+              >
+                <Bold className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={handleItalic}
+                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                title="Italic (Cmd+I)"
+                aria-label="Italic"
+                tabIndex={-1}
+              >
+                <Italic className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={handleLink}
+                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                title="Link"
+                aria-label="Insert link"
+                tabIndex={-1}
+              >
+                <Link className="w-3.5 h-3.5" />
+              </button>
+              <div className="w-px h-3.5 bg-border mx-0.5" />
+              <button
+                type="button"
+                onClick={handleAttachClick}
+                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                title="Attach file"
+                aria-label="Attach file"
+                tabIndex={-1}
+              >
+                <Paperclip className="w-3.5 h-3.5" />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={ACCEPT_STRING}
+                multiple
+                className="hidden"
+                onChange={handleFileInputChange}
+              />
+            </div>
+          )}
           <textarea
             ref={textareaRef}
             value={body}
