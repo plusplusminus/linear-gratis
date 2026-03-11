@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { supabaseAdmin } from "./supabase";
 
 // -- Types -------------------------------------------------------------------
@@ -42,6 +43,17 @@ export type SyncRunErrorDetail = {
  */
 export async function logSyncEvent(input: SyncEventInput): Promise<void> {
   try {
+    Sentry.addBreadcrumb({
+      category: "sync",
+      message: `${input.eventType}.${input.action} → ${input.status}`,
+      level: input.status === "error" ? "error" : "info",
+      data: {
+        entityId: input.entityId,
+        teamId: input.teamId,
+        processingTimeMs: input.processingTimeMs,
+      },
+    });
+
     await supabaseAdmin.from("sync_events").insert({
       event_type: input.eventType,
       action: input.action,
@@ -108,6 +120,23 @@ export async function completeSyncRun(opts: {
 
   try {
     const now = Date.now();
+    const durationMs = now - opts.startedAt;
+
+    if (opts.status === "failed") {
+      Sentry.captureMessage(`Sync run failed (${durationMs}ms)`, {
+        level: "error",
+        tags: { area: "sync", "sync.run_id": opts.runId },
+        contexts: {
+          sync_run: {
+            runId: opts.runId,
+            durationMs,
+            errorsCount: opts.errorsCount,
+            errorDetails: opts.errorDetails,
+          },
+        },
+      });
+    }
+
     await supabaseAdmin
       .from("sync_runs")
       .update({
@@ -116,7 +145,7 @@ export async function completeSyncRun(opts: {
         entities_processed: opts.entitiesProcessed ?? {},
         errors_count: opts.errorsCount ?? 0,
         error_details: opts.errorDetails ?? null,
-        duration_ms: now - opts.startedAt,
+        duration_ms: durationMs,
       })
       .eq("id", opts.runId);
   } catch (e) {

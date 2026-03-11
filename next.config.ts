@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 if (process.env.NODE_ENV === "development") {
   import("@opennextjs/cloudflare").then(({ initOpenNextCloudflareForDev }) =>
@@ -40,4 +41,24 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  // Suppress Sentry CLI logs during build
+  silent: !process.env.CI,
+
+  // Upload source maps to Sentry (configured in Spec 2)
+  sourcemaps: {
+    disable: !process.env.SENTRY_AUTH_TOKEN,
+    deleteSourcemapsAfterUpload: true,
+  },
+
+  // Tunnel Sentry events through our domain to bypass ad blockers
+  tunnelRoute: "/api/monitoring",
+
+  // Disable Sentry telemetry
+  disableLogger: true,
+
+  // Automatically instrument API routes and server components
+  autoInstrumentServerFunctions: true,
+  autoInstrumentMiddleware: true,
+  autoInstrumentAppDirectory: true,
+});

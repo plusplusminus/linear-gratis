@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { withAdminAuth } from "@/lib/admin-auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getWorkspaceToken } from "@/lib/workspace";
@@ -62,6 +63,7 @@ export async function POST() {
 
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
+    Sentry.captureException(error, { tags: { area: "sync" } });
     console.error("POST /api/sync/reconcile error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
@@ -72,11 +74,23 @@ export async function POST() {
 
 // GET: Cron-triggered reconciliation for all active hubs
 export async function GET(request: NextRequest) {
+  const checkInId = Sentry.captureCheckIn(
+    { monitorSlug: "sync-reconcile", status: "in_progress" },
+    {
+      schedule: { type: "crontab", value: "*/5 * * * *" },
+      checkinMargin: 2,
+      maxRuntime: 10,
+      failureIssueThreshold: 3,
+      recoveryThreshold: 1,
+    }
+  );
+
   try {
     const authHeader = request.headers.get("authorization");
     const cronSecret = process.env.CRON_SECRET;
 
     if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+      Sentry.captureCheckIn({ checkInId, monitorSlug: "sync-reconcile", status: "error" });
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -86,17 +100,21 @@ export async function GET(request: NextRequest) {
       .eq("is_active", true);
 
     if (!hubs || hubs.length === 0) {
+      Sentry.captureCheckIn({ checkInId, monitorSlug: "sync-reconcile", status: "ok" });
       return NextResponse.json({ success: true, message: "No active hubs" });
     }
 
     const startedAt = Date.now();
     const runId = await startSyncRun({ runType: "reconcile", trigger: "cron" });
 
-    const result = await reconcileAllHubs();
+    const result = await Sentry.startSpan(
+      { name: "reconcileAllHubs", op: "sync.reconcile" },
+      () => reconcileAllHubs()
+    );
 
     await completeSyncRun({
       runId,
-      status: "completed",
+      status: result.errors > 0 ? "failed" : "completed",
       entitiesProcessed: {
         issues: result.issuesUpserted,
         comments: result.commentsUpserted,
@@ -112,8 +130,11 @@ export async function GET(request: NextRequest) {
     // Prune old logs (fire-and-forget, piggybacks on cron)
     void pruneSyncLogs();
 
+    Sentry.captureCheckIn({ checkInId, monitorSlug: "sync-reconcile", status: "ok" });
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
+    Sentry.captureCheckIn({ checkInId, monitorSlug: "sync-reconcile", status: "error" });
+    Sentry.captureException(error, { tags: { area: "sync" } });
     console.error("GET /api/sync/reconcile error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
@@ -153,6 +174,7 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
     }
     result.teamsUpserted = teams.length;
   } catch (error) {
+    Sentry.captureException(error, { tags: { area: "sync", "sync.entity": "teams" } });
     console.error("Reconcile: teams failed:", error);
     result.errors++;
   }
@@ -243,6 +265,9 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
 
       result.teamsReconciled++;
     } catch (error) {
+      Sentry.captureException(error, {
+        tags: { area: "sync", "sync.entity": "team", "sync.team_id": mapping.linear_team_id },
+      });
       console.error(
         `Reconcile: team ${mapping.linear_team_id} failed:`,
         error
