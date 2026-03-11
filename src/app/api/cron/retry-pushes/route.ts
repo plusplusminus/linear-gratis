@@ -100,104 +100,114 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, eligible: 0, retried: 0, succeeded: 0, failed: 0, abandoned: 0 });
     }
 
-    // 3. Process claimed comments
+    // 3. Process claimed comments — track processed IDs for cleanup
     let succeeded = 0;
     let failed = 0;
     let abandoned = 0;
     const rateLimiter = new LinearRateLimiter();
+    const processedIds = new Set<string>();
 
-    for (const comment of claimedRows) {
-      const retryCount = (comment.push_retry_count ?? 0) + 1;
-      const linearBody = `**${comment.author_name}:** ${comment.body}`;
+    try {
+      for (const comment of claimedRows) {
+        const retryCount = (comment.push_retry_count ?? 0) + 1;
+        const linearBody = `**${comment.author_name}:** ${comment.body}`;
 
-      try {
-        const linearCommentId = await pushCommentToLinear(
-          comment.issue_linear_id,
-          linearBody,
-          comment.parent_comment_id ?? undefined,
-          rateLimiter
-        );
-
-        const { error: updateError } = await supabaseAdmin
-          .from("hub_comments")
-          .update({
-            linear_comment_id: linearCommentId,
-            push_status: "pushed",
-            push_error: null,
-            push_retry_count: retryCount,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", comment.id);
-
-        if (updateError) {
-          console.error(`[retry-pushes] Failed to mark comment ${comment.id} as pushed:`, updateError);
-        }
-
-        succeeded++;
-      } catch (pushError) {
-        // Rate limit deferred — release remaining claimed rows back to "failed"
-        if (pushError instanceof RateLimitDeferredError) {
-          console.warn("[retry-pushes] Rate limit approaching — deferring remaining comments");
-          const remainingIds = claimedRows
-            .slice(claimedRows.indexOf(comment))
-            .map((c) => c.id);
-          await supabaseAdmin
-            .from("hub_comments")
-            .update({ push_status: "failed" })
-            .in("id", remainingIds);
-          break;
-        }
-
-        const errorMsg =
-          pushError instanceof Error ? pushError.message : "Unknown error";
-
-        if (retryCount >= MAX_RETRY_COUNT) {
-          // Exhausted retries — abandon and report to Sentry
-          const { error: updateError } = await supabaseAdmin
-            .from("hub_comments")
-            .update({
-              push_status: "abandoned",
-              push_error: errorMsg,
-              push_retry_count: retryCount,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", comment.id);
-
-          if (updateError) {
-            console.error(`[retry-pushes] Failed to mark comment ${comment.id} as abandoned:`, updateError);
-          }
-
-          Sentry.captureException(
-            new Error(`Comment push abandoned after ${retryCount} retries: ${errorMsg}`),
-            {
-              tags: { area: "sync", "sync.entity": "hub_comment" },
-              extra: {
-                commentId: comment.id,
-                issueLinearId: comment.issue_linear_id,
-                retryCount,
-              },
-            }
+        try {
+          const linearCommentId = await pushCommentToLinear(
+            comment.issue_linear_id,
+            linearBody,
+            comment.parent_comment_id ?? undefined,
+            rateLimiter
           );
 
-          abandoned++;
-        } else {
-          // Increment retry count, set status back to failed for next run
           const { error: updateError } = await supabaseAdmin
             .from("hub_comments")
             .update({
-              push_status: "failed",
-              push_error: errorMsg,
+              linear_comment_id: linearCommentId,
+              push_status: "pushed",
+              push_error: null,
               push_retry_count: retryCount,
               updated_at: new Date().toISOString(),
             })
             .eq("id", comment.id);
 
           if (updateError) {
-            console.error(`[retry-pushes] Failed to update retry count for comment ${comment.id}:`, updateError);
+            console.error(`[retry-pushes] Failed to mark comment ${comment.id} as pushed:`, updateError);
           }
 
-          failed++;
+          processedIds.add(comment.id);
+          succeeded++;
+        } catch (pushError) {
+          // Rate limit deferred — stop processing, finally block releases remaining
+          if (pushError instanceof RateLimitDeferredError) {
+            console.warn("[retry-pushes] Rate limit approaching — deferring remaining comments");
+            break;
+          }
+
+          const errorMsg =
+            pushError instanceof Error ? pushError.message : "Unknown error";
+
+          if (retryCount >= MAX_RETRY_COUNT) {
+            const { error: updateError } = await supabaseAdmin
+              .from("hub_comments")
+              .update({
+                push_status: "abandoned",
+                push_error: errorMsg,
+                push_retry_count: retryCount,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", comment.id);
+
+            if (updateError) {
+              console.error(`[retry-pushes] Failed to mark comment ${comment.id} as abandoned:`, updateError);
+            }
+
+            Sentry.captureException(
+              new Error(`Comment push abandoned after ${retryCount} retries: ${errorMsg}`),
+              {
+                tags: { area: "sync", "sync.entity": "hub_comment" },
+                extra: {
+                  commentId: comment.id,
+                  issueLinearId: comment.issue_linear_id,
+                  retryCount,
+                },
+              }
+            );
+
+            processedIds.add(comment.id);
+            abandoned++;
+          } else {
+            const { error: updateError } = await supabaseAdmin
+              .from("hub_comments")
+              .update({
+                push_status: "failed",
+                push_error: errorMsg,
+                push_retry_count: retryCount,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", comment.id);
+
+            if (updateError) {
+              console.error(`[retry-pushes] Failed to update retry count for comment ${comment.id}:`, updateError);
+            }
+
+            processedIds.add(comment.id);
+            failed++;
+          }
         }
+      }
+    } finally {
+      // Release any claimed rows that were not processed (crash, rate limit, etc.)
+      const strandedIds = claimedRows
+        .map((c) => c.id)
+        .filter((id) => !processedIds.has(id));
+      if (strandedIds.length > 0) {
+        console.warn(`[retry-pushes] Releasing ${strandedIds.length} stranded "retrying" rows back to "failed"`);
+        await supabaseAdmin
+          .from("hub_comments")
+          .update({ push_status: "failed" })
+          .eq("push_status", "retrying")
+          .in("id", strandedIds);
       }
     }
 

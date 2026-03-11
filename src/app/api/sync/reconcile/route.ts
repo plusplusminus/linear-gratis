@@ -165,6 +165,17 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/** Compute the maximum `updatedAt` from a list of Linear entities.
+ *  Returns a Date or null if the list is empty. */
+function maxRemoteUpdatedAt(entities: Array<{ updatedAt: string }>): Date | null {
+  if (entities.length === 0) return null;
+  let max = entities[0].updatedAt;
+  for (let i = 1; i < entities.length; i++) {
+    if (entities[i].updatedAt > max) max = entities[i].updatedAt;
+  }
+  return new Date(max);
+}
+
 /**
  * Reconcile all active hubs. Org-level entities (teams, initiatives) are
  * fetched once. Per-team entities are deduplicated across hubs.
@@ -230,7 +241,6 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
       }
     } else {
       const initiativeWatermark = await getWatermark("_org", "initiatives");
-      const reconcileStart = new Date();
       const initiatives = await fetchAllInitiatives(apiToken, rateLimiter, initiativeWatermark ?? undefined);
       if (initiatives.length > 0) {
         await batchUpsert(
@@ -238,9 +248,10 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
           initiatives.map((i) => mapInitiativeToRow(i, WORKSPACE_USER_ID)),
           "user_id,linear_id"
         );
+        const maxUpdatedAt = maxRemoteUpdatedAt(initiatives);
+        if (maxUpdatedAt) await setWatermark("_org", "initiatives", maxUpdatedAt);
       }
       result.initiativesUpserted = initiatives.length;
-      await setWatermark("_org", "initiatives", reconcileStart);
       console.log(`Reconcile: initiatives — ${initiativeWatermark ? "incremental" : "full"} — ${initiatives.length} fetched`);
     }
   } catch (error) {
@@ -362,7 +373,6 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
 
       } else {
         // --- Legacy full-fetch mode (watermark-based) ---
-        const teamReconcileStart = new Date();
 
         // Projects
         const projectWatermark = await getWatermark(teamId, "projects");
@@ -373,9 +383,10 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
             projects.map((p) => mapProjectToRow(p, WORKSPACE_USER_ID)),
             "user_id,linear_id"
           );
+          const maxProjUpdated = maxRemoteUpdatedAt(projects);
+          if (maxProjUpdated) await setWatermark(teamId, "projects", maxProjUpdated);
         }
         result.projectsUpserted += projects.length;
-        await setWatermark(teamId, "projects", teamReconcileStart);
         console.log(`Reconcile: team ${teamId} projects — ${projectWatermark ? "incremental" : "full"} — ${projects.length} fetched`);
 
         // Cycles
@@ -387,9 +398,10 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
             cycles.map((c) => mapCycleToRow(c, WORKSPACE_USER_ID)),
             "user_id,linear_id"
           );
+          const maxCycleUpdated = maxRemoteUpdatedAt(cycles);
+          if (maxCycleUpdated) await setWatermark(teamId, "cycles", maxCycleUpdated);
         }
         result.cyclesUpserted += cycles.length;
-        await setWatermark(teamId, "cycles", teamReconcileStart);
         console.log(`Reconcile: team ${teamId} cycles — ${cycleWatermark ? "incremental" : "full"} — ${cycles.length} fetched`);
 
         // Issues
@@ -401,9 +413,10 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
             issues.map((issue) => mapIssueToRow(issue, WORKSPACE_USER_ID)),
             "user_id,linear_id"
           );
+          const maxIssueUpdated = maxRemoteUpdatedAt(issues);
+          if (maxIssueUpdated) await setWatermark(teamId, "issues", maxIssueUpdated);
         }
         result.issuesUpserted += issues.length;
-        await setWatermark(teamId, "issues", teamReconcileStart);
         console.log(`Reconcile: team ${teamId} issues — ${issueWatermark ? "incremental" : "full"} — ${issues.length} fetched`);
 
         // Comments: fetch per issue and batch upsert
