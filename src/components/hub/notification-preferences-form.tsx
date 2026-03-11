@@ -27,11 +27,11 @@ const EVENT_TYPE_META: Record<string, { label: string; description: string }> =
   {
     comment: {
       label: "Comments",
-      description: "When someone comments on an issue",
+      description: "When someone comments on a task",
     },
     status_change: {
       label: "Status Changes",
-      description: "When an issue's status changes",
+      description: "When a task's status changes",
     },
     project_update: {
       label: "Epic Updates",

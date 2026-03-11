@@ -11,7 +11,7 @@ import { HubUpdates } from "./hub-updates";
 type Tab = "projects" | "updates";
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: "projects", label: "Epics" },
+  { key: "projects", label: "Projects" },
   { key: "updates", label: "Updates" },
 ];
 

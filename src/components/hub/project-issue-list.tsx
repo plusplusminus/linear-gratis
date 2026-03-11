@@ -80,6 +80,7 @@ export function ProjectIssueList({
   hubId,
   projectId,
   projects,
+  isCycleView,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   teamId,
 }: {
@@ -93,6 +94,7 @@ export function ProjectIssueList({
   projectId?: string;
   hubId: string;
   projects?: ProjectInfo[];
+  isCycleView?: boolean;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -525,9 +527,11 @@ export function ProjectIssueList({
               <p className="text-sm text-muted-foreground">
                 {hasActiveFilters
                   ? "No tasks match the current filters"
-                  : projectId
-                    ? "No tasks in this epic"
-                    : "No tasks in this project"}
+                  : isCycleView
+                    ? "No tasks in this cycle"
+                    : projectId
+                      ? "No tasks in this epic"
+                      : "No tasks in this project"}
               </p>
             </div>
           ) : (

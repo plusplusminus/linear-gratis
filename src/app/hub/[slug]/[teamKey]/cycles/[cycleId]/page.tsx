@@ -144,6 +144,7 @@ export default async function CycleDetailPage({
         teamKey={teamKey}
         teamId={team.id}
         hubId={hub.id}
+        isCycleView
       />
     </div>
   );

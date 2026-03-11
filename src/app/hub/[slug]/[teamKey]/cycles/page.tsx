@@ -207,7 +207,7 @@ export default async function CyclesPage({
         {cycles.length === 0 ? (
           <div className="border border-border rounded-lg p-6 bg-card text-center">
             <p className="text-xs text-muted-foreground">
-              This team doesn&apos;t use cycles
+              This project doesn&apos;t use cycles
             </p>
           </div>
         ) : (
