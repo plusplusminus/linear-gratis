@@ -364,6 +364,16 @@ async function linearRequest<T>(
       rateLimiter.updateFromResponse(res);
     }
 
+    if (res.status === 429) {
+      // Rate limited — retry with backoff using reset header or exponential delay
+      const waitMs = rateLimiter?.getWaitTime() || RETRY_DELAY_MS * Math.pow(2, attempt);
+      const cappedWaitMs = Math.min(waitMs, 30_000); // Cap at 30s to avoid Vercel timeout
+      console.warn(`[rate-limit] Linear API 429 — waiting ${cappedWaitMs}ms before retry (attempt ${attempt + 1}/${MAX_RETRIES})`);
+      lastError = new Error(`Linear API 429: rate limited (attempt ${attempt + 1}/${MAX_RETRIES})`);
+      await sleep(cappedWaitMs);
+      continue;
+    }
+
     if (res.status >= 500) {
       lastError = new Error(`Linear API ${res.status} (attempt ${attempt + 1}/${MAX_RETRIES})`);
       console.warn(lastError.message);
@@ -728,10 +738,10 @@ export async function diffEntities(
   remoteChecksums: EntityChecksum[],
   teamId?: string
 ): Promise<DiffResult> {
-  // Fetch local entities: id + synced_at (+ team_id filter if applicable)
+  // Fetch local entities: id + updated_at (Linear's updatedAt) for direct comparison
   let query = supabaseAdmin
     .from(tableName)
-    .select("linear_id, synced_at")
+    .select("linear_id, updated_at")
     .eq("user_id", "workspace");
 
   if (teamId) {
@@ -745,10 +755,10 @@ export async function diffEntities(
     throw error;
   }
 
-  // Build a map of local entities: linear_id -> synced_at
+  // Build a map of local entities: linear_id -> updated_at (Linear's updatedAt)
   const localMap = new Map<string, string>();
   for (const row of localRows ?? []) {
-    localMap.set(row.linear_id, row.synced_at);
+    localMap.set(row.linear_id, row.updated_at);
   }
 
   // Build set of remote IDs for deletion detection
@@ -759,13 +769,13 @@ export async function diffEntities(
 
   for (const remote of remoteChecksums) {
     remoteIds.add(remote.id);
-    const localSyncedAt = localMap.get(remote.id);
+    const localUpdatedAt = localMap.get(remote.id);
 
-    if (!localSyncedAt) {
+    if (!localUpdatedAt) {
       // Not in local DB at all
       missing.push(remote.id);
-    } else if (new Date(remote.updatedAt) > new Date(localSyncedAt)) {
-      // Remote was updated after our last sync of this entity
+    } else if (new Date(remote.updatedAt) > new Date(localUpdatedAt)) {
+      // Remote updatedAt is newer than what we stored
       stale.push(remote.id);
     }
   }

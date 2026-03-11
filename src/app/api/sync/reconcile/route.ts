@@ -281,13 +281,13 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
       if (DIFF_CHECK_MODE) {
         // --- Diff-check mode: lightweight checksums then targeted fetches ---
 
-        // Projects
+        // Projects — diff without teamId scope since projects are shared across teams.
+        // Deletion detection is skipped: per-team checksums can't reliably detect
+        // deleted projects (a project absent from team A's list may belong to team B).
         const projectChecksums = await fetchProjectChecksums(teamId, apiToken, rateLimiter);
         const projectDiff = await diffEntities("synced_projects", projectChecksums);
         const projectsToFetch = [...projectDiff.stale, ...projectDiff.missing];
-        if (projectDiff.deleted.length > 0) {
-          console.warn(`[diff-check] team ${teamId} projects: ${projectDiff.deleted.length} in local but not remote:`, projectDiff.deleted);
-        }
+        // Note: projectDiff.deleted is ignored here — see comment above
         if (projectsToFetch.length > 0) {
           const projects = await fetchProjectsByIds(projectsToFetch, apiToken, rateLimiter);
           if (projects.length > 0) {
@@ -299,7 +299,7 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
           }
           result.projectsUpserted += projects.length;
         }
-        console.log(`[diff-check] team ${teamId} projects: ${projectChecksums.length} checked, ${projectDiff.stale.length} stale, ${projectDiff.missing.length} missing, ${projectDiff.deleted.length} deleted, ${projectsToFetch.length} fetched`);
+        console.log(`[diff-check] team ${teamId} projects: ${projectChecksums.length} checked, ${projectDiff.stale.length} stale, ${projectDiff.missing.length} missing, ${projectsToFetch.length} fetched`);
 
         // Cycles
         const cycleChecksums = await fetchCycleChecksums(teamId, apiToken, rateLimiter);

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { supabaseAdmin } from "@/lib/supabase";
-import { pushCommentToLinear } from "@/lib/linear-push";
+import { pushCommentToLinear, RateLimitDeferredError } from "@/lib/linear-push";
+import { LinearRateLimiter } from "@/lib/linear-rate-limiter";
 
 const MAX_RETRY_COUNT = 3;
 const MAX_COMMENTS_PER_RUN = 20;
@@ -75,6 +76,7 @@ export async function GET(request: NextRequest) {
     let succeeded = 0;
     let failed = 0;
     let abandoned = 0;
+    const rateLimiter = new LinearRateLimiter();
 
     for (const comment of eligible) {
       const retryCount = (comment.push_retry_count ?? 0) + 1;
@@ -84,7 +86,8 @@ export async function GET(request: NextRequest) {
         const linearCommentId = await pushCommentToLinear(
           comment.issue_linear_id,
           linearBody,
-          comment.parent_comment_id ?? undefined
+          comment.parent_comment_id ?? undefined,
+          rateLimiter
         );
 
         await supabaseAdmin
@@ -100,6 +103,12 @@ export async function GET(request: NextRequest) {
 
         succeeded++;
       } catch (pushError) {
+        // Rate limit deferred — stop processing remaining comments
+        if (pushError instanceof RateLimitDeferredError) {
+          console.warn("[retry-pushes] Rate limit approaching — deferring remaining comments");
+          break;
+        }
+
         const errorMsg =
           pushError instanceof Error ? pushError.message : "Unknown error";
 
@@ -140,11 +149,6 @@ export async function GET(request: NextRequest) {
             .eq("id", comment.id);
 
           failed++;
-        }
-
-        // If we hit a rate limit, stop retrying the rest
-        if (errorMsg.includes("rate limit") || errorMsg.includes("RATELIMITED")) {
-          break;
         }
       }
     }
