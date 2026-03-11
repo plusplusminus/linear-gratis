@@ -48,9 +48,18 @@ export default function SentryExamplePage() {
         </button>
         <button
           onClick={async () => {
-            const res = await fetch("/api/sentry-example");
-            const data = await res.json();
-            alert(JSON.stringify(data));
+            try {
+              const res = await fetch("/api/sentry-example");
+              if (!res.ok) {
+                const text = await res.text();
+                alert(`Server error ${res.status}: ${text}`);
+                return;
+              }
+              const data = await res.json();
+              alert(JSON.stringify(data));
+            } catch (err) {
+              alert(`Fetch failed: ${err instanceof Error ? err.message : err}`);
+            }
           }}
           style={{
             padding: "0.5rem 1rem",

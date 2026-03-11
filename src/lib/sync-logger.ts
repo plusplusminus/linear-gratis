@@ -69,6 +69,7 @@ export async function logSyncEvent(input: SyncEventInput): Promise<void> {
       console.warn("sync-logger: failed to log event", error);
     }
   } catch (e) {
+    Sentry.captureException(e, { tags: { area: "sync-logger" } });
     console.warn("sync-logger: failed to log event", e);
   }
 }
@@ -157,6 +158,7 @@ export async function completeSyncRun(opts: {
       console.warn("sync-logger: failed to complete run", error);
     }
   } catch (e) {
+    Sentry.captureException(e, { tags: { area: "sync-logger" } });
     console.warn("sync-logger: failed to complete run", e);
   }
 }
