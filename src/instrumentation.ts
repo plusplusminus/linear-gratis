@@ -10,4 +10,5 @@ export async function register() {
   }
 }
 
+// Automatically captures all unhandled server-side request errors
 export const onRequestError = Sentry.captureRequestError;

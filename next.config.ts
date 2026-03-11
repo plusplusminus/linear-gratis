@@ -42,23 +42,18 @@ const nextConfig: NextConfig = {
 };
 
 export default withSentryConfig(nextConfig, {
-  // Suppress Sentry CLI logs during build
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+
+  // Source map upload auth token
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+
+  // Upload wider set of client source files for better stack trace resolution
+  widenClientFileUpload: true,
+
+  // Proxy route to bypass ad-blockers
+  tunnelRoute: "/monitoring",
+
+  // Suppress non-CI output
   silent: !process.env.CI,
-
-  // Upload source maps to Sentry (configured in Spec 2)
-  sourcemaps: {
-    disable: !process.env.SENTRY_AUTH_TOKEN,
-    deleteSourcemapsAfterUpload: true,
-  },
-
-  // Tunnel Sentry events through our domain to bypass ad blockers
-  tunnelRoute: "/api/monitoring",
-
-  // Disable Sentry telemetry
-  disableLogger: true,
-
-  // Automatically instrument API routes and server components
-  autoInstrumentServerFunctions: true,
-  autoInstrumentMiddleware: true,
-  autoInstrumentAppDirectory: true,
 });
