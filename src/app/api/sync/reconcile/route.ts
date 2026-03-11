@@ -10,6 +10,15 @@ import {
   fetchAllInitiatives,
   fetchAllCycles,
   fetchCommentsForIssue,
+  fetchIssueChecksums,
+  fetchProjectChecksums,
+  fetchCycleChecksums,
+  fetchInitiativeChecksums,
+  fetchIssuesByIds,
+  fetchProjectsByIds,
+  fetchCyclesByIds,
+  fetchInitiativesByIds,
+  diffEntities,
   mapIssueToRow,
   mapTeamToRow,
   mapProjectToRow,
@@ -19,8 +28,21 @@ import {
   batchUpsert,
 } from "@/lib/initial-sync";
 import { startSyncRun, completeSyncRun, pruneSyncLogs } from "@/lib/sync-logger";
+import { LinearRateLimiter } from "@/lib/linear-rate-limiter";
+import { getWatermark, setWatermark } from "@/lib/sync-watermarks";
 
 const WORKSPACE_USER_ID = "workspace";
+
+/** Skip per-issue comment fetching during reconciliation.
+ *  Comments are reliably synced via webhooks — this avoids N+1 API calls.
+ *  Set to `false` to re-enable if webhook comment sync proves unreliable. */
+const SKIP_COMMENT_RECONCILE = true;
+
+/** When true, reconciliation uses lightweight diff-check: fetches only
+ *  id + updatedAt from Linear, compares against local synced_at timestamps,
+ *  and only fetches full payloads for stale/missing entities.
+ *  When false, uses the original full-fetch behavior. */
+const DIFF_CHECK_MODE = true;
 
 type HubReconcileResult = {
   hubsReconciled: number;
@@ -84,7 +106,7 @@ export async function GET(request: NextRequest) {
   const checkInId = Sentry.captureCheckIn(
     { monitorSlug: "sync-reconcile", status: "in_progress" },
     {
-      schedule: { type: "crontab", value: "*/5 * * * *" },
+      schedule: { type: "crontab", value: "*/30 * * * *" },
       checkinMargin: 2,
       maxRuntime: 10,
       failureIssueThreshold: 3,
@@ -146,6 +168,9 @@ export async function GET(request: NextRequest) {
 /**
  * Reconcile all active hubs. Org-level entities (teams, initiatives) are
  * fetched once. Per-team entities are deduplicated across hubs.
+ *
+ * When DIFF_CHECK_MODE is true, uses lightweight checksums to detect
+ * stale/missing entities and only fetches full payloads for those.
  */
 async function reconcileAllHubs(): Promise<HubReconcileResult> {
   const result: HubReconcileResult = {
@@ -161,10 +186,11 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
   };
 
   const apiToken = await getWorkspaceToken();
+  const rateLimiter = new LinearRateLimiter();
 
-  // 1. Org-level: teams (once)
+  // 1. Org-level: teams (always full fetch — small dataset, no diff needed)
   try {
-    const teams = await fetchAllTeams(apiToken);
+    const teams = await fetchAllTeams(apiToken, rateLimiter);
     if (teams.length > 0) {
       await batchUpsert(
         "synced_teams",
@@ -179,18 +205,46 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
     result.errors++;
   }
 
-  // 2. Org-level: initiatives (once)
+  // 2. Org-level: initiatives
   try {
-    const initiatives = await fetchAllInitiatives(apiToken);
-    if (initiatives.length > 0) {
-      await batchUpsert(
-        "synced_initiatives",
-        initiatives.map((i) => mapInitiativeToRow(i, WORKSPACE_USER_ID)),
-        "user_id,linear_id"
-      );
+    if (DIFF_CHECK_MODE) {
+      const checksums = await fetchInitiativeChecksums(apiToken, rateLimiter);
+      const diff = await diffEntities("synced_initiatives", checksums);
+      const needFetch = [...diff.stale, ...diff.missing];
+
+      if (diff.deleted.length > 0) {
+        console.warn(`[diff-check] initiatives: ${diff.deleted.length} entities in local DB but not in remote:`, diff.deleted);
+      }
+      console.log(`[diff-check] initiatives: ${checksums.length} checked, ${diff.stale.length} stale, ${diff.missing.length} missing, ${diff.deleted.length} deleted, ${needFetch.length} to fetch`);
+
+      if (needFetch.length > 0) {
+        const initiatives = await fetchInitiativesByIds(needFetch, apiToken, rateLimiter);
+        if (initiatives.length > 0) {
+          await batchUpsert(
+            "synced_initiatives",
+            initiatives.map((i) => mapInitiativeToRow(i, WORKSPACE_USER_ID)),
+            "user_id,linear_id"
+          );
+        }
+        result.initiativesUpserted = initiatives.length;
+      }
+    } else {
+      const initiativeWatermark = await getWatermark("_org", "initiatives");
+      const reconcileStart = new Date();
+      const initiatives = await fetchAllInitiatives(apiToken, rateLimiter, initiativeWatermark ?? undefined);
+      if (initiatives.length > 0) {
+        await batchUpsert(
+          "synced_initiatives",
+          initiatives.map((i) => mapInitiativeToRow(i, WORKSPACE_USER_ID)),
+          "user_id,linear_id"
+        );
+      }
+      result.initiativesUpserted = initiatives.length;
+      await setWatermark("_org", "initiatives", reconcileStart);
+      console.log(`Reconcile: initiatives — ${initiativeWatermark ? "incremental" : "full"} — ${initiatives.length} fetched`);
     }
-    result.initiativesUpserted = initiatives.length;
   } catch (error) {
+    // Don't update watermark on failure — next run retries from same point
     console.warn("Reconcile: initiatives failed (may lack org scope):", error);
   }
 
@@ -215,51 +269,160 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
     if (syncedTeamIds.has(mapping.linear_team_id)) continue;
     syncedTeamIds.add(mapping.linear_team_id);
 
+    // Check rate limit before processing next team
+    if (!rateLimiter.canProceed()) {
+      console.warn(`[rate-limit] Reconcile deferred — stopping before team ${mapping.linear_team_id}`, rateLimiter.getStatus());
+      break;
+    }
+
     try {
-      const projects = await fetchAllProjects(apiToken, mapping.linear_team_id);
-      if (projects.length > 0) {
-        await batchUpsert(
-          "synced_projects",
-          projects.map((p) => mapProjectToRow(p, WORKSPACE_USER_ID)),
-          "user_id,linear_id"
-        );
-      }
-      result.projectsUpserted += projects.length;
+      const teamId = mapping.linear_team_id;
 
-      const cycles = await fetchAllCycles(apiToken, mapping.linear_team_id);
-      if (cycles.length > 0) {
-        await batchUpsert(
-          "synced_cycles",
-          cycles.map((c) => mapCycleToRow(c, WORKSPACE_USER_ID)),
-          "user_id,linear_id"
-        );
-      }
-      result.cyclesUpserted += cycles.length;
+      if (DIFF_CHECK_MODE) {
+        // --- Diff-check mode: lightweight checksums then targeted fetches ---
 
-      const issues = await fetchAllIssues(apiToken, mapping.linear_team_id);
-      if (issues.length > 0) {
-        await batchUpsert(
-          "synced_issues",
-          issues.map((issue) => mapIssueToRow(issue, WORKSPACE_USER_ID)),
-          "user_id,linear_id"
-        );
-      }
-      result.issuesUpserted += issues.length;
-
-      // Comments: fetch per issue and batch upsert
-      for (const issue of issues) {
-        try {
-          const comments = await fetchCommentsForIssue(apiToken, issue.id);
-          if (comments.length > 0) {
+        // Projects
+        const projectChecksums = await fetchProjectChecksums(teamId, apiToken, rateLimiter);
+        const projectDiff = await diffEntities("synced_projects", projectChecksums);
+        const projectsToFetch = [...projectDiff.stale, ...projectDiff.missing];
+        if (projectDiff.deleted.length > 0) {
+          console.warn(`[diff-check] team ${teamId} projects: ${projectDiff.deleted.length} in local but not remote:`, projectDiff.deleted);
+        }
+        if (projectsToFetch.length > 0) {
+          const projects = await fetchProjectsByIds(projectsToFetch, apiToken, rateLimiter);
+          if (projects.length > 0) {
             await batchUpsert(
-              "synced_comments",
-              comments.map((c) => mapCommentToRow(c, issue.id, WORKSPACE_USER_ID)),
+              "synced_projects",
+              projects.map((p) => mapProjectToRow(p, WORKSPACE_USER_ID)),
               "user_id,linear_id"
             );
-            result.commentsUpserted += comments.length;
           }
-        } catch (commentError) {
-          console.error(`Reconcile: comments for issue ${issue.id} failed:`, commentError);
+          result.projectsUpserted += projects.length;
+        }
+        console.log(`[diff-check] team ${teamId} projects: ${projectChecksums.length} checked, ${projectDiff.stale.length} stale, ${projectDiff.missing.length} missing, ${projectDiff.deleted.length} deleted, ${projectsToFetch.length} fetched`);
+
+        // Cycles
+        const cycleChecksums = await fetchCycleChecksums(teamId, apiToken, rateLimiter);
+        const cycleDiff = await diffEntities("synced_cycles", cycleChecksums, teamId);
+        const cyclesToFetch = [...cycleDiff.stale, ...cycleDiff.missing];
+        if (cycleDiff.deleted.length > 0) {
+          console.warn(`[diff-check] team ${teamId} cycles: ${cycleDiff.deleted.length} in local but not remote:`, cycleDiff.deleted);
+        }
+        if (cyclesToFetch.length > 0) {
+          const cycles = await fetchCyclesByIds(cyclesToFetch, apiToken, rateLimiter);
+          if (cycles.length > 0) {
+            await batchUpsert(
+              "synced_cycles",
+              cycles.map((c) => mapCycleToRow(c, WORKSPACE_USER_ID)),
+              "user_id,linear_id"
+            );
+          }
+          result.cyclesUpserted += cycles.length;
+        }
+        console.log(`[diff-check] team ${teamId} cycles: ${cycleChecksums.length} checked, ${cycleDiff.stale.length} stale, ${cycleDiff.missing.length} missing, ${cycleDiff.deleted.length} deleted, ${cyclesToFetch.length} fetched`);
+
+        // Issues
+        const issueChecksums = await fetchIssueChecksums(teamId, apiToken, rateLimiter);
+        const issueDiff = await diffEntities("synced_issues", issueChecksums, teamId);
+        const issuesToFetch = [...issueDiff.stale, ...issueDiff.missing];
+        if (issueDiff.deleted.length > 0) {
+          console.warn(`[diff-check] team ${teamId} issues: ${issueDiff.deleted.length} in local but not remote:`, issueDiff.deleted);
+        }
+        if (issuesToFetch.length > 0) {
+          const issues = await fetchIssuesByIds(issuesToFetch, apiToken, rateLimiter);
+          if (issues.length > 0) {
+            await batchUpsert(
+              "synced_issues",
+              issues.map((issue) => mapIssueToRow(issue, WORKSPACE_USER_ID)),
+              "user_id,linear_id"
+            );
+          }
+          result.issuesUpserted += issues.length;
+
+          // Comments for fetched issues only (if enabled)
+          if (!SKIP_COMMENT_RECONCILE) {
+            for (const issue of issues) {
+              try {
+                const comments = await fetchCommentsForIssue(apiToken, issue.id, rateLimiter);
+                if (comments.length > 0) {
+                  await batchUpsert(
+                    "synced_comments",
+                    comments.map((c) => mapCommentToRow(c, issue.id, WORKSPACE_USER_ID)),
+                    "user_id,linear_id"
+                  );
+                  result.commentsUpserted += comments.length;
+                }
+              } catch (commentError) {
+                console.error(`Reconcile: comments for issue ${issue.id} failed:`, commentError);
+              }
+            }
+          }
+        }
+        console.log(`[diff-check] team ${teamId} issues: ${issueChecksums.length} checked, ${issueDiff.stale.length} stale, ${issueDiff.missing.length} missing, ${issueDiff.deleted.length} deleted, ${issuesToFetch.length} fetched`);
+
+      } else {
+        // --- Legacy full-fetch mode (watermark-based) ---
+        const teamReconcileStart = new Date();
+
+        // Projects
+        const projectWatermark = await getWatermark(teamId, "projects");
+        const projects = await fetchAllProjects(apiToken, teamId, rateLimiter, projectWatermark ?? undefined);
+        if (projects.length > 0) {
+          await batchUpsert(
+            "synced_projects",
+            projects.map((p) => mapProjectToRow(p, WORKSPACE_USER_ID)),
+            "user_id,linear_id"
+          );
+        }
+        result.projectsUpserted += projects.length;
+        await setWatermark(teamId, "projects", teamReconcileStart);
+        console.log(`Reconcile: team ${teamId} projects — ${projectWatermark ? "incremental" : "full"} — ${projects.length} fetched`);
+
+        // Cycles
+        const cycleWatermark = await getWatermark(teamId, "cycles");
+        const cycles = await fetchAllCycles(apiToken, teamId, rateLimiter, cycleWatermark ?? undefined);
+        if (cycles.length > 0) {
+          await batchUpsert(
+            "synced_cycles",
+            cycles.map((c) => mapCycleToRow(c, WORKSPACE_USER_ID)),
+            "user_id,linear_id"
+          );
+        }
+        result.cyclesUpserted += cycles.length;
+        await setWatermark(teamId, "cycles", teamReconcileStart);
+        console.log(`Reconcile: team ${teamId} cycles — ${cycleWatermark ? "incremental" : "full"} — ${cycles.length} fetched`);
+
+        // Issues
+        const issueWatermark = await getWatermark(teamId, "issues");
+        const issues = await fetchAllIssues(apiToken, teamId, rateLimiter, issueWatermark ?? undefined);
+        if (issues.length > 0) {
+          await batchUpsert(
+            "synced_issues",
+            issues.map((issue) => mapIssueToRow(issue, WORKSPACE_USER_ID)),
+            "user_id,linear_id"
+          );
+        }
+        result.issuesUpserted += issues.length;
+        await setWatermark(teamId, "issues", teamReconcileStart);
+        console.log(`Reconcile: team ${teamId} issues — ${issueWatermark ? "incremental" : "full"} — ${issues.length} fetched`);
+
+        // Comments: fetch per issue and batch upsert
+        if (!SKIP_COMMENT_RECONCILE) {
+          for (const issue of issues) {
+            try {
+              const comments = await fetchCommentsForIssue(apiToken, issue.id, rateLimiter);
+              if (comments.length > 0) {
+                await batchUpsert(
+                  "synced_comments",
+                  comments.map((c) => mapCommentToRow(c, issue.id, WORKSPACE_USER_ID)),
+                  "user_id,linear_id"
+                );
+                result.commentsUpserted += comments.length;
+              }
+            } catch (commentError) {
+              console.error(`Reconcile: comments for issue ${issue.id} failed:`, commentError);
+            }
+          }
         }
       }
 
@@ -278,8 +441,9 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
 
   result.hubsReconciled = hubIds.size;
 
+  const mode = DIFF_CHECK_MODE ? "diff-check" : "full-fetch";
   console.log(
-    `Reconcile complete: ${result.hubsReconciled} hubs, ${result.teamsReconciled} teams, ` +
+    `Reconcile complete (${mode}): ${result.hubsReconciled} hubs, ${result.teamsReconciled} teams, ` +
       `${result.issuesUpserted} issues, ${result.commentsUpserted} comments, ` +
       `${result.projectsUpserted} projects, ${result.cyclesUpserted} cycles, ` +
       `${result.initiativesUpserted} initiatives, ${result.errors} errors`

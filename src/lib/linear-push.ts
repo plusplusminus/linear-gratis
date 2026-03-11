@@ -1,6 +1,20 @@
 import { getWorkspaceToken } from "./workspace";
+import { LinearRateLimiter } from "./linear-rate-limiter";
 
 const LINEAR_API = "https://api.linear.app/graphql";
+
+/**
+ * Thrown when a push operation is skipped because the rate limiter
+ * indicates we're too close to the budget ceiling. Callers can catch
+ * this specifically to log "deferred" instead of "error".
+ */
+export class RateLimitDeferredError extends Error {
+  readonly isRateLimitDeferred = true as const;
+  constructor(message: string) {
+    super(message);
+    this.name = "RateLimitDeferredError";
+  }
+}
 
 const COMMENT_CREATE_MUTATION = `
   mutation CommentCreate($issueId: String!, $body: String!, $parentId: String) {
@@ -21,8 +35,13 @@ const COMMENT_CREATE_MUTATION = `
 export async function pushCommentToLinear(
   issueLinearId: string,
   body: string,
-  parentId?: string
+  parentId?: string,
+  rateLimiter?: LinearRateLimiter
 ): Promise<string> {
+  if (rateLimiter && !rateLimiter.canProceed()) {
+    throw new RateLimitDeferredError("pushCommentToLinear deferred due to rate limit");
+  }
+
   const token = await getWorkspaceToken();
   const MAX_RETRIES = 3;
 
@@ -38,6 +57,11 @@ export async function pushCommentToLinear(
         variables: { issueId: issueLinearId, body, parentId: parentId ?? null },
       }),
     });
+
+    // Track rate limit headers
+    if (rateLimiter) {
+      rateLimiter.updateFromResponse(res);
+    }
 
     // Rate limited — retry with backoff
     if (res.status === 429 || (res.status === 400 && attempt < MAX_RETRIES)) {
@@ -107,8 +131,13 @@ const ISSUE_UPDATE_LABELS_MUTATION = `
  */
 export async function updateIssueLabels(
   issueLinearId: string,
-  labelIds: string[]
+  labelIds: string[],
+  rateLimiter?: LinearRateLimiter
 ): Promise<Array<{ id: string; name: string; color: string }>> {
+  if (rateLimiter && !rateLimiter.canProceed()) {
+    throw new RateLimitDeferredError("updateIssueLabels deferred due to rate limit");
+  }
+
   const token = await getWorkspaceToken();
 
   const res = await fetch(LINEAR_API, {
@@ -122,6 +151,11 @@ export async function updateIssueLabels(
       variables: { issueId: issueLinearId, labelIds },
     }),
   });
+
+  // Track rate limit headers
+  if (rateLimiter) {
+    rateLimiter.updateFromResponse(res);
+  }
 
   if (!res.ok) {
     throw new Error(`Linear API ${res.status}: ${await res.text()}`);
@@ -228,8 +262,13 @@ export type CreatedIssue = {
  * Returns the created issue data on success, or throws on failure.
  */
 export async function createIssueInLinear(
-  params: CreateIssueParams
+  params: CreateIssueParams,
+  rateLimiter?: LinearRateLimiter
 ): Promise<CreatedIssue> {
+  if (rateLimiter && !rateLimiter.canProceed()) {
+    throw new RateLimitDeferredError("createIssueInLinear deferred due to rate limit");
+  }
+
   const token = await getWorkspaceToken();
 
   const res = await fetch(LINEAR_API, {
@@ -252,6 +291,11 @@ export async function createIssueInLinear(
       },
     }),
   });
+
+  // Track rate limit headers
+  if (rateLimiter) {
+    rateLimiter.updateFromResponse(res);
+  }
 
   if (!res.ok) {
     throw new Error(`Linear API ${res.status}: ${await res.text()}`);
