@@ -18,10 +18,10 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug, projectId } = await params;
   const hub = await resolveHubBySlug(slug);
-  if (!hub) return { title: "Project" };
+  if (!hub) return { title: "Epic" };
   const projects = await fetchHubProjects(hub.id);
   const project = projects.find((p) => p.id === projectId);
-  return { title: project?.name ?? "Project" };
+  return { title: project?.name ?? "Epic" };
 }
 
 export default async function ProjectViewPage({
@@ -116,7 +116,7 @@ export default async function ProjectViewPage({
 
           {!overviewOnly && (
             <span className="text-[10px] text-muted-foreground">
-              {issues.length} {issues.length === 1 ? "issue" : "issues"}
+              {issues.length} {issues.length === 1 ? "task" : "tasks"}
             </span>
           )}
         </div>

@@ -160,7 +160,7 @@ export function HubSidebar() {
           {teams.length > 0 && !collapsed && (
             <div className="pt-3 pb-1 px-2">
               <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
-                Teams
+                Projects
               </span>
             </div>
           )}

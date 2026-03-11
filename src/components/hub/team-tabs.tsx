@@ -19,8 +19,8 @@ import { RoadmapView } from "./roadmap-view";
 type Tab = "issues" | "projects" | "roadmap" | "cycles" | "initiatives" | "milestones" | "activity";
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: "issues", label: "Issues" },
-  { key: "projects", label: "Projects" },
+  { key: "issues", label: "Tasks" },
+  { key: "projects", label: "Epics" },
   { key: "roadmap", label: "Roadmap" },
   { key: "cycles", label: "Cycles" },
   { key: "initiatives", label: "Initiatives" },
@@ -236,7 +236,7 @@ export function TeamTabs({
       {activeTab === "projects" && (
         <div className="p-6 max-w-4xl overflow-y-auto">
           {projects.length === 0 ? (
-            <EmptySection message="No projects visible for this team" />
+            <EmptySection message="No epics visible for this project" />
           ) : (
             <div className="space-y-2">
               {projects.map((project) => (
@@ -258,7 +258,7 @@ export function TeamTabs({
       {activeTab === "cycles" && (
         <div className="p-6 max-w-4xl overflow-y-auto">
           {!cycleDetails || cycleDetails.length === 0 ? (
-            <EmptySection message="This team doesn't use cycles" />
+            <EmptySection message="This project doesn't use cycles" />
           ) : (
             <CyclesTabContent
               cycles={cycleDetails}
@@ -272,7 +272,7 @@ export function TeamTabs({
       {activeTab === "initiatives" && (
         <div className="p-6 max-w-4xl overflow-y-auto">
           {initiatives.length === 0 ? (
-            <EmptySection message="No initiatives linked to this team" />
+            <EmptySection message="No initiatives linked to this project" />
           ) : (
             <div className="space-y-2">
               {initiatives.map((init) => (
@@ -286,7 +286,7 @@ export function TeamTabs({
       {activeTab === "milestones" && (
         <div className="p-6 max-w-4xl overflow-y-auto">
           {milestones.length === 0 ? (
-            <EmptySection message="No milestones set on visible projects" />
+            <EmptySection message="No milestones set on visible epics" />
           ) : (
             <div className="space-y-1.5">
               {milestones.map((m, i) => (
@@ -417,7 +417,7 @@ function InitiativeCard({
       <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
         <span>
           {initiative.projects.length}{" "}
-          {initiative.projects.length === 1 ? "project" : "projects"}
+          {initiative.projects.length === 1 ? "epic" : "epics"}
         </span>
         {initiative.targetDate && (
           <span className="flex items-center gap-1">
@@ -564,7 +564,7 @@ function CycleCard({
           )}
           {total > 0 && (
             <span className="text-[10px] text-muted-foreground tabular-nums">
-              {completed} / {total} issues
+              {completed} / {total} tasks
             </span>
           )}
         </div>
