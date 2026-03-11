@@ -54,7 +54,7 @@ export async function logSyncEvent(input: SyncEventInput): Promise<void> {
       },
     });
 
-    await supabaseAdmin.from("sync_events").insert({
+    const { error } = await supabaseAdmin.from("sync_events").insert({
       event_type: input.eventType,
       action: input.action,
       entity_id: input.entityId,
@@ -64,6 +64,10 @@ export async function logSyncEvent(input: SyncEventInput): Promise<void> {
       processing_time_ms: input.processingTimeMs ?? null,
       payload_summary: input.payloadSummary ?? null,
     });
+    if (error) {
+      Sentry.captureException(error, { tags: { area: "sync-logger" } });
+      console.warn("sync-logger: failed to log event", error);
+    }
   } catch (e) {
     console.warn("sync-logger: failed to log event", e);
   }
@@ -123,7 +127,7 @@ export async function completeSyncRun(opts: {
     const durationMs = now - opts.startedAt;
 
     if (opts.status === "failed") {
-      Sentry.captureMessage(`Sync run failed (${durationMs}ms)`, {
+      Sentry.captureMessage("Sync run failed", {
         level: "error",
         tags: { area: "sync", "sync.run_id": opts.runId },
         contexts: {
@@ -137,7 +141,7 @@ export async function completeSyncRun(opts: {
       });
     }
 
-    await supabaseAdmin
+    const { error } = await supabaseAdmin
       .from("sync_runs")
       .update({
         status: opts.status,
@@ -148,6 +152,10 @@ export async function completeSyncRun(opts: {
         duration_ms: durationMs,
       })
       .eq("id", opts.runId);
+    if (error) {
+      Sentry.captureException(error, { tags: { area: "sync-logger" } });
+      console.warn("sync-logger: failed to complete run", error);
+    }
   } catch (e) {
     console.warn("sync-logger: failed to complete run", e);
   }

@@ -11,8 +11,7 @@ export default function HubError({
   reset: () => void;
 }) {
   useEffect(() => {
-    Sentry.setTag("area", "hub");
-    Sentry.captureException(error);
+    Sentry.captureException(error, { tags: { area: "hub" } });
   }, [error]);
 
   return (

@@ -74,6 +74,13 @@ export async function POST() {
 
 // GET: Cron-triggered reconciliation for all active hubs
 export async function GET(request: NextRequest) {
+  const authHeader = request.headers.get("authorization");
+  const cronSecret = process.env.CRON_SECRET;
+
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const checkInId = Sentry.captureCheckIn(
     { monitorSlug: "sync-reconcile", status: "in_progress" },
     {
@@ -86,14 +93,6 @@ export async function GET(request: NextRequest) {
   );
 
   try {
-    const authHeader = request.headers.get("authorization");
-    const cronSecret = process.env.CRON_SECRET;
-
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-      Sentry.captureCheckIn({ checkInId, monitorSlug: "sync-reconcile", status: "error" });
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const { data: hubs } = await supabaseAdmin
       .from("client_hubs")
       .select("id")
@@ -130,7 +129,8 @@ export async function GET(request: NextRequest) {
     // Prune old logs (fire-and-forget, piggybacks on cron)
     void pruneSyncLogs();
 
-    Sentry.captureCheckIn({ checkInId, monitorSlug: "sync-reconcile", status: "ok" });
+    const checkInStatus = result.errors > 0 ? "error" : "ok";
+    Sentry.captureCheckIn({ checkInId, monitorSlug: "sync-reconcile", status: checkInStatus });
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     Sentry.captureCheckIn({ checkInId, monitorSlug: "sync-reconcile", status: "error" });

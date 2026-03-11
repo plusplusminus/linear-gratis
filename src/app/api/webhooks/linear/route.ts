@@ -163,7 +163,6 @@ export async function POST(request: NextRequest) {
       action: payload.action,
       entityId,
       teamId,
-      ...summary,
     });
 
     // Route the event

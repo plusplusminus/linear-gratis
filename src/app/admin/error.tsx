@@ -11,8 +11,7 @@ export default function AdminError({
   reset: () => void;
 }) {
   useEffect(() => {
-    Sentry.setTag("area", "admin");
-    Sentry.captureException(error);
+    Sentry.captureException(error, { tags: { area: "admin" } });
   }, [error]);
 
   return (
