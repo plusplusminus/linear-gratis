@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { getWorkspaceSetting } from "@/lib/workspace";
 import { isTeamConfigured } from "@/lib/hub-team-lookup";
 import {
@@ -153,10 +154,26 @@ export async function POST(request: NextRequest) {
     }
     // teamId === null → org-level entity (Initiative) — always process
 
+    // Set Sentry context for this webhook event
+    Sentry.setTag("webhook.event_type", payload.type);
+    Sentry.setTag("webhook.action", payload.action);
+    if (teamId) Sentry.setTag("webhook.team_id", teamId);
+    Sentry.setContext("webhook_payload", {
+      type: payload.type,
+      action: payload.action,
+      entityId,
+      teamId,
+    });
+
     // Route the event
     const start = Date.now();
     try {
-      await routeWebhookEvent(payload, WORKSPACE_USER_ID);
+      await Sentry.startSpan(
+        { name: `webhook.${payload.type}.${payload.action}`, op: "webhook.process" },
+        async () => {
+          await routeWebhookEvent(payload, WORKSPACE_USER_ID);
+        }
+      );
       // Fire-and-forget: emit notification events for hub visibility
       void emitNotificationEventsForWebhook(payload);
       void logSyncEvent({
@@ -169,6 +186,16 @@ export async function POST(request: NextRequest) {
         payloadSummary: summary,
       });
     } catch (error) {
+      Sentry.captureException(error, {
+        tags: {
+          area: "sync",
+          "webhook.event_type": payload.type,
+          "webhook.action": payload.action,
+        },
+        contexts: {
+          webhook: { type: payload.type, action: payload.action, entityId, teamId },
+        },
+      });
       console.error("Webhook handler error:", error);
       void logSyncEvent({
         eventType: payload.type,
@@ -190,6 +217,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    Sentry.captureException(error, { tags: { area: "sync" } });
     console.error("Webhook route error:", error);
     return NextResponse.json({ success: true });
   }
