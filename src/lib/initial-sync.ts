@@ -284,7 +284,7 @@ type LinearGqlProject = {
   initiatives: { nodes: Array<{ id: string; name: string }> };
   projectMilestones: { nodes: Array<{ id: string; name: string; targetDate?: string }> };
   projectLinks: { nodes: Array<{ id: string; label: string; url: string; createdAt: string }> };
-  documents: { nodes: Array<{ id: string; title: string; content: string; slugId: string; icon?: string; color?: string; updatedAt: string }> };
+  documents: { nodes: Array<{ id: string; title: string; content?: string; slugId: string; icon?: string; color?: string; updatedAt: string }> };
   createdAt: string;
   updatedAt: string;
 };
