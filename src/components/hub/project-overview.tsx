@@ -7,6 +7,8 @@ import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 
+import type { ProjectLink, ProjectDocument } from "./project-tabs";
+
 type ProjectOverviewProps = {
   project: {
     description?: string;
@@ -18,6 +20,8 @@ type ProjectOverviewProps = {
     milestones: Array<{ id: string; name: string; targetDate?: string }>;
     status: { id: string; name: string; color: string; type: string };
   };
+  links: ProjectLink[];
+  documents: ProjectDocument[];
 };
 
 function getHealthColor(health: string): string {
@@ -75,7 +79,7 @@ function formatDate(dateStr: string): string {
   });
 }
 
-export function ProjectOverview({ project }: ProjectOverviewProps) {
+export function ProjectOverview({ project, links: _links, documents: _documents }: ProjectOverviewProps) {
   const projectStatus = project.status.name;
   useEffect(() => {
     captureEvent(POSTHOG_EVENTS.project_viewed);
