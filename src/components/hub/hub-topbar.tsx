@@ -7,6 +7,7 @@ import { RefreshCw, Settings } from "lucide-react";
 import { useHub } from "@/contexts/hub-context";
 import { SimpleThemeToggle } from "@/components/theme-toggle";
 import { NotificationBell } from "@/components/hub/notification-bell";
+import { UserMenu } from "@/components/user-menu";
 import { cn } from "@/lib/utils";
 
 function useRelativeTime(timestamp: number) {
@@ -86,13 +87,8 @@ export function HubTopBar() {
               </span>
             )}
 
-            {/* User avatar */}
-            <div className="flex items-center gap-2">
-              <UserAvatar name={displayName} />
-              <span className="text-xs text-muted-foreground hidden sm:block">
-                {displayName}
-              </span>
-            </div>
+            {/* User menu with sign out */}
+            <UserMenu displayName={displayName} />
           </div>
         )}
       </div>
@@ -100,16 +96,3 @@ export function HubTopBar() {
   );
 }
 
-function UserAvatar({ name }: { name: string }) {
-  const initial = (name ?? "?").charAt(0).toUpperCase();
-  return (
-    <div
-      className={cn(
-        "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-medium",
-        "bg-muted text-muted-foreground"
-      )}
-    >
-      {initial}
-    </div>
-  );
-}
