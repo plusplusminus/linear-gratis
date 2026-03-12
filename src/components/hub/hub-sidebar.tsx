@@ -198,9 +198,16 @@ export function HubSidebar() {
         </nav>
       </div>
 
-      {/* Form buttons + submissions */}
+      {/* Actions (CTAs) */}
       {canInteract && (
-        <div className="px-1.5 py-2 border-t border-border shrink-0 space-y-0.5">
+        <div className="px-1.5 py-2 border-t border-border shrink-0 space-y-1">
+          {!collapsed && (
+            <div className="px-2 pb-0.5">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                Actions
+              </span>
+            </div>
+          )}
           {forms.map((form) => {
             const Icon = (form.button_icon && buttonIconMap[form.button_icon])
               || formTypeIcons[form.type]
@@ -210,10 +217,7 @@ export function HubSidebar() {
               <button
                 key={form.id}
                 onClick={() => setActiveFormId(form.id)}
-                className={cn(
-                  "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-colors w-full",
-                  "text-muted-foreground hover:text-foreground hover:bg-accent/50"
-                )}
+                className="flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm font-medium transition-colors w-full bg-primary/10 text-primary hover:bg-primary/15"
                 title={collapsed ? label : undefined}
               >
                 <Icon className="w-4 h-4 shrink-0" />
@@ -223,10 +227,7 @@ export function HubSidebar() {
           })}
           <button
             onClick={() => setShowHistory(true)}
-            className={cn(
-              "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-colors w-full",
-              "text-muted-foreground hover:text-foreground hover:bg-accent/50"
-            )}
+            className="flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm font-medium transition-colors w-full bg-primary/10 text-primary hover:bg-primary/15"
             title={collapsed ? "My Submissions" : undefined}
           >
             <ClipboardList className="w-4 h-4 shrink-0" />
