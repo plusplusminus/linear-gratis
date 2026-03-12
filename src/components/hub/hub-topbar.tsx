@@ -18,13 +18,13 @@ function useRelativeTime(timestamp: number) {
   }, []);
 
   const diff = Math.floor((Date.now() - timestamp) / 1000);
-  if (diff < 30) return "Updated just now";
-  if (diff < 90) return "Updated 1m ago";
+  if (diff < 30) return "Synced just now";
+  if (diff < 90) return "Synced 1m ago";
   const mins = Math.floor(diff / 60);
-  if (mins < 60) return `Updated ${mins}m ago`;
+  if (mins < 60) return `Synced ${mins}m ago`;
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `Updated ${hours}h ago`;
-  return `Updated ${Math.floor(hours / 24)}d ago`;
+  if (hours < 24) return `Synced ${hours}h ago`;
+  return `Synced ${Math.floor(hours / 24)}d ago`;
 }
 
 export function HubTopBar() {

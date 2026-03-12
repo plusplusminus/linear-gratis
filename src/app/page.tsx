@@ -1,4 +1,4 @@
-import { getSignInUrl, signOut, withAuth } from '@workos-inc/authkit-nextjs'
+import { signOut, withAuth } from '@workos-inc/authkit-nextjs'
 import { redirect } from 'next/navigation'
 import { isPPMAdmin } from '@/lib/ppm-admin'
 import { getHubForUser } from '@/lib/hub-auth'
@@ -59,8 +59,6 @@ export default async function Home() {
     )
   }
 
-  const signInUrl = await getSignInUrl()
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
       <div className="flex w-full max-w-sm flex-col items-center gap-6 px-4">
@@ -87,7 +85,7 @@ export default async function Home() {
           </p>
         </div>
         <Button asChild className="w-full">
-          <Link href={signInUrl}>Sign in</Link>
+          <Link href="/auth/sign-in">Sign in</Link>
         </Button>
       </div>
     </div>
