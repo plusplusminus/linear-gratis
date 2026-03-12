@@ -94,11 +94,46 @@ export function ProjectOverview({ project, links, documents }: ProjectOverviewPr
 
   return (
     <div className="px-6 py-5 space-y-0">
-      {/* Documents & Resources — shown first */}
+      {/* Metadata row */}
+      {hasMetadata && (
+        <div className="flex flex-wrap items-center gap-4 pb-4">
+          {project.priority > 0 && (
+            <MetadataItem label="Priority">
+              <span
+                className="text-xs font-medium"
+                style={{ color: getPriorityColor(project.priority) }}
+              >
+                {getPriorityIcon(project.priority)} {project.priorityLabel}
+              </span>
+            </MetadataItem>
+          )}
+          {project.health && (
+            <MetadataItem label="Health">
+              <span
+                className="inline-flex items-center gap-1.5 text-xs font-medium"
+                style={{ color: getHealthColor(project.health) }}
+              >
+                <span
+                  className="w-1.5 h-1.5 rounded-full"
+                  style={{ backgroundColor: getHealthColor(project.health) }}
+                />
+                {getHealthLabel(project.health)}
+              </span>
+            </MetadataItem>
+          )}
+          {project.lead && (
+            <MetadataItem label="Lead">
+              <span className="text-xs text-foreground">{project.lead.name}</span>
+            </MetadataItem>
+          )}
+        </div>
+      )}
+
+      {/* Documents & Resources — after metadata */}
       {hasDocumentsOrLinks && (
-        <div className="pb-4">
+        <div className={cn(hasMetadata && "border-t border-border pt-4", "pb-4")}>
           {documents.length > 0 && (
-            <div className="mb-3">
+            <div className={cn(links.length > 0 && "mb-3")}>
               <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
                 Documents
               </p>
@@ -168,41 +203,6 @@ export function ProjectOverview({ project, links, documents }: ProjectOverviewPr
                 })}
               </div>
             </div>
-          )}
-        </div>
-      )}
-
-      {/* Metadata row */}
-      {hasMetadata && (
-        <div className={cn(hasDocumentsOrLinks && "border-t border-border pt-4", "flex flex-wrap items-center gap-4 pb-4")}>
-          {project.priority > 0 && (
-            <MetadataItem label="Priority">
-              <span
-                className="text-xs font-medium"
-                style={{ color: getPriorityColor(project.priority) }}
-              >
-                {getPriorityIcon(project.priority)} {project.priorityLabel}
-              </span>
-            </MetadataItem>
-          )}
-          {project.health && (
-            <MetadataItem label="Health">
-              <span
-                className="inline-flex items-center gap-1.5 text-xs font-medium"
-                style={{ color: getHealthColor(project.health) }}
-              >
-                <span
-                  className="w-1.5 h-1.5 rounded-full"
-                  style={{ backgroundColor: getHealthColor(project.health) }}
-                />
-                {getHealthLabel(project.health)}
-              </span>
-            </MetadataItem>
-          )}
-          {project.lead && (
-            <MetadataItem label="Lead">
-              <span className="text-xs text-foreground">{project.lead.name}</span>
-            </MetadataItem>
           )}
         </div>
       )}
