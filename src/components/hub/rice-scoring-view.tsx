@@ -189,7 +189,7 @@ export function RiceScoringView({ projects }: { projects: Project[] }) {
   }, []);
 
   const saveScore = useCallback(
-    (projectId: string, updated: ProjectScore) => {
+    (projectId: string, updated: ProjectScore, previous: ProjectScore) => {
       // Clear existing debounce for this project
       const existing = debounceRefs.current.get(projectId);
       if (existing) clearTimeout(existing);
@@ -227,14 +227,10 @@ export function RiceScoringView({ projects }: { projects: Project[] }) {
               /* best-effort */
             }
           } else {
-            // Revert optimistic update on server error
+            // Revert to previous state on server error
             setScores((prev) => {
               const next = new Map(prev);
-              const current = next.get(projectId);
-              if (current) {
-                // Reset the field that failed — remove the optimistic value
-                next.delete(projectId);
-              }
+              next.set(projectId, previous);
               return next;
             });
           }
@@ -268,7 +264,7 @@ export function RiceScoringView({ projects }: { projects: Project[] }) {
         const updated = { ...current, [field]: value };
         updated.score = calculateScore(updated);
         next.set(projectId, updated);
-        saveScore(projectId, updated);
+        saveScore(projectId, updated, current);
         return next;
       });
     },
