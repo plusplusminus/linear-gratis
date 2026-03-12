@@ -279,6 +279,7 @@ export type HubWorkflowRule = {
   trigger_type: WorkflowTriggerType
   trigger_label_id: string
   trigger_from_label_id: string | null
+  condition_state_ids: string[] | null
   action_type: WorkflowActionType
   action_config: Record<string, unknown>
   created_at: string

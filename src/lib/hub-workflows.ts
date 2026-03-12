@@ -10,6 +10,8 @@ export type LabelChangeContext = {
   newLabelIds: string[];
   addedLabelIds: string[];
   removedLabelIds: string[];
+  currentStateId?: string;
+  currentStateName?: string;
 };
 
 export type WorkflowAction = {
@@ -33,7 +35,8 @@ export type WorkflowExecutionResult = {
  */
 export function buildLabelChangeContext(
   previousLabelIds: string[],
-  newLabelIds: string[]
+  newLabelIds: string[],
+  currentState?: { id: string; name: string }
 ): LabelChangeContext {
   const prevSet = new Set(previousLabelIds);
   const newSet = new Set(newLabelIds);
@@ -41,7 +44,14 @@ export function buildLabelChangeContext(
   const addedLabelIds = newLabelIds.filter((id) => !prevSet.has(id));
   const removedLabelIds = previousLabelIds.filter((id) => !newSet.has(id));
 
-  return { previousLabelIds, newLabelIds, addedLabelIds, removedLabelIds };
+  return {
+    previousLabelIds,
+    newLabelIds,
+    addedLabelIds,
+    removedLabelIds,
+    currentStateId: currentState?.id,
+    currentStateName: currentState?.name,
+  };
 }
 
 // -- Evaluation --------------------------------------------------------------
@@ -75,6 +85,15 @@ export function evaluateWorkflowRules(
           context.newLabelIds.includes(rule.trigger_label_id) &&
           !context.newLabelIds.includes(rule.trigger_from_label_id);
         break;
+    }
+
+    // Check status condition: if the rule has condition_state_ids (non-null),
+    // the issue's current state must be in that list for the rule to fire.
+    // An empty array means no statuses match, so the rule never fires.
+    if (matches && rule.condition_state_ids !== null) {
+      if (rule.condition_state_ids.length === 0 || !context.currentStateId || !rule.condition_state_ids.includes(context.currentStateId)) {
+        matches = false;
+      }
     }
 
     if (matches) {
@@ -217,7 +236,8 @@ export async function logWorkflowExecution(
   issueLinearId: string,
   results: WorkflowExecutionResult[],
   triggeredBy: string,
-  rules: HubWorkflowRule[]
+  rules: HubWorkflowRule[],
+  matchedState?: { id: string; name: string }
 ): Promise<void> {
   if (results.length === 0) return;
 
@@ -234,6 +254,7 @@ export async function logWorkflowExecution(
       action_config: {
         ...(rule?.action_config ?? {}),
         ...(result.details ?? {}),
+        ...(matchedState ? { matchedStateId: matchedState.id, matchedStateName: matchedState.name } : {}),
       },
       result: result.success ? "success" : "failure",
       error_message: result.error ?? null,

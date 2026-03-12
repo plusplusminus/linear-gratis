@@ -424,6 +424,7 @@ export function IssueDetailPanel({
                   hubId={hubId}
                   issueId={issue.id}
                   isViewOnly={isViewOnly}
+                  issueStateId={issue.state?.id}
                   workflowLabelIds={workflowLabelIds}
                   workflowRules={workflowRules}
                   onLabelsChange={(labels) => {
