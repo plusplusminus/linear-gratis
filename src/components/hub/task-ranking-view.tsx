@@ -89,6 +89,7 @@ export function TaskRankingView({
   const [activeId, setActiveId] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const dragSnapshotRef = useRef<{ ranked: Task[]; unranked: Task[] } | null>(null);
 
   // Cleanup debounce and abort on unmount
   useEffect(() => {
@@ -115,11 +116,20 @@ export function TaskRankingView({
 
   // Load rankings
   useEffect(() => {
+    const controller = new AbortController();
+    const { signal } = controller;
+
+    setIsLoading(true);
+    setShowBanner(false);
+
     async function load() {
       try {
         const res = await fetch(
-          `/api/hubs/${hubId}/projects/${projectId}/task-rankings`
+          `/api/hubs/${hubId}/projects/${projectId}/task-rankings`,
+          { signal }
         );
+        if (signal.aborted) return;
+
         if (!res.ok) {
           setRanked([]);
           setUnranked([...tasks]);
@@ -130,6 +140,8 @@ export function TaskRankingView({
         const data = (await res.json()) as {
           userRanking: UserTaskRanking[];
         };
+
+        if (signal.aborted) return;
 
         if (data.userRanking.length === 0) {
           setRanked([]);
@@ -154,14 +166,18 @@ export function TaskRankingView({
 
         setRanked(orderedRanked);
         setUnranked(newTasks);
-      } catch {
+        setShowBanner(false);
+      } catch (err) {
+        if ((err as Error).name === "AbortError") return;
         setRanked([]);
         setUnranked([...tasks]);
         setShowBanner(false);
       }
-      setIsLoading(false);
+      if (!signal.aborted) setIsLoading(false);
     }
     load();
+
+    return () => controller.abort();
   }, [hubId, projectId, tasks]);
 
   const saveRanking = useCallback(
@@ -220,7 +236,17 @@ export function TaskRankingView({
   }
 
   function handleDragStart(event: DragStartEvent) {
+    dragSnapshotRef.current = { ranked: [...ranked], unranked: [...unranked] };
     setActiveId(event.active.id as string);
+  }
+
+  function handleDragCancel() {
+    if (dragSnapshotRef.current) {
+      setRanked(dragSnapshotRef.current.ranked);
+      setUnranked(dragSnapshotRef.current.unranked);
+      dragSnapshotRef.current = null;
+    }
+    setActiveId(null);
   }
 
   function handleDragOver(event: DragOverEvent) {
@@ -267,6 +293,7 @@ export function TaskRankingView({
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     setActiveId(null);
+    dragSnapshotRef.current = null;
 
     if (!over) return;
 
@@ -343,6 +370,7 @@ export function TaskRankingView({
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
       >
         <div className="flex flex-col md:flex-row gap-4 flex-1 overflow-hidden p-3 sm:p-6">
           {/* Unranked panel */}
@@ -485,6 +513,7 @@ function SortableTaskRow({
       {/* Drag handle */}
       {canDrag && (
         <button
+          aria-label={`Drag to reorder ${task.title}`}
           className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground shrink-0 touch-none"
           {...attributes}
           {...listeners}

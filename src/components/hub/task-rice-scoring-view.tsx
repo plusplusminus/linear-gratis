@@ -207,18 +207,30 @@ export function TaskRiceScoringView({
   );
   const abortRefs = useRef<Map<string, AbortController>>(new Map());
 
-  // Load scores on mount
+  // Load scores on mount / project change
   useEffect(() => {
+    const controller = new AbortController();
+    const { signal } = controller;
+
+    setIsLoading(true);
+    setScores(new Map());
+
     async function load() {
       try {
         const res = await fetch(
-          `/api/hubs/${hubId}/projects/${projectId}/task-rice-scores`
+          `/api/hubs/${hubId}/projects/${projectId}/task-rice-scores`,
+          { signal }
         );
+        if (signal.aborted) return;
+
         if (!res.ok) {
           setIsLoading(false);
           return;
         }
         const data = (await res.json()) as { scores: RiceScoreResponse[] };
+
+        if (signal.aborted) return;
+
         const map = new Map<string, TaskScore>();
         for (const s of data.scores) {
           map.set(s.issueLinearId, {
@@ -230,12 +242,15 @@ export function TaskRiceScoringView({
           });
         }
         setScores(map);
-      } catch {
+      } catch (err) {
+        if ((err as Error).name === "AbortError") return;
         // Silent — empty state is fine
       }
-      setIsLoading(false);
+      if (!signal.aborted) setIsLoading(false);
     }
     load();
+
+    return () => controller.abort();
   }, [hubId, projectId]);
 
   // Cleanup timers on unmount

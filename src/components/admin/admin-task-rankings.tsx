@@ -156,20 +156,28 @@ export function AdminTaskRankings({
       return;
     }
 
+    const controller = new AbortController();
+    const { signal } = controller;
+
     async function load() {
       setIsLoading(true);
       try {
         const [rankRes, logRes, riceRes] = await Promise.all([
           fetch(
-            `/api/hubs/${hubId}/projects/${selectedProjectId}/task-rankings?composite=true`
+            `/api/hubs/${hubId}/projects/${selectedProjectId}/task-rankings?composite=true`,
+            { signal }
           ),
           fetch(
-            `/api/hubs/${hubId}/projects/${selectedProjectId}/task-rankings/log?limit=50`
+            `/api/hubs/${hubId}/projects/${selectedProjectId}/task-rankings/log?limit=50`,
+            { signal }
           ),
           fetch(
-            `/api/hubs/${hubId}/projects/${selectedProjectId}/task-rice-scores?composite=true`
+            `/api/hubs/${hubId}/projects/${selectedProjectId}/task-rice-scores?composite=true`,
+            { signal }
           ),
         ]);
+
+        if (signal.aborted) return;
 
         if (rankRes.ok) {
           const data = (await rankRes.json()) as {
@@ -199,12 +207,15 @@ export function AdminTaskRankings({
         } else {
           setRiceScores([]);
         }
-      } catch {
-        // Non-critical
+      } catch (err) {
+        if ((err as Error).name === "AbortError") return;
+        console.error("AdminTaskRankings load error:", err);
       }
-      setIsLoading(false);
+      if (!signal.aborted) setIsLoading(false);
     }
     load();
+
+    return () => controller.abort();
   }, [hubId, selectedProjectId]);
 
   const sorted = useMemo(() => {
@@ -413,37 +424,32 @@ export function AdminTaskRankings({
                       </span>
                     </button>
 
-                    {isExpanded &&
-                      (() => {
-                        const issueLog =
-                          logByIssue.get(entry.issueLinearId) ?? [];
-                        return (
-                          <div className="px-4 pb-3 pl-14">
-                            <div className="text-xs text-muted-foreground space-y-1">
-                              {issueLog.slice(0, 5).map((l) => (
-                                <div
-                                  key={l.id}
-                                  className="flex items-center gap-2"
-                                >
-                                  <Clock className="w-3 h-3 shrink-0" />
-                                  <span>
-                                    {formatUserName(l.userId, members)} moved
-                                    from {l.previousRank ?? "—"} → {l.newRank}
-                                  </span>
-                                  <span className="ml-auto text-[10px]">
-                                    {formatRelativeTime(l.createdAt)}
-                                  </span>
-                                </div>
-                              ))}
-                              {issueLog.length === 0 && (
-                                <span className="text-[10px]">
-                                  No ranking changes recorded
-                                </span>
-                              )}
+                    {isExpanded && (
+                      <div className="px-4 pb-3 pl-14">
+                        <div className="text-xs text-muted-foreground space-y-1">
+                          {(logByIssue.get(entry.issueLinearId) ?? []).slice(0, 5).map((l) => (
+                            <div
+                              key={l.id}
+                              className="flex items-center gap-2"
+                            >
+                              <Clock className="w-3 h-3 shrink-0" />
+                              <span>
+                                {formatUserName(l.userId, members)} moved
+                                from {l.previousRank ?? "—"} → {l.newRank}
+                              </span>
+                              <span className="ml-auto text-[10px]">
+                                {formatRelativeTime(l.createdAt)}
+                              </span>
                             </div>
-                          </div>
-                        );
-                      })()}
+                          ))}
+                          {(logByIssue.get(entry.issueLinearId) ?? []).length === 0 && (
+                            <span className="text-[10px]">
+                              No ranking changes recorded
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -652,9 +658,9 @@ export function AdminTaskRankings({
                         {isExpanded && (
                           <div className="px-4 pb-3 pl-14">
                             <div className="text-xs text-muted-foreground space-y-1">
-                              {entry.scores.map((s, i) => (
+                              {entry.scores.map((s) => (
                                 <div
-                                  key={i}
+                                  key={s.userId}
                                   className="flex items-center gap-3"
                                 >
                                   <span className="w-24 truncate">

@@ -69,7 +69,23 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       }
     }
     if (body.task_priority_project_ids !== undefined) {
-      updates.task_priority_project_ids = body.task_priority_project_ids;
+      // Validate against effective overview-only set
+      const effectiveOverview = new Set(
+        body.overview_only_project_ids ??
+          ((
+            await supabaseAdmin
+              .from("hub_team_mappings")
+              .select("overview_only_project_ids")
+              .eq("id", mappingId)
+              .eq("hub_id", hubId)
+              .single()
+          ).data as { overview_only_project_ids?: string[] })
+            ?.overview_only_project_ids ?? []
+      );
+      updates.task_priority_project_ids =
+        body.task_priority_project_ids.filter(
+          (id) => !effectiveOverview.has(id)
+        );
     }
     if (body.is_active !== undefined) {
       updates.is_active = body.is_active;
