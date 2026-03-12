@@ -85,10 +85,10 @@ export function ProjectOverview({ project }: ProjectOverviewProps) {
   const hasContent = project.content || project.description;
 
   return (
-    <div className="px-6 py-4 space-y-4">
+    <div className="px-6 py-5 space-y-0">
       {/* Metadata row */}
       {hasMetadata && (
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-4 pb-4">
           {/* Priority */}
           {project.priority > 0 && (
             <MetadataItem label="Priority">
@@ -128,11 +128,11 @@ export function ProjectOverview({ project }: ProjectOverviewProps) {
 
       {/* Milestones */}
       {project.milestones.length > 0 && (
-        <div>
-          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
+        <div className={cn(hasMetadata && "border-t border-border pt-4", "pb-4")}>
+          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2.5">
             Milestones
           </p>
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             {project.milestones.map((m) => (
               <div
                 key={m.id}
@@ -152,15 +152,25 @@ export function ProjectOverview({ project }: ProjectOverviewProps) {
       )}
 
       {/* Full description (content from Linear) */}
-      {project.content ? (
-        <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-sm prose-headings:font-semibold prose-p:text-[13px] prose-p:leading-relaxed prose-code:text-xs prose-pre:text-xs prose-ul:text-[13px] prose-ol:text-[13px]">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {project.content}
-          </ReactMarkdown>
+      {hasContent && (
+        <div className={cn(
+          (hasMetadata || project.milestones.length > 0) && "border-t border-border pt-5"
+        )}>
+          {project.content ? (
+            <div className="prose prose-sm dark:prose-invert max-w-prose prose-headings:text-sm prose-headings:font-semibold prose-headings:mt-6 prose-headings:mb-2 prose-p:text-[13px] prose-p:leading-relaxed prose-p:my-2.5 prose-code:text-xs prose-pre:text-xs prose-pre:my-3 prose-ul:text-[13px] prose-ul:my-2.5 prose-ol:text-[13px] prose-ol:my-2.5 prose-li:my-0.5 prose-hr:my-5">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {project.content}
+              </ReactMarkdown>
+            </div>
+          ) : project.description ? (
+            <p className="text-[13px] leading-relaxed text-muted-foreground max-w-prose">
+              {project.description}
+            </p>
+          ) : null}
         </div>
-      ) : project.description ? (
-        <p className="text-sm text-muted-foreground">{project.description}</p>
-      ) : (
+      )}
+
+      {!hasMetadata && project.milestones.length === 0 && !hasContent && (
         <p className="text-xs text-muted-foreground italic">
           No project description available.
         </p>
@@ -178,7 +188,7 @@ function MetadataItem({
 }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className="text-[10px] text-muted-foreground">{label}:</span>
+      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{label}</span>
       {children}
     </div>
   );
