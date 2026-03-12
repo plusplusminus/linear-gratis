@@ -886,6 +886,8 @@ export async function fetchProjectsByIds(
           teams { nodes { id name key } }
           initiatives { nodes { id name } }
           projectMilestones { nodes { id name targetDate } }
+          projectLinks { nodes { id label url createdAt } }
+          documents { nodes { id title content slugId icon color updatedAt } }
           createdAt
           updatedAt
         }

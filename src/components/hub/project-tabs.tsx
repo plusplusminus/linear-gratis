@@ -75,7 +75,9 @@ export function ProjectTabs({
     project.priority > 0 ||
     !!project.health ||
     !!project.lead ||
-    project.milestones.length > 0;
+    project.milestones.length > 0 ||
+    links.length > 0 ||
+    documents.length > 0;
 
   const [activeTab, setActiveTab] = useState<Tab>(
     isOverviewOnly || issues.length === 0 ? "overview" : "issues"
