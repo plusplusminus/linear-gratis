@@ -112,7 +112,7 @@ export function RoadmapList({ projects }: { projects: Project[] }) {
 }
 
 function ProjectCard({ project }: { project: Project }) {
-  const progressPct = Math.round(project.progress * 100);
+  const progressPct = Math.max(0, Math.min(100, Math.round(project.progress * 100)));
   const color = project.color || project.status.color || "var(--primary)";
 
   return (
