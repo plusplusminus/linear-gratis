@@ -80,7 +80,7 @@ function formatDate(dateStr: string): string {
   });
 }
 
-export function ProjectOverview({ project, links, documents: _documents }: ProjectOverviewProps) {
+export function ProjectOverview({ project, links, documents }: ProjectOverviewProps) {
   const projectStatus = project.status.name;
   useEffect(() => {
     captureEvent(POSTHOG_EVENTS.project_viewed);
@@ -226,11 +226,103 @@ export function ProjectOverview({ project, links, documents: _documents }: Proje
         </div>
       )}
 
-      {!hasMetadata && project.milestones.length === 0 && links.length === 0 && !hasContent && (
+      {/* Documents */}
+      {documents.length > 0 && (
+        <DocumentsSection
+          documents={documents}
+          hasPrecedingContent={!!(hasMetadata || project.milestones.length > 0 || links.length > 0 || hasContent)}
+        />
+      )}
+
+      {!hasMetadata && project.milestones.length === 0 && links.length === 0 && !hasContent && documents.length === 0 && (
         <p className="text-xs text-muted-foreground italic">
           No project description available.
         </p>
       )}
+    </div>
+  );
+}
+
+function DocumentsSection({
+  documents,
+  hasPrecedingContent,
+}: {
+  documents: ProjectDocument[];
+  hasPrecedingContent: boolean;
+}) {
+  const defaultExpanded = documents.length === 1 && documents[0].content
+    ? new Set([documents[0].id])
+    : new Set<string>();
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(defaultExpanded);
+
+  function toggleDoc(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  return (
+    <div className={cn(hasPrecedingContent && "border-t border-border pt-4", "pb-4")}>
+      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2.5">
+        Documents
+      </p>
+      <div className="space-y-1">
+        {documents.map((doc) => {
+          const hasContent = !!doc.content;
+          const isExpanded = expandedIds.has(doc.id);
+
+          return (
+            <div key={doc.id}>
+              {hasContent ? (
+                <button
+                  onClick={() => toggleDoc(doc.id)}
+                  className="flex items-center gap-2 w-full px-2 py-1.5 -mx-2 rounded-md text-left hover:bg-muted/50 transition-colors group"
+                >
+                  {isExpanded ? (
+                    <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  ) : (
+                    <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  )}
+                  {doc.icon && (
+                    <span className="text-sm shrink-0">{doc.icon}</span>
+                  )}
+                  <span className="text-xs text-foreground truncate">{doc.title}</span>
+                  <span className="text-[11px] text-muted-foreground shrink-0 ml-auto">
+                    {formatDate(doc.updatedAt)}
+                  </span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-2 px-2 py-1.5 -mx-2">
+                  <span className="w-3.5 h-3.5 shrink-0" />
+                  {doc.icon && (
+                    <span className="text-sm shrink-0">{doc.icon}</span>
+                  )}
+                  <span className="text-xs text-foreground truncate">{doc.title}</span>
+                  <span className="text-[11px] text-muted-foreground shrink-0 ml-auto">
+                    Content available in Linear
+                  </span>
+                </div>
+              )}
+
+              {hasContent && isExpanded && (
+                <div className="pl-[22px] pr-2 pb-3 pt-1">
+                  <div className="prose prose-sm dark:prose-invert max-w-prose prose-headings:text-sm prose-headings:font-semibold prose-headings:mt-6 prose-headings:mb-2 prose-p:text-[13px] prose-p:leading-relaxed prose-p:my-2.5 prose-code:text-xs prose-pre:text-xs prose-pre:my-3 prose-ul:text-[13px] prose-ul:my-2.5 prose-ol:text-[13px] prose-ol:my-2.5 prose-li:my-0.5 prose-hr:my-5">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {doc.content!}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
