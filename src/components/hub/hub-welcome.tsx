@@ -12,7 +12,7 @@ type HubWelcomeProps = {
 };
 
 export function HubWelcome({ stats }: HubWelcomeProps) {
-  const { hubName, firstName, isLoading } = useHub();
+  const { firstName, isLoading } = useHub();
 
   const now = new Date();
   const hour = now.getHours();
@@ -51,9 +51,11 @@ export function HubWelcome({ stats }: HubWelcomeProps) {
         <Pill icon={CircleDot}>
           {stats.openTaskCount} open {stats.openTaskCount === 1 ? "task" : "tasks"}
         </Pill>
-        {stats.lastActivity && (
-          <Pill icon={Clock}>Last task activity {formatRelative(stats.lastActivity)}</Pill>
-        )}
+        <Pill icon={Clock}>
+          {stats.lastActivity
+            ? `Last task activity ${formatRelative(stats.lastActivity)}`
+            : "No task activity yet"}
+        </Pill>
       </div>
     </div>
   );
@@ -76,8 +78,12 @@ function Pill({
 
 function formatRelative(dateStr: string): string {
   const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return "unknown";
+
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
+  if (diffMs < 0) return "just now";
+
   const diffMin = Math.floor(diffMs / 60000);
   const diffHr = Math.floor(diffMin / 60);
   const diffDay = Math.floor(diffHr / 24);
