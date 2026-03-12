@@ -53,7 +53,8 @@ export function LabelEditor({
   // Filter workflow rules by current issue status — only show hints for rules
   // that would actually fire given the issue's current state
   const activeRules = workflowRules.filter((rule) => {
-    if (!rule.conditionStateIds || rule.conditionStateIds.length === 0) return true;
+    if (rule.conditionStateIds == null) return true;
+    if (rule.conditionStateIds.length === 0) return false;
     return issueStateId ? rule.conditionStateIds.includes(issueStateId) : false;
   });
 

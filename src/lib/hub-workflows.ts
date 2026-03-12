@@ -87,11 +87,12 @@ export function evaluateWorkflowRules(
         break;
     }
 
-    // Check status condition: if the rule has condition_state_ids (non-null),
+    // Check status condition: if the rule has condition_state_ids (non-null array),
     // the issue's current state must be in that list for the rule to fire.
     // An empty array means no statuses match, so the rule never fires.
-    if (matches && rule.condition_state_ids !== null) {
-      if (rule.condition_state_ids.length === 0 || !context.currentStateId || !rule.condition_state_ids.includes(context.currentStateId)) {
+    // Non-array values (malformed JSONB) are treated as non-matching.
+    if (matches && rule.condition_state_ids != null) {
+      if (!Array.isArray(rule.condition_state_ids) || rule.condition_state_ids.length === 0 || !context.currentStateId || !rule.condition_state_ids.includes(context.currentStateId)) {
         matches = false;
       }
     }
