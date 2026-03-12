@@ -48,10 +48,13 @@ type HubReconcileResult = {
   hubsReconciled: number;
   teamsReconciled: number;
   issuesUpserted: number;
+  issuesMoved: number;
+  issuesDeleted: number;
   commentsUpserted: number;
   teamsUpserted: number;
   projectsUpserted: number;
   cyclesUpserted: number;
+  cyclesDeleted: number;
   initiativesUpserted: number;
   errors: number;
 };
@@ -188,13 +191,21 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
     hubsReconciled: 0,
     teamsReconciled: 0,
     issuesUpserted: 0,
+    issuesMoved: 0,
+    issuesDeleted: 0,
     commentsUpserted: 0,
     teamsUpserted: 0,
     projectsUpserted: 0,
     cyclesUpserted: 0,
+    cyclesDeleted: 0,
     initiativesUpserted: 0,
     errors: 0,
   };
+
+  // Collect deleted entity IDs across all teams, then resolve after the team loop.
+  // This avoids order-dependent results when issues move between teams.
+  const allDeletedIssueIds = new Set<string>();
+  const allDeletedCycleIds = new Set<string>();
 
   const apiToken = await getWorkspaceToken();
   const rateLimiter = new LinearRateLimiter();
@@ -316,9 +327,7 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
         const cycleChecksums = await fetchCycleChecksums(teamId, apiToken, rateLimiter);
         const cycleDiff = await diffEntities("synced_cycles", cycleChecksums, teamId);
         const cyclesToFetch = [...cycleDiff.stale, ...cycleDiff.missing];
-        if (cycleDiff.deleted.length > 0) {
-          console.warn(`[diff-check] team ${teamId} cycles: ${cycleDiff.deleted.length} in local but not remote:`, cycleDiff.deleted);
-        }
+        for (const id of cycleDiff.deleted) allDeletedCycleIds.add(id);
         if (cyclesToFetch.length > 0) {
           const cycles = await fetchCyclesByIds(cyclesToFetch, apiToken, rateLimiter);
           if (cycles.length > 0) {
@@ -330,15 +339,13 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
           }
           result.cyclesUpserted += cycles.length;
         }
-        console.log(`[diff-check] team ${teamId} cycles: ${cycleChecksums.length} checked, ${cycleDiff.stale.length} stale, ${cycleDiff.missing.length} missing, ${cycleDiff.deleted.length} deleted, ${cyclesToFetch.length} fetched`);
+        console.log(`[diff-check] team ${teamId} cycles: ${cycleChecksums.length} checked, ${cycleDiff.stale.length} stale, ${cycleDiff.missing.length} missing, ${cycleDiff.deleted.length} gone, ${cyclesToFetch.length} fetched`);
 
         // Issues
         const issueChecksums = await fetchIssueChecksums(teamId, apiToken, rateLimiter);
         const issueDiff = await diffEntities("synced_issues", issueChecksums, teamId);
         const issuesToFetch = [...issueDiff.stale, ...issueDiff.missing];
-        if (issueDiff.deleted.length > 0) {
-          console.warn(`[diff-check] team ${teamId} issues: ${issueDiff.deleted.length} in local but not remote:`, issueDiff.deleted);
-        }
+        for (const id of issueDiff.deleted) allDeletedIssueIds.add(id);
         if (issuesToFetch.length > 0) {
           const issues = await fetchIssuesByIds(issuesToFetch, apiToken, rateLimiter);
           if (issues.length > 0) {
@@ -369,7 +376,7 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
             }
           }
         }
-        console.log(`[diff-check] team ${teamId} issues: ${issueChecksums.length} checked, ${issueDiff.stale.length} stale, ${issueDiff.missing.length} missing, ${issueDiff.deleted.length} deleted, ${issuesToFetch.length} fetched`);
+        console.log(`[diff-check] team ${teamId} issues: ${issueChecksums.length} checked, ${issueDiff.stale.length} stale, ${issueDiff.missing.length} missing, ${issueDiff.deleted.length} gone, ${issuesToFetch.length} fetched`);
 
       } else {
         // --- Legacy full-fetch mode (watermark-based) ---
@@ -454,11 +461,73 @@ async function reconcileAllHubs(): Promise<HubReconcileResult> {
 
   result.hubsReconciled = hubIds.size;
 
+  // 4. Resolve entities that disappeared from their team's checksum query.
+  //    Done after all teams so that cross-team moves don't cause order-dependent results.
+  if (DIFF_CHECK_MODE) {
+    // Cycles can't move teams — delete directly
+    if (allDeletedCycleIds.size > 0) {
+      const ids = Array.from(allDeletedCycleIds);
+      const { error: delError } = await supabaseAdmin
+        .from("synced_cycles")
+        .delete()
+        .eq("user_id", WORKSPACE_USER_ID)
+        .in("linear_id", ids);
+
+      if (delError) {
+        console.error(`[diff-check] Failed to delete ${ids.length} cycles:`, delError);
+      } else {
+        result.cyclesDeleted = ids.length;
+      }
+      console.log(`[diff-check] cycles cleanup: ${ids.length} deleted`);
+    }
+
+    // Issues can move teams — re-fetch to distinguish moved vs truly deleted
+    if (allDeletedIssueIds.size > 0) {
+      const ids = Array.from(allDeletedIssueIds);
+      try {
+        const refetched = await fetchIssuesByIds(ids, apiToken, rateLimiter);
+        const refetchedIds = new Set(refetched.map((i) => i.id));
+
+        // Moved: still exists in Linear, different team — upsert updates team_id
+        if (refetched.length > 0) {
+          await batchUpsert(
+            "synced_issues",
+            refetched.map((issue) => mapIssueToRow(issue, WORKSPACE_USER_ID)),
+            "user_id,linear_id"
+          );
+          result.issuesMoved = refetched.length;
+        }
+
+        // Truly deleted: not returned by Linear at all
+        const trulyDeleted = ids.filter((id) => !refetchedIds.has(id));
+        if (trulyDeleted.length > 0) {
+          const { error: delError } = await supabaseAdmin
+            .from("synced_issues")
+            .delete()
+            .eq("user_id", WORKSPACE_USER_ID)
+            .in("linear_id", trulyDeleted);
+
+          if (delError) {
+            console.error(`[diff-check] Failed to delete ${trulyDeleted.length} issues:`, delError);
+          } else {
+            result.issuesDeleted = trulyDeleted.length;
+          }
+        }
+
+        console.log(`[diff-check] issues cleanup: ${ids.length} gone — ${refetched.length} moved, ${trulyDeleted.length} deleted`);
+      } catch (error) {
+        console.error("[diff-check] Failed to resolve deleted issues:", error);
+        result.errors++;
+      }
+    }
+  }
+
   const mode = DIFF_CHECK_MODE ? "diff-check" : "full-fetch";
   console.log(
     `Reconcile complete (${mode}): ${result.hubsReconciled} hubs, ${result.teamsReconciled} teams, ` +
-      `${result.issuesUpserted} issues, ${result.commentsUpserted} comments, ` +
-      `${result.projectsUpserted} projects, ${result.cyclesUpserted} cycles, ` +
+      `${result.issuesUpserted} issues (${result.issuesMoved} moved, ${result.issuesDeleted} deleted), ` +
+      `${result.commentsUpserted} comments, ${result.projectsUpserted} projects, ` +
+      `${result.cyclesUpserted} cycles (${result.cyclesDeleted} deleted), ` +
       `${result.initiativesUpserted} initiatives, ${result.errors} errors`
   );
 
