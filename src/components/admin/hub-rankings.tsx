@@ -16,6 +16,24 @@ type CompositeEntry = {
   rankerCount: number;
 };
 
+type CompositeRiceEntry = {
+  projectLinearId: string;
+  averageReach: number | null;
+  averageImpact: number | null;
+  averageConfidence: number | null;
+  averageEffort: number | null;
+  averageScore: number | null;
+  scorerCount: number;
+  scores: Array<{
+    userId: string;
+    reach: number | null;
+    impact: number | null;
+    confidence: number | null;
+    effort: number | null;
+    score: number | null;
+  }>;
+};
+
 type LogEntry = {
   id: string;
   userId: string;
@@ -78,7 +96,7 @@ function formatUserName(
     const local = email.split("@")[0];
     return local.charAt(0).toUpperCase() + local.slice(1);
   }
-  return userId.slice(0, 12) + "...";
+  return "Unknown user";
 }
 
 function formatRelativeTime(dateStr: string): string {
@@ -108,10 +126,11 @@ export function HubRankings({
 }) {
   const [composite, setComposite] = useState<CompositeEntry[]>([]);
   const [log, setLog] = useState<LogEntry[]>([]);
+  const [riceScores, setRiceScores] = useState<CompositeRiceEntry[]>([]);
   const [members, setMembers] = useState<Record<string, string>>({});
-  const [activeTab, setActiveTab] = useState<"rankings" | "activity">(
-    "rankings"
-  );
+  const [activeTab, setActiveTab] = useState<
+    "rankings" | "activity" | "rice"
+  >("rankings");
   const [isLoading, setIsLoading] = useState(true);
   const [sortBy, setSortBy] = useState<"rank" | "variance">("rank");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -124,9 +143,10 @@ export function HubRankings({
   useEffect(() => {
     async function load() {
       try {
-        const [rankRes, logRes] = await Promise.all([
+        const [rankRes, logRes, riceRes] = await Promise.all([
           fetch(`/api/hubs/${hubId}/rankings`),
           fetch(`/api/hubs/${hubId}/rankings/log?limit=50`),
+          fetch(`/api/hubs/${hubId}/rice-scores?composite=true`),
         ]);
 
         if (rankRes.ok) {
@@ -143,6 +163,13 @@ export function HubRankings({
           };
           setLog(data.log);
           setMembers(data.members ?? {});
+        }
+
+        if (riceRes.ok) {
+          const data = (await riceRes.json()) as {
+            scores: CompositeRiceEntry[];
+          };
+          setRiceScores(data.scores);
         }
       } catch {
         // Non-critical
@@ -173,6 +200,15 @@ export function HubRankings({
 
   const batches = useMemo(() => groupIntoBatches(log), [log]);
 
+  const sortedRice = useMemo(() => {
+    return [...riceScores].sort((a, b) => {
+      if (a.averageScore == null && b.averageScore == null) return 0;
+      if (a.averageScore == null) return 1;
+      if (b.averageScore == null) return -1;
+      return b.averageScore - a.averageScore;
+    });
+  }, [riceScores]);
+
   function toggleExpand(id: string) {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -190,7 +226,7 @@ export function HubRankings({
     );
   }
 
-  if (composite.length === 0 && log.length === 0) {
+  if (composite.length === 0 && log.length === 0 && riceScores.length === 0) {
     return (
       <div className="p-6">
         <div className="border border-border rounded-lg p-8 text-center bg-card">
@@ -238,6 +274,22 @@ export function HubRankings({
             </span>
           )}
         </button>
+        <button
+          onClick={() => setActiveTab("rice")}
+          className={cn(
+            "text-sm font-medium pb-1 border-b-2 transition-colors",
+            activeTab === "rice"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          RICE Scores
+          {riceScores.length > 0 && (
+            <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-muted text-[10px] tabular-nums">
+              {riceScores.length}
+            </span>
+          )}
+        </button>
 
         {activeTab === "rankings" && (
           <div className="ml-auto">
@@ -254,7 +306,7 @@ export function HubRankings({
         )}
       </div>
 
-      {activeTab === "rankings" ? (
+      {activeTab === "rankings" && (
         <div className="border border-border rounded-lg overflow-hidden bg-card">
           {/* Header */}
           <div className="grid grid-cols-[40px_1fr_80px_80px_60px] gap-2 px-4 py-2 border-b border-border text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
@@ -339,7 +391,9 @@ export function HubRankings({
             );
           })}
         </div>
-      ) : (
+      )}
+
+      {activeTab === "activity" && (
         // Activity log tab — grouped by batch
         <div className="border border-border rounded-lg overflow-hidden bg-card">
           {batches.length === 0 ? (
@@ -432,6 +486,116 @@ export function HubRankings({
                 );
               })}
             </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "rice" && (
+        <div className="border border-border rounded-lg overflow-x-auto bg-card">
+          {sortedRice.length === 0 ? (
+            <div className="p-6 text-center text-sm text-muted-foreground">
+              No RICE scores submitted yet
+            </div>
+          ) : (
+            <>
+              {/* Header */}
+              <div className="grid grid-cols-[40px_1fr_70px_70px_80px_70px_70px_60px_40px] gap-2 px-4 py-2 border-b border-border text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                <span>#</span>
+                <span>Project</span>
+                <span className="text-right">Reach</span>
+                <span className="text-right">Impact</span>
+                <span className="text-right">Confidence</span>
+                <span className="text-right">Effort</span>
+                <span className="text-right">Score</span>
+                <span className="text-right">Scorers</span>
+                <span />
+              </div>
+
+              {sortedRice.map((entry, index) => {
+                const project = projectMap.get(entry.projectLinearId);
+                const isExpanded = expanded.has(`rice-${entry.projectLinearId}`);
+
+                return (
+                  <div
+                    key={entry.projectLinearId}
+                    className={cn(
+                      index < sortedRice.length - 1 && "border-b border-border"
+                    )}
+                  >
+                    <button
+                      onClick={() => toggleExpand(`rice-${entry.projectLinearId}`)}
+                      className="grid grid-cols-[40px_1fr_70px_70px_80px_70px_70px_60px_40px] gap-2 px-4 py-2.5 w-full text-left hover:bg-accent/30 transition-colors"
+                    >
+                      <span className="text-sm font-medium tabular-nums text-muted-foreground">
+                        {index + 1}
+                      </span>
+                      <span className="flex items-center gap-2">
+                        {project?.color && (
+                          <span
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{ backgroundColor: project.color }}
+                          />
+                        )}
+                        <span className="text-sm truncate">
+                          {project?.name ?? "Unknown project"}
+                        </span>
+                      </span>
+                      <span className="text-sm tabular-nums text-right">
+                        {entry.averageReach != null ? entry.averageReach.toFixed(1) : "—"}
+                      </span>
+                      <span className="text-sm tabular-nums text-right">
+                        {entry.averageImpact != null ? entry.averageImpact.toFixed(1) : "—"}
+                      </span>
+                      <span className="text-sm tabular-nums text-right">
+                        {entry.averageConfidence != null ? `${Math.round(entry.averageConfidence)}%` : "—"}
+                      </span>
+                      <span className="text-sm tabular-nums text-right">
+                        {entry.averageEffort != null ? `${entry.averageEffort.toFixed(1)}mo` : "—"}
+                      </span>
+                      <span
+                        className={cn(
+                          "text-sm tabular-nums text-right font-medium",
+                          entry.averageScore != null && entry.averageScore >= 5
+                            ? "text-emerald-500"
+                            : entry.averageScore != null && entry.averageScore >= 2
+                              ? "text-orange-500"
+                              : "text-muted-foreground"
+                        )}
+                      >
+                        {entry.averageScore != null ? entry.averageScore.toFixed(1) : "—"}
+                      </span>
+                      <span className="text-sm tabular-nums text-right text-muted-foreground">
+                        {entry.scorerCount}
+                      </span>
+                      <span className="flex justify-end">
+                        {isExpanded ? (
+                          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                        ) : (
+                          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+                        )}
+                      </span>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="px-4 pb-3 pl-14">
+                        <div className="text-xs text-muted-foreground space-y-1">
+                          {entry.scores.map((s, i) => (
+                            <div key={i} className="flex items-center gap-3">
+                              <span className="w-24 truncate">{formatUserName(s.userId, members)}</span>
+                              <span className="tabular-nums w-10 text-right">{s.reach ?? "—"}</span>
+                              <span className="tabular-nums w-10 text-right">{s.impact ?? "—"}</span>
+                              <span className="tabular-nums w-14 text-right">{s.confidence != null ? `${s.confidence}%` : "—"}</span>
+                              <span className="tabular-nums w-12 text-right">{s.effort != null ? `${s.effort}mo` : "—"}</span>
+                              <span className="tabular-nums w-12 text-right font-medium">{s.score != null ? s.score.toFixed(1) : "—"}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </>
           )}
         </div>
       )}

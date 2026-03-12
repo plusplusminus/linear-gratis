@@ -27,6 +27,7 @@ export const POSTHOG_EVENTS = {
   // Hub — Priority Ranking
   ranking_viewed: 'ranking_viewed',
   ranking_updated: 'ranking_updated',
+  rice_score_updated: 'rice_score_updated',
 
   // Hub — Navigation
   tab_switched: 'tab_switched',
