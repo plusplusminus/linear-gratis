@@ -313,8 +313,15 @@ export function TaskRiceScoringView({
               return next;
             });
           }
-        } catch {
-          // Network error / abort
+        } catch (err) {
+          if ((err as Error).name !== "AbortError") {
+            // Network error — rollback optimistic update
+            setScores((prev) => {
+              const next = new Map(prev);
+              next.set(issueId, previous);
+              return next;
+            });
+          }
         } finally {
           setSavingIds((prev) => {
             const next = new Set(prev);
