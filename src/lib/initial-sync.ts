@@ -820,9 +820,10 @@ export async function fetchIssuesByIds(
   if (ids.length === 0) return [];
 
   const query = `
-    query IssuesByIds($ids: [ID!]!) {
-      nodes(ids: $ids) {
-        ... on Issue {
+    query IssuesByIds($ids: [ID!]!, $after: String) {
+      issues(filter: { id: { in: $ids } }, first: ${BATCH_IDS_SIZE}, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
           id
           identifier
           title
@@ -844,11 +845,11 @@ export async function fetchIssuesByIds(
     }
   `;
 
-  return batchFetchByIds<LinearGqlIssue>(ids, accessToken, query, rateLimiter);
+  return batchFetchByIds<LinearGqlIssue>(ids, accessToken, query, "issues", rateLimiter);
 }
 
 /**
- * Fetch full project data for specific IDs using Linear's `nodes` query.
+ * Fetch full project data for specific IDs using Linear's `projects` query with ID filter.
  */
 export async function fetchProjectsByIds(
   ids: string[],
@@ -858,9 +859,10 @@ export async function fetchProjectsByIds(
   if (ids.length === 0) return [];
 
   const query = `
-    query ProjectsByIds($ids: [ID!]!) {
-      nodes(ids: $ids) {
-        ... on Project {
+    query ProjectsByIds($ids: [ID!]!, $after: String) {
+      projects(filter: { id: { in: $ids } }, first: ${BATCH_IDS_SIZE}, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
           id
           name
           description
@@ -887,11 +889,11 @@ export async function fetchProjectsByIds(
     }
   `;
 
-  return batchFetchByIds<LinearGqlProject>(ids, accessToken, query, rateLimiter);
+  return batchFetchByIds<LinearGqlProject>(ids, accessToken, query, "projects", rateLimiter);
 }
 
 /**
- * Fetch full cycle data for specific IDs using Linear's `nodes` query.
+ * Fetch full cycle data for specific IDs using Linear's `cycles` query with ID filter.
  */
 export async function fetchCyclesByIds(
   ids: string[],
@@ -901,9 +903,10 @@ export async function fetchCyclesByIds(
   if (ids.length === 0) return [];
 
   const query = `
-    query CyclesByIds($ids: [ID!]!) {
-      nodes(ids: $ids) {
-        ... on Cycle {
+    query CyclesByIds($ids: [ID!]!, $after: String) {
+      cycles(filter: { id: { in: $ids } }, first: ${BATCH_IDS_SIZE}, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
           id
           name
           number
@@ -924,11 +927,11 @@ export async function fetchCyclesByIds(
     }
   `;
 
-  return batchFetchByIds<LinearGqlCycle>(ids, accessToken, query, rateLimiter);
+  return batchFetchByIds<LinearGqlCycle>(ids, accessToken, query, "cycles", rateLimiter);
 }
 
 /**
- * Fetch full initiative data for specific IDs using Linear's `nodes` query.
+ * Fetch full initiative data for specific IDs using Linear's `initiatives` query with ID filter.
  */
 export async function fetchInitiativesByIds(
   ids: string[],
@@ -938,9 +941,10 @@ export async function fetchInitiativesByIds(
   if (ids.length === 0) return [];
 
   const query = `
-    query InitiativesByIds($ids: [ID!]!) {
-      nodes(ids: $ids) {
-        ... on Initiative {
+    query InitiativesByIds($ids: [ID!]!, $after: String) {
+      initiatives(filter: { id: { in: $ids } }, first: ${BATCH_IDS_SIZE}, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
           id
           name
           description
@@ -962,14 +966,16 @@ export async function fetchInitiativesByIds(
     }
   `;
 
-  return batchFetchByIds<LinearGqlInitiative>(ids, accessToken, query, rateLimiter);
+  return batchFetchByIds<LinearGqlInitiative>(ids, accessToken, query, "initiatives", rateLimiter);
 }
 
-/** Generic batch-fetch-by-ID using Linear's `nodes` query. */
+/** Generic batch-fetch-by-ID using Linear's list queries with `id: { in: [...] }` filter.
+ *  Batches IDs and paginates within each batch. */
 async function batchFetchByIds<T extends { id: string }>(
   ids: string[],
   accessToken: string,
   query: string,
+  rootField: string,
   rateLimiter?: LinearRateLimiter
 ): Promise<T[]> {
   const all: T[] = [];
@@ -981,13 +987,27 @@ async function batchFetchByIds<T extends { id: string }>(
     }
 
     const batch = ids.slice(i, i + BATCH_IDS_SIZE);
-    const data = await linearRequest<{ nodes: (T | null)[] }>(
-      accessToken, query, { ids: batch }, rateLimiter
-    );
+    let after: string | null = null;
 
-    // Filter out nulls (nodes query can return null for deleted/inaccessible entities)
-    const valid = data.nodes.filter((n): n is T => n !== null && "id" in n);
-    all.push(...valid);
+    // Paginate within this batch
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const resp = await linearRequest<{ [key: string]: { pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: T[] } }>(
+        accessToken, query, { ids: batch, after }, rateLimiter
+      );
+
+      const connection = resp[rootField] as { pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: T[] } | undefined;
+      if (!connection) break;
+
+      all.push(...connection.nodes);
+
+      if (connection.pageInfo.hasNextPage && connection.pageInfo.endCursor) {
+        after = connection.pageInfo.endCursor;
+        await sleep(PAGE_DELAY_MS);
+      } else {
+        break;
+      }
+    }
 
     if (i + BATCH_IDS_SIZE < ids.length) await sleep(PAGE_DELAY_MS);
   }
