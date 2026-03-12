@@ -7,6 +7,7 @@ import {
   fetchHubMetadata,
   isProjectOverviewOnly,
 } from "@/lib/hub-read";
+import { isTaskPriorityEnabled } from "@/lib/hub-task-priorities";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { ProjectTabs } from "@/components/hub/project-tabs";
@@ -37,9 +38,10 @@ export default async function ProjectViewPage({
   const team = teams.find((t) => t.key === teamKey);
   if (!team) notFound();
 
-  const [allProjects, overviewOnly] = await Promise.all([
+  const [allProjects, overviewOnly, taskPriorityEnabled] = await Promise.all([
     fetchHubProjects(hub.id),
     isProjectOverviewOnly(hub.id, team.id, projectId),
+    isTaskPriorityEnabled(hub.id, projectId),
   ]);
 
   const project = allProjects.find((p) => p.id === projectId);
@@ -128,6 +130,7 @@ export default async function ProjectViewPage({
         links={project.links}
         documents={project.documents}
         isOverviewOnly={overviewOnly}
+        taskPriorityEnabled={!overviewOnly && taskPriorityEnabled}
         issues={issues}
         states={metadata.states}
         labels={metadata.labels}

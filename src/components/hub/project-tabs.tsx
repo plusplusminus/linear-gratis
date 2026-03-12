@@ -1,11 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import type { LinearIssue } from "@/lib/linear";
 import { ProjectIssueList } from "./project-issue-list";
 import { ProjectUpdates } from "./project-updates";
 import { ProjectOverview } from "./project-overview";
+import { TaskRankingView } from "./task-ranking-view";
+import { TaskRiceScoringView } from "./task-rice-scoring-view";
 
 export type ProjectLink = {
   id: string;
@@ -40,6 +43,7 @@ type ProjectTabsProps = {
   links: ProjectLink[];
   documents: ProjectDocument[];
   isOverviewOnly: boolean;
+  taskPriorityEnabled?: boolean;
   issues: LinearIssue[];
   states: Array<{ id: string; name: string; color: string; type: string }>;
   labels: Array<{ id: string; name: string; color: string }>;
@@ -51,13 +55,14 @@ type ProjectTabsProps = {
   hubId: string;
 };
 
-type Tab = "overview" | "issues";
+type Tab = "overview" | "issues" | "priority";
 
 export function ProjectTabs({
   project,
   links,
   documents,
   isOverviewOnly,
+  taskPriorityEnabled,
   issues,
   states,
   labels,
@@ -68,6 +73,10 @@ export function ProjectTabs({
   projectId,
   hubId,
 }: ProjectTabsProps) {
+  const searchParams = useSearchParams();
+  const [priorityMode, setPriorityMode] = useState<"rank" | "rice">(
+    (searchParams.get("priorityMode") as "rank" | "rice") || "rank"
+  );
   const hasOverviewContent =
     isOverviewOnly ||
     !!project.content ||
@@ -91,6 +100,9 @@ export function ProjectTabs({
           : []),
         ...(issues.length > 0
           ? [{ id: "issues" as const, label: "Tasks", count: issues.length }]
+          : []),
+        ...(taskPriorityEnabled && issues.length > 0
+          ? [{ id: "priority" as const, label: "Priority" }]
           : []),
       ];
 
@@ -141,6 +153,60 @@ export function ProjectTabs({
           projectId={projectId}
           hubId={hubId}
         />
+      )}
+
+      {activeTab === "priority" && taskPriorityEnabled && (
+        <div className="flex flex-col flex-1 min-h-0">
+          {/* Mode toggle */}
+          <div className="flex items-center gap-1 px-6 pt-4">
+            <button
+              onClick={() => setPriorityMode("rank")}
+              className={cn(
+                "px-2.5 py-1 text-xs font-medium rounded-md transition-colors",
+                priorityMode === "rank"
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Ranking
+            </button>
+            <button
+              onClick={() => setPriorityMode("rice")}
+              className={cn(
+                "px-2.5 py-1 text-xs font-medium rounded-md transition-colors",
+                priorityMode === "rice"
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              RICE
+            </button>
+          </div>
+
+          {priorityMode === "rank" ? (
+            <TaskRankingView
+              projectId={projectId}
+              tasks={issues.map((issue) => ({
+                id: issue.id,
+                title: issue.title,
+                identifier: issue.identifier,
+                status: issue.state,
+                labels: issue.labels,
+              }))}
+            />
+          ) : (
+            <TaskRiceScoringView
+              projectId={projectId}
+              tasks={issues.map((issue) => ({
+                id: issue.id,
+                title: issue.title,
+                identifier: issue.identifier,
+                status: issue.state,
+                labels: issue.labels,
+              }))}
+            />
+          )}
+        </div>
       )}
     </div>
   );

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { TeamPicker, ProjectPicker, LabelPicker, InitiativePicker } from "./pickers";
-import { Plus, Trash2, ChevronDown, ChevronRight, Eye } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronRight, Eye, BarChart3 } from "lucide-react";
 import { WorkflowRules } from "./workflow-rules";
 
 interface TeamMapping {
@@ -18,12 +18,14 @@ interface TeamMapping {
   hidden_label_ids: string[];
   auto_include_projects: boolean;
   overview_only_project_ids: string[];
+  task_priority_project_ids: string[];
   is_active: boolean;
 }
 
 type ScopingUpdates = Partial<Pick<TeamMapping,
   "visible_project_ids" | "visible_initiative_ids" | "visible_label_ids" |
-  "hidden_label_ids" | "auto_include_projects" | "overview_only_project_ids"
+  "hidden_label_ids" | "auto_include_projects" | "overview_only_project_ids" |
+  "task_priority_project_ids"
 >>;
 
 interface ScopingEditorProps {
@@ -210,6 +212,7 @@ function MappingCard({
   const [autoInclude, setAutoInclude] = useState(mapping.auto_include_projects);
   const [projectIds, setProjectIds] = useState(mapping.visible_project_ids);
   const [overviewOnlyIds, setOverviewOnlyIds] = useState(mapping.overview_only_project_ids);
+  const [taskPriorityIds, setTaskPriorityIds] = useState(mapping.task_priority_project_ids);
   const [initiativeIds, setInitiativeIds] = useState(mapping.visible_initiative_ids);
   const [labelIds, setLabelIds] = useState(mapping.visible_label_ids);
   const [hiddenLabelIds, setHiddenLabelIds] = useState(mapping.hidden_label_ids);
@@ -218,6 +221,7 @@ function MappingCard({
     autoInclude !== mapping.auto_include_projects ||
     JSON.stringify(projectIds) !== JSON.stringify(mapping.visible_project_ids) ||
     JSON.stringify(overviewOnlyIds) !== JSON.stringify(mapping.overview_only_project_ids) ||
+    JSON.stringify(taskPriorityIds) !== JSON.stringify(mapping.task_priority_project_ids) ||
     JSON.stringify(initiativeIds) !== JSON.stringify(mapping.visible_initiative_ids) ||
     JSON.stringify(labelIds) !== JSON.stringify(mapping.visible_label_ids) ||
     JSON.stringify(hiddenLabelIds) !== JSON.stringify(mapping.hidden_label_ids);
@@ -237,7 +241,7 @@ function MappingCard({
           {mapping.linear_team_name ?? mapping.linear_team_id}
         </button>
         <div className="flex items-center gap-2">
-          <ScopingBadges mapping={mapping} autoInclude={autoInclude} overviewOnlyCount={overviewOnlyIds.length} />
+          <ScopingBadges mapping={mapping} autoInclude={autoInclude} overviewOnlyCount={overviewOnlyIds.length} taskPriorityCount={taskPriorityIds.length} />
           <button
             onClick={onRemove}
             disabled={isPending}
@@ -296,10 +300,29 @@ function MappingCard({
             <ProjectPicker
               teamId={mapping.linear_team_id}
               value={overviewOnlyIds}
-              onChange={setOverviewOnlyIds}
+              onChange={(ids) => {
+                setOverviewOnlyIds(ids);
+                // Remove any newly overview-only projects from task priority
+                setTaskPriorityIds((prev) =>
+                  prev.filter((id) => !ids.includes(id))
+                );
+              }}
               label="Overview-only projects"
               description="These projects will show their description and updates but not individual issues."
               icon={<Eye className="w-3.5 h-3.5 text-muted-foreground" />}
+            />
+          </div>
+
+          {/* Task prioritisation opt-in */}
+          <div>
+            <ProjectPicker
+              teamId={mapping.linear_team_id}
+              value={taskPriorityIds}
+              onChange={setTaskPriorityIds}
+              label="Task prioritisation"
+              description="Clients can rank and RICE-score individual tasks within these projects. Only non-overview-only projects can be selected."
+              icon={<BarChart3 className="w-3.5 h-3.5 text-muted-foreground" />}
+              excludeIds={overviewOnlyIds}
             />
           </div>
 
@@ -340,6 +363,7 @@ function MappingCard({
                     auto_include_projects: autoInclude,
                     visible_project_ids: autoInclude ? [] : projectIds,
                     overview_only_project_ids: overviewOnlyIds,
+                    task_priority_project_ids: taskPriorityIds,
                     visible_initiative_ids: initiativeIds,
                     visible_label_ids: labelIds,
                     hidden_label_ids: hiddenLabelIds,
@@ -355,6 +379,7 @@ function MappingCard({
                   setAutoInclude(mapping.auto_include_projects);
                   setProjectIds(mapping.visible_project_ids);
                   setOverviewOnlyIds(mapping.overview_only_project_ids);
+                  setTaskPriorityIds(mapping.task_priority_project_ids);
                   setInitiativeIds(mapping.visible_initiative_ids);
                   setLabelIds(mapping.visible_label_ids);
                   setHiddenLabelIds(mapping.hidden_label_ids);
@@ -375,10 +400,12 @@ function ScopingBadges({
   mapping,
   autoInclude,
   overviewOnlyCount,
+  taskPriorityCount,
 }: {
   mapping: TeamMapping;
   autoInclude: boolean;
   overviewOnlyCount: number;
+  taskPriorityCount: number;
 }) {
   const p = mapping.visible_project_ids.length;
   const l = mapping.visible_label_ids.length;
@@ -393,6 +420,11 @@ function ScopingBadges({
       {overviewOnlyCount > 0 && (
         <span className="text-[10px] text-blue-500/80 px-1.5 py-0.5 rounded bg-blue-500/10">
           {overviewOnlyCount} overview
+        </span>
+      )}
+      {taskPriorityCount > 0 && (
+        <span className="text-[10px] text-violet-500/80 px-1.5 py-0.5 rounded bg-violet-500/10">
+          {taskPriorityCount} task prio
         </span>
       )}
       <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 rounded bg-muted">
