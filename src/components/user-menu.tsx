@@ -16,23 +16,36 @@ export function UserMenu({ displayName, showName = true }: UserMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!open) return;
     function handleClickOutside(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false);
       }
     }
-    if (open) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape" || e.key === "Esc") {
+        setOpen(false);
+      }
     }
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [open]);
 
   const initial = (displayName ?? "?").charAt(0).toUpperCase();
+  const menuId = "user-menu-dropdown";
 
   return (
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
+        aria-haspopup="true"
+        aria-expanded={open}
+        aria-controls={menuId}
+        aria-label={`User menu for ${displayName}`}
         className="flex items-center gap-2 rounded-md px-1.5 py-1 -mx-1.5 -my-1 hover:bg-accent transition-colors"
       >
         <div
@@ -51,12 +64,17 @@ export function UserMenu({ displayName, showName = true }: UserMenuProps) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-[calc(100%+4px)] z-50 min-w-[180px] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95">
+        <div
+          id={menuId}
+          role="menu"
+          className="absolute right-0 top-[calc(100%+4px)] z-50 min-w-[180px] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95"
+        >
           <div className="px-2 py-1.5 text-xs text-muted-foreground sm:hidden">
             {displayName}
           </div>
           <div className="sm:hidden -mx-1 my-1 h-px bg-muted" />
           <button
+            role="menuitem"
             onClick={() => signOut()}
             className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent transition-colors cursor-pointer"
           >
