@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
+import { WorkOS } from "@workos-inc/node";
 import { withHubAuth, type HubAuthError } from "@/lib/hub-auth";
 import { fetchRankingLog } from "@/lib/hub-rankings";
 import { supabaseAdmin } from "@/lib/supabase";
+
+const workos = new WorkOS(process.env.WORKOS_API_KEY!);
 
 type Params = { params: Promise<{ hubId: string }> };
 
@@ -51,6 +54,24 @@ export async function GET(request: Request, { params }: Params) {
     const memberMap: Record<string, string> = {};
     for (const m of members ?? []) {
       if (m.user_id && m.email) memberMap[m.user_id] = m.email;
+    }
+
+    // Resolve any unmatched user IDs via WorkOS
+    const unresolved = userIds.filter((id) => !memberMap[id]);
+    if (unresolved.length > 0) {
+      await Promise.all(
+        unresolved.map(async (id) => {
+          try {
+            const user = await workos.userManagement.getUser(id);
+            memberMap[id] =
+              user.email ||
+              [user.firstName, user.lastName].filter(Boolean).join(" ") ||
+              id;
+          } catch {
+            // User not found in WorkOS — leave unmapped
+          }
+        })
+      );
     }
 
     return NextResponse.json({ log, members: memberMap });
