@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import { captureEvent } from "@/lib/posthog-client";
 import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import remarkGfm from "remark-gfm";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { FileText, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import type { ProjectLink, ProjectDocument } from "./project-tabs";
@@ -89,12 +89,92 @@ export function ProjectOverview({ project, links, documents }: ProjectOverviewPr
   const hasMetadata = project.priority > 0 || project.health || project.lead;
   const hasContent = project.content || project.description;
 
+  const [openDoc, setOpenDoc] = useState<ProjectDocument | null>(null);
+  const hasDocumentsOrLinks = documents.length > 0 || links.length > 0;
+
   return (
     <div className="px-6 py-5 space-y-0">
+      {/* Documents & Resources — shown first */}
+      {hasDocumentsOrLinks && (
+        <div className="pb-4">
+          {documents.length > 0 && (
+            <div className="mb-3">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                Documents
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {documents.map((doc) => (
+                  <button
+                    key={doc.id}
+                    onClick={() => doc.content ? setOpenDoc(doc) : undefined}
+                    className={cn(
+                      "inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-xs",
+                      doc.content
+                        ? "hover:bg-muted/50 hover:border-border/80 transition-colors cursor-pointer"
+                        : "opacity-60 cursor-default"
+                    )}
+                  >
+                    <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    {doc.icon && <span className="text-sm shrink-0">{doc.icon}</span>}
+                    <span className="text-foreground">{doc.title}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {links.length > 0 && (
+            <div>
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                Resources
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {links.map((link) => {
+                  let hostname = "";
+                  try {
+                    hostname = new URL(link.url).hostname.replace(/^www\./, "");
+                  } catch {
+                    // invalid URL
+                  }
+                  const displayLabel = link.label || hostname || link.url;
+
+                  return (
+                    <a
+                      key={link.id}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-xs hover:bg-muted/50 hover:border-border/80 transition-colors group"
+                    >
+                      <svg
+                        className="w-3.5 h-3.5 text-muted-foreground shrink-0 group-hover:text-foreground transition-colors"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M6.5 3.5H3.5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3" />
+                        <path d="M9.5 2.5h4v4" />
+                        <path d="M13.5 2.5L7.5 8.5" />
+                      </svg>
+                      <span className="text-foreground">{displayLabel}</span>
+                      {hostname && displayLabel !== hostname && (
+                        <span className="text-muted-foreground text-[11px]">{hostname}</span>
+                      )}
+                    </a>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Metadata row */}
       {hasMetadata && (
-        <div className="flex flex-wrap items-center gap-4 pb-4">
-          {/* Priority */}
+        <div className={cn(hasDocumentsOrLinks && "border-t border-border pt-4", "flex flex-wrap items-center gap-4 pb-4")}>
           {project.priority > 0 && (
             <MetadataItem label="Priority">
               <span
@@ -105,8 +185,6 @@ export function ProjectOverview({ project, links, documents }: ProjectOverviewPr
               </span>
             </MetadataItem>
           )}
-
-          {/* Health */}
           {project.health && (
             <MetadataItem label="Health">
               <span
@@ -121,8 +199,6 @@ export function ProjectOverview({ project, links, documents }: ProjectOverviewPr
               </span>
             </MetadataItem>
           )}
-
-          {/* Lead */}
           {project.lead && (
             <MetadataItem label="Lead">
               <span className="text-xs text-foreground">{project.lead.name}</span>
@@ -133,22 +209,17 @@ export function ProjectOverview({ project, links, documents }: ProjectOverviewPr
 
       {/* Milestones */}
       {project.milestones.length > 0 && (
-        <div className={cn(hasMetadata && "border-t border-border pt-4", "pb-4")}>
+        <div className={cn((hasDocumentsOrLinks || hasMetadata) && "border-t border-border pt-4", "pb-4")}>
           <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2.5">
             Milestones
           </p>
           <div className="space-y-1.5">
             {project.milestones.map((m) => (
-              <div
-                key={m.id}
-                className="flex items-center gap-2 text-xs"
-              >
+              <div key={m.id} className="flex items-center gap-2 text-xs">
                 <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 shrink-0" />
                 <span className="text-foreground">{m.name}</span>
                 {m.targetDate && (
-                  <span className="text-muted-foreground">
-                    {formatDate(m.targetDate)}
-                  </span>
+                  <span className="text-muted-foreground">{formatDate(m.targetDate)}</span>
                 )}
               </div>
             ))}
@@ -156,61 +227,10 @@ export function ProjectOverview({ project, links, documents }: ProjectOverviewPr
         </div>
       )}
 
-      {/* Resources (external links) */}
-      {links.length > 0 && (
-        <div className={cn(
-          (hasMetadata || project.milestones.length > 0) && "border-t border-border pt-4",
-          "pb-4"
-        )}>
-          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2.5">
-            Resources
-          </p>
-          <div className="space-y-1">
-            {links.map((link) => {
-              let hostname = "";
-              try {
-                hostname = new URL(link.url).hostname.replace(/^www\./, "");
-              } catch {
-                // invalid URL, skip hostname
-              }
-              const displayLabel = link.label || hostname || link.url;
-
-              return (
-                <a
-                  key={link.id}
-                  href={link.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-2 py-1.5 -mx-2 rounded-md text-xs text-foreground hover:bg-muted/50 transition-colors group"
-                >
-                  <svg
-                    className="w-3.5 h-3.5 text-muted-foreground shrink-0 group-hover:text-foreground transition-colors"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M6.5 3.5H3.5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3" />
-                    <path d="M9.5 2.5h4v4" />
-                    <path d="M13.5 2.5L7.5 8.5" />
-                  </svg>
-                  <span className="truncate">{displayLabel}</span>
-                  {hostname && displayLabel !== hostname && (
-                    <span className="text-muted-foreground text-[11px] shrink-0">{hostname}</span>
-                  )}
-                </a>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Full description (content from Linear) */}
+      {/* Full description */}
       {hasContent && (
         <div className={cn(
-          (hasMetadata || project.milestones.length > 0 || links.length > 0) && "border-t border-border pt-5"
+          (hasDocumentsOrLinks || hasMetadata || project.milestones.length > 0) && "border-t border-border pt-5"
         )}>
           {project.content ? (
             <div className="prose prose-sm dark:prose-invert max-w-prose prose-headings:text-sm prose-headings:font-semibold prose-headings:mt-6 prose-headings:mb-2 prose-p:text-[13px] prose-p:leading-relaxed prose-p:my-2.5 prose-code:text-xs prose-pre:text-xs prose-pre:my-3 prose-ul:text-[13px] prose-ul:my-2.5 prose-ol:text-[13px] prose-ol:my-2.5 prose-li:my-0.5 prose-hr:my-5">
@@ -226,102 +246,69 @@ export function ProjectOverview({ project, links, documents }: ProjectOverviewPr
         </div>
       )}
 
-      {/* Documents */}
-      {documents.length > 0 && (
-        <DocumentsSection
-          documents={documents}
-          hasPrecedingContent={!!(hasMetadata || project.milestones.length > 0 || links.length > 0 || hasContent)}
-        />
-      )}
-
-      {!hasMetadata && project.milestones.length === 0 && links.length === 0 && !hasContent && documents.length === 0 && (
+      {!hasMetadata && project.milestones.length === 0 && !hasDocumentsOrLinks && !hasContent && (
         <p className="text-xs text-muted-foreground italic">
           No project description available.
         </p>
+      )}
+
+      {/* Document modal */}
+      {openDoc && (
+        <DocumentModal document={openDoc} onClose={() => setOpenDoc(null)} />
       )}
     </div>
   );
 }
 
-function DocumentsSection({
-  documents,
-  hasPrecedingContent,
+function DocumentModal({
+  document: doc,
+  onClose,
 }: {
-  documents: ProjectDocument[];
-  hasPrecedingContent: boolean;
+  document: ProjectDocument;
+  onClose: () => void;
 }) {
-  const defaultExpanded = documents.length === 1 && documents[0].content
-    ? new Set([documents[0].id])
-    : new Set<string>();
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(defaultExpanded);
-
-  function toggleDoc(id: string) {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", handleKey);
+      document.body.style.overflow = "";
+    };
+  }, [onClose]);
 
   return (
-    <div className={cn(hasPrecedingContent && "border-t border-border pt-4", "pb-4")}>
-      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2.5">
-        Documents
-      </p>
-      <div className="space-y-1">
-        {documents.map((doc) => {
-          const hasContent = !!doc.content;
-          const isExpanded = expandedIds.has(doc.id);
-
-          return (
-            <div key={doc.id}>
-              {hasContent ? (
-                <button
-                  onClick={() => toggleDoc(doc.id)}
-                  className="flex items-center gap-2 w-full px-2 py-1.5 -mx-2 rounded-md text-left hover:bg-muted/50 transition-colors group"
-                >
-                  {isExpanded ? (
-                    <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  ) : (
-                    <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  )}
-                  {doc.icon && (
-                    <span className="text-sm shrink-0">{doc.icon}</span>
-                  )}
-                  <span className="text-xs text-foreground truncate">{doc.title}</span>
-                  <span className="text-[11px] text-muted-foreground shrink-0 ml-auto">
-                    {formatDate(doc.updatedAt)}
-                  </span>
-                </button>
-              ) : (
-                <div className="flex items-center gap-2 px-2 py-1.5 -mx-2">
-                  <span className="w-3.5 h-3.5 shrink-0" />
-                  {doc.icon && (
-                    <span className="text-sm shrink-0">{doc.icon}</span>
-                  )}
-                  <span className="text-xs text-foreground truncate">{doc.title}</span>
-                  <span className="text-[11px] text-muted-foreground shrink-0 ml-auto">
-                    Content available in Linear
-                  </span>
-                </div>
-              )}
-
-              {hasContent && isExpanded && (
-                <div className="pl-[22px] pr-2 pb-3 pt-1">
-                  <div className="prose prose-sm dark:prose-invert max-w-prose prose-headings:text-sm prose-headings:font-semibold prose-headings:mt-6 prose-headings:mb-2 prose-p:text-[13px] prose-p:leading-relaxed prose-p:my-2.5 prose-code:text-xs prose-pre:text-xs prose-pre:my-3 prose-ul:text-[13px] prose-ul:my-2.5 prose-ol:text-[13px] prose-ol:my-2.5 prose-li:my-0.5 prose-hr:my-5">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {doc.content!}
-                    </ReactMarkdown>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] px-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="fixed inset-0 bg-black/50" />
+      <div className="relative bg-background rounded-xl border border-border shadow-xl w-full max-w-2xl max-h-[75vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-border shrink-0">
+          <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+          {doc.icon && <span className="text-base shrink-0">{doc.icon}</span>}
+          <h2 className="text-sm font-semibold text-foreground truncate flex-1">{doc.title}</h2>
+          <span className="text-[11px] text-muted-foreground shrink-0">
+            Updated {formatDate(doc.updatedAt)}
+          </span>
+          <button
+            onClick={onClose}
+            className="p-1 -mr-1 rounded-md hover:bg-muted/50 transition-colors"
+          >
+            <X className="w-4 h-4 text-muted-foreground" />
+          </button>
+        </div>
+        {/* Content */}
+        <div className="flex-1 overflow-auto px-6 py-5">
+          <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-sm prose-headings:font-semibold prose-headings:mt-6 prose-headings:mb-2 prose-p:text-[13px] prose-p:leading-relaxed prose-p:my-2.5 prose-code:text-xs prose-pre:text-xs prose-pre:my-3 prose-ul:text-[13px] prose-ul:my-2.5 prose-ol:text-[13px] prose-ol:my-2.5 prose-li:my-0.5 prose-hr:my-5">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {doc.content!}
+            </ReactMarkdown>
+          </div>
+        </div>
       </div>
     </div>
   );
