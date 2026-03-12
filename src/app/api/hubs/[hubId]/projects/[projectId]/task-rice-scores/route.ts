@@ -103,9 +103,9 @@ export async function PUT(request: Request, { params }: Params) {
 
     // Validate ranges
     if (body.reach !== undefined && body.reach !== null) {
-      if (typeof body.reach !== "number" || !Number.isFinite(body.reach) || body.reach < 1 || body.reach > 10) {
+      if (typeof body.reach !== "number" || !Number.isFinite(body.reach) || !Number.isInteger(body.reach) || body.reach < 1 || body.reach > 10) {
         return NextResponse.json(
-          { error: "reach must be a number between 1 and 10" },
+          { error: "reach must be an integer between 1 and 10" },
           { status: 400 }
         );
       }

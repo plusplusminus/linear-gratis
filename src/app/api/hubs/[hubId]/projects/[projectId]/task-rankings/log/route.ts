@@ -47,11 +47,15 @@ export async function GET(request: Request, { params }: Params) {
 
     // Resolve user IDs to emails
     const userIds = [...new Set(log.map((l) => l.userId))];
-    const { data: members } = await supabaseAdmin
-      .from("hub_members")
-      .select("user_id, email")
-      .eq("hub_id", hubId)
-      .in("user_id", userIds.length > 0 ? userIds : ["__none__"]);
+    let members: Array<{ user_id: string | null; email: string | null }> | null = null;
+    if (userIds.length > 0) {
+      const { data } = await supabaseAdmin
+        .from("hub_members")
+        .select("user_id, email")
+        .eq("hub_id", hubId)
+        .in("user_id", userIds);
+      members = data;
+    }
 
     const memberMap: Record<string, string> = {};
     for (const m of members ?? []) {

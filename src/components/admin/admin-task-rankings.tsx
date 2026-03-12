@@ -142,7 +142,7 @@ export function AdminTaskRankings({
     "rankings" | "activity" | "rice"
   >("rankings");
   const [isLoading, setIsLoading] = useState(true);
-  const [sortBy, setSortBy] = useState<"rank" | "variance">("rank");
+  const [sortBy, setSortBy] = useState<"rank" | "activity">("rank");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const issueMap = useMemo(
@@ -209,7 +209,7 @@ export function AdminTaskRankings({
 
   const sorted = useMemo(() => {
     const entries = [...composite];
-    if (sortBy === "variance") {
+    if (sortBy === "activity") {
       return entries.sort(
         (a, b) =>
           b.rankerCount - a.rankerCount || a.averageRank - b.averageRank
@@ -349,7 +349,7 @@ export function AdminTaskRankings({
               <div className="ml-auto">
                 <button
                   onClick={() =>
-                    setSortBy((s) => (s === "rank" ? "variance" : "rank"))
+                    setSortBy((s) => (s === "rank" ? "activity" : "rank"))
                   }
                   className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
@@ -618,7 +618,7 @@ export function AdminTaskRankings({
                           </span>
                           <span className="text-sm tabular-nums text-right">
                             {entry.averageEffort != null
-                              ? `${entry.averageEffort.toFixed(1)}mo`
+                              ? `${entry.averageEffort.toFixed(1)}d`
                               : "—"}
                           </span>
                           <span
@@ -673,7 +673,7 @@ export function AdminTaskRankings({
                                   </span>
                                   <span className="tabular-nums w-12 text-right">
                                     {s.effort != null
-                                      ? `${s.effort}mo`
+                                      ? `${s.effort}d`
                                       : "—"}
                                   </span>
                                   <span className="tabular-nums w-12 text-right font-medium">

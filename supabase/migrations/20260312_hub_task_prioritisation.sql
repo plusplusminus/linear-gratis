@@ -3,7 +3,7 @@
 
 -- ─── Task Rankings ───
 
-create table hub_task_rankings (
+create table if not exists hub_task_rankings (
   id uuid primary key default gen_random_uuid(),
   hub_id uuid not null references client_hubs(id) on delete cascade,
   user_id text not null,
@@ -15,11 +15,11 @@ create table hub_task_rankings (
   unique (hub_id, user_id, project_linear_id, rank)
 );
 
-create index idx_hub_task_rankings_hub_project on hub_task_rankings (hub_id, project_linear_id);
-create index idx_hub_task_rankings_hub_user on hub_task_rankings (hub_id, user_id, project_linear_id);
+create index if not exists idx_hub_task_rankings_hub_project on hub_task_rankings (hub_id, project_linear_id);
+create index if not exists idx_hub_task_rankings_hub_user on hub_task_rankings (hub_id, user_id, project_linear_id);
 
 -- Task ranking audit log
-create table hub_task_ranking_log (
+create table if not exists hub_task_ranking_log (
   id uuid primary key default gen_random_uuid(),
   hub_id uuid not null references client_hubs(id) on delete cascade,
   user_id text not null,
@@ -30,7 +30,7 @@ create table hub_task_ranking_log (
   created_at timestamptz not null default now()
 );
 
-create index idx_hub_task_ranking_log_hub_project on hub_task_ranking_log (hub_id, project_linear_id, created_at desc);
+create index if not exists idx_hub_task_ranking_log_hub_project on hub_task_ranking_log (hub_id, project_linear_id, created_at desc);
 
 -- ─── Task RICE Scores ───
 

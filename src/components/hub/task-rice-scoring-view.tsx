@@ -251,7 +251,7 @@ export function TaskRiceScoringView({
   }, []);
 
   const saveScore = useCallback(
-    (issueId: string, updated: TaskScore) => {
+    (issueId: string, updated: TaskScore, previous: TaskScore) => {
       const existing = debounceRefs.current.get(issueId);
       if (existing) clearTimeout(existing);
 
@@ -291,9 +291,10 @@ export function TaskRiceScoringView({
               /* best-effort */
             }
           } else {
+            // Revert to previous state on server error
             setScores((prev) => {
               const next = new Map(prev);
-              next.delete(issueId);
+              next.set(issueId, previous);
               return next;
             });
           }
@@ -327,7 +328,7 @@ export function TaskRiceScoringView({
         const updated = { ...current, [field]: value };
         updated.score = calculateScore(updated);
         next.set(issueId, updated);
-        saveScore(issueId, updated);
+        saveScore(issueId, updated, current);
         return next;
       });
     },

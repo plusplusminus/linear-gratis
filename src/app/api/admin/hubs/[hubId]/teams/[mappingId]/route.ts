@@ -50,7 +50,22 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       // Remove any overview-only projects from task priority (they can't coexist)
       if (body.task_priority_project_ids === undefined) {
         // Only auto-clean if task_priority_project_ids wasn't explicitly set in this request
-        // (if it was, the frontend already handled the cleanup)
+        const { data: current } = await supabaseAdmin
+          .from("hub_team_mappings")
+          .select("task_priority_project_ids")
+          .eq("id", mappingId)
+          .eq("hub_id", hubId)
+          .single();
+        const currentTaskPriorityIds: string[] =
+          (current as { task_priority_project_ids?: string[] })
+            ?.task_priority_project_ids ?? [];
+        const overviewSet = new Set(body.overview_only_project_ids);
+        const filtered = currentTaskPriorityIds.filter(
+          (id) => !overviewSet.has(id)
+        );
+        if (filtered.length !== currentTaskPriorityIds.length) {
+          updates.task_priority_project_ids = filtered;
+        }
       }
     }
     if (body.task_priority_project_ids !== undefined) {
