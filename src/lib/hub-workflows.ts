@@ -31,6 +31,24 @@ export type WorkflowExecutionResult = {
 // -- Helpers -----------------------------------------------------------------
 
 /**
+ * Check whether an issue's current state satisfies a rule's status condition.
+ * - null/undefined condition → unconditional (always matches)
+ * - non-array (malformed JSONB) → never matches
+ * - empty array → never matches
+ * - otherwise → matches if currentStateId is in the list
+ */
+function stateConditionMatches(
+  conditionStateIds: unknown,
+  currentStateId: string | undefined
+): boolean {
+  if (conditionStateIds == null) return true;
+  if (!Array.isArray(conditionStateIds)) return false;
+  if (conditionStateIds.length === 0) return false;
+  if (!currentStateId) return false;
+  return conditionStateIds.includes(currentStateId);
+}
+
+/**
  * Compute added/removed label sets from previous and new label arrays.
  */
 export function buildLabelChangeContext(
@@ -87,14 +105,8 @@ export function evaluateWorkflowRules(
         break;
     }
 
-    // Check status condition: if the rule has condition_state_ids (non-null array),
-    // the issue's current state must be in that list for the rule to fire.
-    // An empty array means no statuses match, so the rule never fires.
-    // Non-array values (malformed JSONB) are treated as non-matching.
-    if (matches && rule.condition_state_ids != null) {
-      if (!Array.isArray(rule.condition_state_ids) || rule.condition_state_ids.length === 0 || !context.currentStateId || !rule.condition_state_ids.includes(context.currentStateId)) {
-        matches = false;
-      }
+    if (matches && !stateConditionMatches(rule.condition_state_ids, context.currentStateId)) {
+      matches = false;
     }
 
     if (matches) {
