@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase";
-import { fetchHubProjects } from "@/lib/hub-read";
 import { HubRankings } from "@/components/admin/hub-rankings";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
@@ -20,12 +19,36 @@ export default async function HubRankingsPage({
 
   if (!hub) notFound();
 
-  const projects = await fetchHubProjects(hubId);
-  const projectInfos = projects.map((p) => ({
-    id: p.id,
-    name: p.name,
-    color: p.color,
-  }));
+  // Fetch all synced projects for this hub's teams (no visibility filter)
+  // so admin rankings can resolve names for all ranked projects
+  const { data: mappings } = await supabaseAdmin
+    .from("hub_team_mappings")
+    .select("linear_team_id")
+    .eq("hub_id", hubId);
+
+  const teamIds = (mappings ?? []).map((m) => m.linear_team_id);
+
+  const { data: allProjects } = await supabaseAdmin
+    .from("synced_projects")
+    .select("linear_id, data")
+    .eq("user_id", "workspace");
+
+  const projectInfos = (allProjects ?? [])
+    .filter((p) => {
+      const teams = (p.data as Record<string, unknown>)?.teams;
+      return (
+        Array.isArray(teams) &&
+        teams.some((t: { id?: string }) => teamIds.includes(t.id ?? ""))
+      );
+    })
+    .map((p) => ({
+      id: p.linear_id,
+      name:
+        ((p.data as Record<string, unknown>)?.name as string) ?? p.linear_id,
+      color: (p.data as Record<string, unknown>)?.color as
+        | string
+        | undefined,
+    }));
 
   return (
     <div className="max-w-4xl">
