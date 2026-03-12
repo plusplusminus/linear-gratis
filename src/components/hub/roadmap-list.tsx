@@ -165,10 +165,11 @@ function ProjectCard({ project }: { project: Project }) {
 }
 
 function formatDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: d.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
-  });
+  // Parse as UTC to stay consistent with the UTC bucketing logic above
+  const d = new Date(dateStr + (dateStr.includes("T") ? "" : "T00:00:00Z"));
+  const day = d.getUTCDate();
+  const month = MONTH_NAMES[d.getUTCMonth()];
+  const year = d.getUTCFullYear();
+  const currentYear = new Date().getUTCFullYear();
+  return year !== currentYear ? `${month} ${day}, ${year}` : `${month} ${day}`;
 }
