@@ -219,13 +219,12 @@ When creating or editing a rule, the **"Only when issue is in status"** field le
 
 This fires whenever "Approved" is added, regardless of the issue's current status.
 
-**Status-aware rules:**
+**Status-aware rules (two separate rules, same label):**
 
-> When label "Client Approved" is added **and issue is in "Staging Review"** → Set status to "Ready for Release"
+- When label "Client Approved" is added **and issue is in "Staging Review"** → Set status to "Ready for Release"
+- When label "Client Approved" is added **and issue is in "Prod Review"** → Set status to "Done"
 
-> When label "Client Approved" is added **and issue is in "Prod Review"** → Set status to "Done"
-
-These are two separate rules using the same label and trigger type, differentiated by their status condition. When a client adds "Client Approved" to an issue in Staging Review, it moves to Ready for Release. The same label on an issue in Prod Review moves it to Done.
+When a client adds "Client Approved" to an issue in Staging Review, it moves to Ready for Release. The same label on an issue in Prod Review moves it to Done.
 
 ### How It Works
 
