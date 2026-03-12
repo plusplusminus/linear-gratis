@@ -71,7 +71,6 @@ export async function POST(
         organizationId: hub.workos_org_id,
         inviterUserId: user.id,
         expiresInDays: 30,
-        redirectUri: process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI!,
       });
       invitationId = invitation.id;
     } catch (error) {
