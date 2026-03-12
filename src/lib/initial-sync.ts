@@ -821,7 +821,7 @@ export async function fetchIssuesByIds(
 
   const query = `
     query IssuesByIds($ids: [ID!]!, $after: String) {
-      issues(filter: { id: { in: $ids } }, first: 50, after: $after) {
+      issues(filter: { id: { in: $ids } }, first: ${BATCH_IDS_SIZE}, after: $after) {
         pageInfo { hasNextPage endCursor }
         nodes {
           id
@@ -860,7 +860,7 @@ export async function fetchProjectsByIds(
 
   const query = `
     query ProjectsByIds($ids: [ID!]!, $after: String) {
-      projects(filter: { id: { in: $ids } }, first: 50, after: $after) {
+      projects(filter: { id: { in: $ids } }, first: ${BATCH_IDS_SIZE}, after: $after) {
         pageInfo { hasNextPage endCursor }
         nodes {
           id
@@ -904,7 +904,7 @@ export async function fetchCyclesByIds(
 
   const query = `
     query CyclesByIds($ids: [ID!]!, $after: String) {
-      cycles(filter: { id: { in: $ids } }, first: 50, after: $after) {
+      cycles(filter: { id: { in: $ids } }, first: ${BATCH_IDS_SIZE}, after: $after) {
         pageInfo { hasNextPage endCursor }
         nodes {
           id
@@ -942,7 +942,7 @@ export async function fetchInitiativesByIds(
 
   const query = `
     query InitiativesByIds($ids: [ID!]!, $after: String) {
-      initiatives(filter: { id: { in: $ids } }, first: 50, after: $after) {
+      initiatives(filter: { id: { in: $ids } }, first: ${BATCH_IDS_SIZE}, after: $after) {
         pageInfo { hasNextPage endCursor }
         nodes {
           id
