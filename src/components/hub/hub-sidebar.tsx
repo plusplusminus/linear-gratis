@@ -64,6 +64,8 @@ const buttonIconMap: Record<string, LucideIcon> = {
   megaphone: Megaphone,
 };
 
+const ctaClasses = "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm font-medium transition-colors w-full bg-primary/10 text-primary hover:bg-primary/15";
+
 export function HubSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [activeFormId, setActiveFormId] = useState<string | null>(null);
@@ -208,40 +210,33 @@ export function HubSidebar() {
               </span>
             </div>
           )}
-          {(() => {
-            const ctaClasses = "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm font-medium transition-colors w-full bg-primary/10 text-primary hover:bg-primary/15";
+          {forms.map((form) => {
+            const Icon = (form.button_icon && buttonIconMap[form.button_icon])
+              || formTypeIcons[form.type]
+              || FileText;
+            const label = form.button_label || form.name;
             return (
-              <>
-                {forms.map((form) => {
-                  const Icon = (form.button_icon && buttonIconMap[form.button_icon])
-                    || formTypeIcons[form.type]
-                    || FileText;
-                  const label = form.button_label || form.name;
-                  return (
-                    <button
-                      key={form.id}
-                      onClick={() => setActiveFormId(form.id)}
-                      className={ctaClasses}
-                      title={collapsed ? label : undefined}
-                      aria-label={collapsed ? label : undefined}
-                    >
-                      <Icon className="w-4 h-4 shrink-0" />
-                      {!collapsed && <span className="truncate">{label}</span>}
-                    </button>
-                  );
-                })}
-                <button
-                  onClick={() => setShowHistory(true)}
-                  className={ctaClasses}
-                  title={collapsed ? "My Submissions" : undefined}
-                  aria-label={collapsed ? "My Submissions" : undefined}
-                >
-                  <ClipboardList className="w-4 h-4 shrink-0" />
-                  {!collapsed && <span className="truncate">My Submissions</span>}
-                </button>
-              </>
+              <button
+                key={form.id}
+                onClick={() => setActiveFormId(form.id)}
+                className={ctaClasses}
+                title={collapsed ? label : undefined}
+                aria-label={collapsed ? label : undefined}
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                {!collapsed && <span className="truncate">{label}</span>}
+              </button>
             );
-          })()}
+          })}
+          <button
+            onClick={() => setShowHistory(true)}
+            className={ctaClasses}
+            title={collapsed ? "My Submissions" : undefined}
+            aria-label={collapsed ? "My Submissions" : undefined}
+          >
+            <ClipboardList className="w-4 h-4 shrink-0" />
+            {!collapsed && <span className="truncate">My Submissions</span>}
+          </button>
         </div>
       )}
 
