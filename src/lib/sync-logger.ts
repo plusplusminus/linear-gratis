@@ -65,11 +65,10 @@ export async function logSyncEvent(input: SyncEventInput): Promise<void> {
       payload_summary: input.payloadSummary ?? null,
     });
     if (error) {
-      Sentry.captureException(error, { tags: { area: "sync-logger" } });
       console.warn("sync-logger: failed to log event", error);
     }
   } catch (e) {
-    Sentry.captureException(e, { tags: { area: "sync-logger" } });
+    // Transient network errors (ECONNRESET etc.) — don't escalate to Sentry
     console.warn("sync-logger: failed to log event", e);
   }
 }
