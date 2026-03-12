@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { AlertCircle, CircleDot, Loader2 } from "lucide-react";
+import { AlertCircle, CircleDot, HelpCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHub } from "@/contexts/hub-context";
 import { useCanInteract } from "@/hooks/use-can-interact";
@@ -71,6 +71,70 @@ function scoreColor(score: number | null): string {
   if (ratio > 0.3) return "bg-emerald-500/8 text-emerald-300/80";
   if (ratio > 0.1) return "bg-muted/40 text-muted-foreground";
   return "bg-muted/20 text-muted-foreground";
+}
+
+const COLUMN_INFO: Record<string, { label: string; description: string; scale: string }> = {
+  reach: {
+    label: "Reach",
+    description: "How many people will this impact in a given time period?",
+    scale: "1 (few) – 10 (everyone)",
+  },
+  impact: {
+    label: "Impact",
+    description: "How much will this impact each person affected?",
+    scale: "0.25 Minimal · 0.5 Low · 1 Medium · 2 High · 3 Massive",
+  },
+  confidence: {
+    label: "Confidence",
+    description: "How confident are you in your Reach, Impact, and Effort estimates?",
+    scale: "0% (pure guess) – 100% (backed by data)",
+  },
+  effort: {
+    label: "Effort",
+    description: "How many person-days of work will this task take to complete?",
+    scale: "0.5+ days (lower = easier)",
+  },
+  score: {
+    label: "Score",
+    description: "Calculated as (Reach × Impact × Confidence%) ÷ Effort. Higher is better.",
+    scale: "Auto-calculated",
+  },
+};
+
+function ColumnHeader({ id, align = "right", className }: { id: string; align?: "left" | "right"; className?: string }) {
+  const info = COLUMN_INFO[id];
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLTableCellElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
+  if (!info) return null;
+
+  return (
+    <th ref={ref} className={cn("text-[10px] uppercase tracking-wider text-muted-foreground font-medium px-3 py-2 relative", align === "right" ? "text-right" : "text-left", className)}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+      >
+        {info.label}
+        <HelpCircle className="w-2.5 h-2.5 opacity-40 hover:opacity-100 transition-opacity" />
+      </button>
+      {open && (
+        <div className="absolute z-50 top-full mt-1 right-0 w-56 rounded-md border border-border bg-popover p-3 shadow-md text-left normal-case tracking-normal">
+          <p className="text-xs text-foreground font-medium mb-1">{info.label}</p>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">{info.description}</p>
+          <p className="text-[10px] text-muted-foreground/70 mt-1.5 font-mono">{info.scale}</p>
+        </div>
+      )}
+    </th>
+  );
 }
 
 function EffortInput({
@@ -322,7 +386,7 @@ export function TaskRiceScoringView({
               </li>
               <li>
                 <span className="text-foreground/70 font-medium">Effort</span>{" "}
-                — How many person-months will this take? (0.5+)
+                — How many person-days will this take? (0.5+)
               </li>
             </ul>
             <p className="pt-2 text-xs font-mono text-muted-foreground/70">
@@ -343,21 +407,11 @@ export function TaskRiceScoringView({
               <th className="text-left text-[10px] uppercase tracking-wider text-muted-foreground font-medium px-3 py-2 w-[40%]">
                 Task
               </th>
-              <th className="text-right text-[10px] uppercase tracking-wider text-muted-foreground font-medium px-3 py-2 w-[12%]">
-                Reach
-              </th>
-              <th className="text-right text-[10px] uppercase tracking-wider text-muted-foreground font-medium px-3 py-2 w-[14%]">
-                Impact
-              </th>
-              <th className="text-right text-[10px] uppercase tracking-wider text-muted-foreground font-medium px-3 py-2 w-[12%]">
-                Confidence
-              </th>
-              <th className="text-right text-[10px] uppercase tracking-wider text-muted-foreground font-medium px-3 py-2 w-[12%]">
-                Effort
-              </th>
-              <th className="text-right text-[10px] uppercase tracking-wider text-muted-foreground font-medium px-3 py-2 w-[10%]">
-                Score
-              </th>
+              <ColumnHeader id="reach" className="w-[12%]" />
+              <ColumnHeader id="impact" className="w-[14%]" />
+              <ColumnHeader id="confidence" className="w-[12%]" />
+              <ColumnHeader id="effort" className="w-[12%]" />
+              <ColumnHeader id="score" className="w-[10%]" />
             </tr>
           </thead>
           <tbody>
@@ -497,7 +551,7 @@ export function TaskRiceScoringView({
                     </div>
                   </td>
 
-                  {/* Effort (months) */}
+                  {/* Effort (days) */}
                   <td className="px-3 py-2">
                     <div className="flex items-center justify-end gap-0.5">
                       <EffortInput
@@ -507,7 +561,7 @@ export function TaskRiceScoringView({
                       />
                       {ts.effort != null && (
                         <span className="text-[10px] text-muted-foreground">
-                          mo
+                          d
                         </span>
                       )}
                     </div>
