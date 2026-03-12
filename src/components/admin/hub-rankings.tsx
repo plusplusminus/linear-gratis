@@ -550,7 +550,7 @@ export function HubRankings({
                         {entry.averageConfidence != null ? `${Math.round(entry.averageConfidence)}%` : "—"}
                       </span>
                       <span className="text-sm tabular-nums text-right">
-                        {entry.averageEffort != null ? `${entry.averageEffort.toFixed(1)}d` : "—"}
+                        {entry.averageEffort != null ? `${entry.averageEffort.toFixed(1)}mo` : "—"}
                       </span>
                       <span
                         className={cn(
@@ -585,7 +585,7 @@ export function HubRankings({
                               <span className="tabular-nums w-10 text-right">{s.reach ?? "—"}</span>
                               <span className="tabular-nums w-10 text-right">{s.impact ?? "—"}</span>
                               <span className="tabular-nums w-14 text-right">{s.confidence != null ? `${s.confidence}%` : "—"}</span>
-                              <span className="tabular-nums w-12 text-right">{s.effort != null ? `${s.effort}d` : "—"}</span>
+                              <span className="tabular-nums w-12 text-right">{s.effort != null ? `${s.effort}mo` : "—"}</span>
                               <span className="tabular-nums w-12 text-right font-medium">{s.score != null ? s.score.toFixed(1) : "—"}</span>
                             </div>
                           ))}

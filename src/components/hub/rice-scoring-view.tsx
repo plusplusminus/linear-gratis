@@ -97,8 +97,8 @@ const COLUMN_INFO: Record<string, { label: string; description: string; scale: s
   },
   effort: {
     label: "Effort",
-    description: "How many person-days of work will this take to complete?",
-    scale: "0.5+ days (lower = easier)",
+    description: "How many person-months of work will this take to complete?",
+    scale: "0.5+ months (lower = easier)",
   },
   score: {
     label: "Score",
@@ -391,7 +391,7 @@ export function RiceScoringView({ projects }: { projects: Project[] }) {
               </li>
               <li>
                 <span className="text-foreground/70 font-medium">Effort</span>{" "}
-                — How many person-days will this take? (0.5+)
+                — How many person-months will this take? (0.5+)
               </li>
             </ul>
             <p className="pt-2 text-xs font-mono text-muted-foreground/70">
@@ -542,7 +542,7 @@ export function RiceScoringView({ projects }: { projects: Project[] }) {
                     </div>
                   </td>
 
-                  {/* Effort (days) — use text input to allow typing decimals like "0.5" */}
+                  {/* Effort (months) — use text input to allow typing decimals like "0.5" */}
                   <td className="px-3 py-2">
                     <div className="flex items-center justify-end gap-0.5">
                       <EffortInput
@@ -552,7 +552,7 @@ export function RiceScoringView({ projects }: { projects: Project[] }) {
                       />
                       {ps.effort != null && (
                         <span className="text-[10px] text-muted-foreground">
-                          d
+                          mo
                         </span>
                       )}
                     </div>
