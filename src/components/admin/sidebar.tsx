@@ -130,6 +130,7 @@ export function AdminSidebar() {
               : "bg-primary/10 text-primary hover:bg-primary/15"
           )}
           title={collapsed ? "Create Hub" : undefined}
+          aria-label="Create Hub"
         >
           <Plus className="w-4 h-4 shrink-0" />
           {!collapsed && <span>Create Hub</span>}
