@@ -64,7 +64,7 @@ const buttonIconMap: Record<string, LucideIcon> = {
   megaphone: Megaphone,
 };
 
-const ctaClasses = "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm font-medium transition-colors w-full bg-primary/10 text-primary hover:bg-primary/15";
+const ctaClasses = "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-colors w-full bg-primary/10 text-primary hover:bg-primary/15";
 
 export function HubSidebar() {
   const [collapsed, setCollapsed] = useState(false);
