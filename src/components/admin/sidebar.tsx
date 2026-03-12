@@ -112,21 +112,33 @@ export function AdminSidebar() {
         )}
       </div>
 
-      {/* Footer actions */}
-      <div className="border-t border-border py-1.5 px-1.5 space-y-0.5 shrink-0">
+      {/* Actions (CTAs) */}
+      <div className="border-t border-border py-1.5 px-1.5 space-y-1 shrink-0">
+        {!collapsed && (
+          <div className="px-2 pb-0.5">
+            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+              Actions
+            </span>
+          </div>
+        )}
         <Link
           href="/admin/hubs/new"
           className={cn(
-            "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-colors",
+            "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm font-medium transition-colors",
             pathname === "/admin/hubs/new"
-              ? "bg-accent text-foreground"
-              : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+              ? "bg-primary text-primary-foreground"
+              : "bg-primary/10 text-primary hover:bg-primary/15"
           )}
           title={collapsed ? "Create Hub" : undefined}
+          aria-label="Create Hub"
         >
           <Plus className="w-4 h-4 shrink-0" />
           {!collapsed && <span>Create Hub</span>}
         </Link>
+      </div>
+
+      {/* Footer navigation */}
+      <div className="border-t border-border py-1.5 px-1.5 space-y-0.5 shrink-0">
         <Link
           href="/admin/forms"
           className={cn(
