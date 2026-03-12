@@ -75,7 +75,7 @@ export function UserMenu({ displayName, showName = true }: UserMenuProps) {
           <div className="sm:hidden -mx-1 my-1 h-px bg-muted" />
           <button
             role="menuitem"
-            onClick={() => signOut()}
+            onClick={() => signOut({ returnTo: window.location.origin })}
             className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent transition-colors cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
