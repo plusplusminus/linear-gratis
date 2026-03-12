@@ -79,6 +79,62 @@ function scoreColor(score: number | null): string {
   return "bg-muted/20 text-muted-foreground";
 }
 
+/** Text-mode input for effort that allows typing decimals like "0.5" without blocking on keystroke. */
+function EffortInput({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: number | null;
+  disabled: boolean;
+  onChange: (v: number | null) => void;
+}) {
+  const [draft, setDraft] = useState(value != null ? String(value) : "");
+
+  // Sync external value changes (e.g. load from server)
+  useEffect(() => {
+    setDraft(value != null ? String(value) : "");
+  }, [value]);
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={draft}
+      disabled={disabled}
+      onChange={(e) => {
+        const raw = e.target.value;
+        // Allow empty, digits, and one decimal point while typing
+        if (raw === "" || /^\d*\.?\d*$/.test(raw)) {
+          setDraft(raw);
+        }
+      }}
+      onBlur={() => {
+        if (draft === "" || draft === ".") {
+          onChange(null);
+          setDraft("");
+          return;
+        }
+        const v = parseFloat(draft);
+        if (Number.isNaN(v) || v < 0.5) {
+          // Revert to last valid value
+          setDraft(value != null ? String(value) : "");
+          return;
+        }
+        onChange(v);
+        setDraft(String(v));
+      }}
+      placeholder="—"
+      className={cn(
+        "w-12 tabular-nums text-right text-sm bg-transparent border-none outline-none",
+        "focus:ring-1 focus:ring-primary/50 rounded px-1 py-1 min-h-[44px]",
+        "placeholder:text-muted-foreground/40",
+        !disabled ? "" : "cursor-default opacity-60"
+      )}
+    />
+  );
+}
+
 export function RiceScoringView({ projects }: { projects: Project[] }) {
   const { hubId } = useHub();
   const canInteract = useCanInteract();
@@ -170,9 +226,20 @@ export function RiceScoringView({ projects }: { projects: Project[] }) {
             } catch {
               /* best-effort */
             }
+          } else {
+            // Revert optimistic update on server error
+            setScores((prev) => {
+              const next = new Map(prev);
+              const current = next.get(projectId);
+              if (current) {
+                // Reset the field that failed — remove the optimistic value
+                next.delete(projectId);
+              }
+              return next;
+            });
           }
         } catch {
-          // Silent — optimistic UI already updated
+          // Network error / abort — keep optimistic state (will retry)
         } finally {
           setSavingIds((prev) => {
             const next = new Set(prev);
@@ -425,27 +492,13 @@ export function RiceScoringView({ projects }: { projects: Project[] }) {
                     </div>
                   </td>
 
-                  {/* Effort (months) */}
+                  {/* Effort (months) — use text input to allow typing decimals like "0.5" */}
                   <td className="px-3 py-2">
                     <div className="flex items-center justify-end gap-0.5">
-                      <input
-                        type="number"
-                        min={0.5}
-                        step={0.5}
-                        value={ps.effort ?? ""}
+                      <EffortInput
+                        value={ps.effort}
                         disabled={!canInteract}
-                        onChange={(e) => {
-                          const v = e.target.value === "" ? null : parseFloat(e.target.value);
-                          if (v != null && v < 0.5) return;
-                          updateField(project.id, "effort", v);
-                        }}
-                        placeholder="—"
-                        className={cn(
-                          "w-12 tabular-nums text-right text-sm bg-transparent border-none outline-none",
-                          "focus:ring-1 focus:ring-primary/50 rounded px-1 py-1 min-h-[44px]",
-                          "placeholder:text-muted-foreground/40",
-                          !canInteract && "cursor-default opacity-60"
-                        )}
+                        onChange={(v) => updateField(project.id, "effort", v)}
                       />
                       {ps.effort != null && (
                         <span className="text-[10px] text-muted-foreground">

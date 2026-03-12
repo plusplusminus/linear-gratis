@@ -38,8 +38,8 @@ export function RoadmapList({ projects }: { projects: Project[] }) {
         continue;
       }
       const d = new Date(p.targetDate);
-      const year = d.getFullYear();
-      const month = d.getMonth();
+      const year = d.getUTCFullYear();
+      const month = d.getUTCMonth();
       const key = `${year}-${String(month).padStart(2, "0")}`;
       const label = `${MONTH_NAMES[month]} ${year}`;
 

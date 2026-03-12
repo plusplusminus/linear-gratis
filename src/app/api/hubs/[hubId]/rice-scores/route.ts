@@ -86,18 +86,18 @@ export async function PUT(request: Request, { params }: Params) {
       );
     }
 
-    // Validate ranges
+    // Validate ranges (type-check first — body comes from untrusted JSON)
     if (body.reach !== undefined && body.reach !== null) {
-      if (body.reach < 1 || body.reach > 10) {
+      if (typeof body.reach !== "number" || !Number.isFinite(body.reach) || body.reach < 1 || body.reach > 10) {
         return NextResponse.json(
-          { error: "reach must be between 1 and 10" },
+          { error: "reach must be a number between 1 and 10" },
           { status: 400 }
         );
       }
     }
     if (body.impact !== undefined && body.impact !== null) {
       const validImpacts = [0.25, 0.5, 1, 2, 3];
-      if (!validImpacts.includes(body.impact)) {
+      if (typeof body.impact !== "number" || !validImpacts.includes(body.impact)) {
         return NextResponse.json(
           { error: "impact must be one of: 0.25, 0.5, 1, 2, 3" },
           { status: 400 }
@@ -105,17 +105,17 @@ export async function PUT(request: Request, { params }: Params) {
       }
     }
     if (body.confidence !== undefined && body.confidence !== null) {
-      if (body.confidence < 0 || body.confidence > 100) {
+      if (typeof body.confidence !== "number" || !Number.isFinite(body.confidence) || body.confidence < 0 || body.confidence > 100) {
         return NextResponse.json(
-          { error: "confidence must be between 0 and 100" },
+          { error: "confidence must be a number between 0 and 100" },
           { status: 400 }
         );
       }
     }
     if (body.effort !== undefined && body.effort !== null) {
-      if (body.effort < 0.5) {
+      if (typeof body.effort !== "number" || !Number.isFinite(body.effort) || body.effort < 0.5) {
         return NextResponse.json(
-          { error: "effort must be at least 0.5" },
+          { error: "effort must be a number at least 0.5" },
           { status: 400 }
         );
       }

@@ -272,10 +272,11 @@ export function RankingView({ projects }: { projects: Project[] }) {
       }
     }
 
-    // Save ranked items
-    if (ranked.length > 0) {
-      saveRanking(ranked);
-    }
+    // Save ranked items — read current state to avoid stale closure
+    setRanked((current) => {
+      if (current.length > 0) saveRanking(current);
+      return current;
+    });
     setShowBanner(false);
   }
 

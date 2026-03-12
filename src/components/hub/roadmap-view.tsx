@@ -233,6 +233,7 @@ export function RoadmapView({ projects }: { projects: Project[] }) {
         <div className="flex items-center border border-border rounded-md overflow-hidden">
           <button
             onClick={() => changeView("list")}
+            aria-label="List view"
             className={cn(
               "flex items-center gap-1 px-2 py-1 text-xs transition-colors",
               viewMode === "list"
@@ -245,6 +246,7 @@ export function RoadmapView({ projects }: { projects: Project[] }) {
           </button>
           <button
             onClick={() => changeView("timeline")}
+            aria-label="Timeline view"
             className={cn(
               "flex items-center gap-1 px-2 py-1 text-xs transition-colors",
               viewMode === "timeline"
@@ -257,6 +259,7 @@ export function RoadmapView({ projects }: { projects: Project[] }) {
           </button>
           <button
             onClick={() => changeView("board")}
+            aria-label="Board view"
             className={cn(
               "flex items-center gap-1 px-2 py-1 text-xs transition-colors",
               viewMode === "board"
@@ -269,6 +272,7 @@ export function RoadmapView({ projects }: { projects: Project[] }) {
           </button>
           <button
             onClick={() => changeView("priority")}
+            aria-label="Priority view"
             className={cn(
               "flex items-center gap-1 px-2 py-1 text-xs transition-colors",
               viewMode === "priority"
@@ -406,7 +410,7 @@ export function RoadmapView({ projects }: { projects: Project[] }) {
         priorityMode === "rice" ? (
           <RiceScoringView projects={filtered} />
         ) : (
-          <RankingView projects={projects} />
+          <RankingView projects={filtered} />
         )
       ) : viewMode === "timeline" ? (
         <div className="flex-1 overflow-auto p-6">

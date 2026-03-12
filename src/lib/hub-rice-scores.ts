@@ -103,7 +103,7 @@ export async function fetchCompositeRiceScores(
       averageConfidence: avg(rows.map((r) => r.confidence)),
       averageEffort: avg(rows.map((r) => r.effort)),
       averageScore: avg(withScore.map((r) => r.score)),
-      scorerCount: new Set(rows.map((r) => r.user_id)).size,
+      scorerCount: new Set(withScore.map((r) => r.user_id)).size,
       scores: rows.map((r) => ({
         userId: r.user_id,
         reach: r.reach,

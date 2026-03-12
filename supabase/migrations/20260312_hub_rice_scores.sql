@@ -7,10 +7,10 @@ create table if not exists hub_rice_scores (
   hub_id uuid not null references client_hubs(id) on delete cascade,
   user_id text not null,
   project_linear_id text not null,
-  reach numeric,           -- 1-10 scale
-  impact numeric,          -- 0.25, 0.5, 1, 2, 3
-  confidence numeric,      -- 0-100 (percentage)
-  effort numeric,          -- person-months, 0.5+
+  reach numeric check (reach >= 1 and reach <= 10),
+  impact numeric check (impact in (0.25, 0.5, 1, 2, 3)),
+  confidence numeric check (confidence >= 0 and confidence <= 100),
+  effort numeric check (effort >= 0.5),
   score numeric generated always as (
     case when reach is not null and impact is not null and confidence is not null and effort is not null and effort > 0
       then (reach * impact * (confidence / 100.0)) / effort

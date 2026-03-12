@@ -491,7 +491,7 @@ export function HubRankings({
       )}
 
       {activeTab === "rice" && (
-        <div className="border border-border rounded-lg overflow-hidden bg-card">
+        <div className="border border-border rounded-lg overflow-x-auto bg-card">
           {sortedRice.length === 0 ? (
             <div className="p-6 text-center text-sm text-muted-foreground">
               No RICE scores submitted yet
