@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { captureEvent } from "@/lib/posthog-client";
 import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import remarkGfm from "remark-gfm";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import type { ProjectLink, ProjectDocument } from "./project-tabs";
@@ -79,7 +80,7 @@ function formatDate(dateStr: string): string {
   });
 }
 
-export function ProjectOverview({ project, links: _links, documents: _documents }: ProjectOverviewProps) {
+export function ProjectOverview({ project, links, documents: _documents }: ProjectOverviewProps) {
   const projectStatus = project.status.name;
   useEffect(() => {
     captureEvent(POSTHOG_EVENTS.project_viewed);
@@ -155,10 +156,61 @@ export function ProjectOverview({ project, links: _links, documents: _documents 
         </div>
       )}
 
+      {/* Resources (external links) */}
+      {links.length > 0 && (
+        <div className={cn(
+          (hasMetadata || project.milestones.length > 0) && "border-t border-border pt-4",
+          "pb-4"
+        )}>
+          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2.5">
+            Resources
+          </p>
+          <div className="space-y-1">
+            {links.map((link) => {
+              let hostname = "";
+              try {
+                hostname = new URL(link.url).hostname.replace(/^www\./, "");
+              } catch {
+                // invalid URL, skip hostname
+              }
+              const displayLabel = link.label || hostname || link.url;
+
+              return (
+                <a
+                  key={link.id}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-2 py-1.5 -mx-2 rounded-md text-xs text-foreground hover:bg-muted/50 transition-colors group"
+                >
+                  <svg
+                    className="w-3.5 h-3.5 text-muted-foreground shrink-0 group-hover:text-foreground transition-colors"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M6.5 3.5H3.5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3" />
+                    <path d="M9.5 2.5h4v4" />
+                    <path d="M13.5 2.5L7.5 8.5" />
+                  </svg>
+                  <span className="truncate">{displayLabel}</span>
+                  {hostname && displayLabel !== hostname && (
+                    <span className="text-muted-foreground text-[11px] shrink-0">{hostname}</span>
+                  )}
+                </a>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Full description (content from Linear) */}
       {hasContent && (
         <div className={cn(
-          (hasMetadata || project.milestones.length > 0) && "border-t border-border pt-5"
+          (hasMetadata || project.milestones.length > 0 || links.length > 0) && "border-t border-border pt-5"
         )}>
           {project.content ? (
             <div className="prose prose-sm dark:prose-invert max-w-prose prose-headings:text-sm prose-headings:font-semibold prose-headings:mt-6 prose-headings:mb-2 prose-p:text-[13px] prose-p:leading-relaxed prose-p:my-2.5 prose-code:text-xs prose-pre:text-xs prose-pre:my-3 prose-ul:text-[13px] prose-ul:my-2.5 prose-ol:text-[13px] prose-ol:my-2.5 prose-li:my-0.5 prose-hr:my-5">
@@ -174,7 +226,7 @@ export function ProjectOverview({ project, links: _links, documents: _documents 
         </div>
       )}
 
-      {!hasMetadata && project.milestones.length === 0 && !hasContent && (
+      {!hasMetadata && project.milestones.length === 0 && links.length === 0 && !hasContent && (
         <p className="text-xs text-muted-foreground italic">
           No project description available.
         </p>
