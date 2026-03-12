@@ -51,7 +51,8 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       (body.overview_only_project_ids !== undefined && body.task_priority_project_ids === undefined) ||
       (body.task_priority_project_ids !== undefined && body.overview_only_project_ids === undefined);
 
-    let existingMapping: { overview_only_project_ids: string[]; task_priority_project_ids: string[] } | null = null;
+    type MappingFields = { overview_only_project_ids: string[]; task_priority_project_ids: string[] };
+    let existingMapping: MappingFields | null = null;
     if (needsCrossValidation) {
       const { data, error: fetchError } = await supabaseAdmin
         .from("hub_team_mappings")
@@ -65,7 +66,10 @@ export async function PATCH(request: Request, { params }: RouteParams) {
           { status: 404 }
         );
       }
-      existingMapping = data as unknown as typeof existingMapping;
+      existingMapping = {
+        overview_only_project_ids: (data.overview_only_project_ids ?? []) as string[],
+        task_priority_project_ids: (data.task_priority_project_ids ?? []) as string[],
+      };
     }
 
     if (body.overview_only_project_ids !== undefined) {

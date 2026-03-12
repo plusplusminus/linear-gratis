@@ -337,7 +337,7 @@ export function TaskRiceScoringView({
   );
 
   const updateField = useCallback(
-    (issueId: string, field: keyof TaskScore, value: number | null) => {
+    (issueId: string, field: keyof Omit<TaskScore, "score">, value: number | null) => {
       setScores((prev) => {
         const next = new Map(prev);
         const current = next.get(issueId) || {
@@ -448,6 +448,8 @@ export function TaskRiceScoringView({
               };
               const isSaving = savingIds.has(task.id);
               const complete = isComplete(ts);
+              const showIncomplete = !complete &&
+                [ts.reach, ts.impact, ts.confidence, ts.effort].some((v) => v != null);
 
               return (
                 <tr
@@ -470,18 +472,12 @@ export function TaskRiceScoringView({
                       {isSaving && (
                         <Loader2 className="w-3 h-3 animate-spin text-muted-foreground/50 shrink-0" />
                       )}
-                      {!complete &&
-                        ts.reach == null &&
-                        ts.impact == null &&
-                        ts.confidence == null &&
-                        ts.effort == null
-                        ? null
-                        : !complete && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-500/80 shrink-0">
-                              <AlertCircle className="w-2.5 h-2.5" />
-                              Incomplete
-                            </span>
-                          )}
+                      {showIncomplete && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-500/80 shrink-0">
+                          <AlertCircle className="w-2.5 h-2.5" />
+                          Incomplete
+                        </span>
+                      )}
                     </div>
                   </td>
 
