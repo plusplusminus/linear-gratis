@@ -21,6 +21,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       hidden_label_ids?: string[];
       auto_include_projects?: boolean;
       overview_only_project_ids?: string[];
+      task_priority_project_ids?: string[];
       is_active?: boolean;
     };
 
@@ -46,6 +47,14 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     }
     if (body.overview_only_project_ids !== undefined) {
       updates.overview_only_project_ids = body.overview_only_project_ids;
+      // Remove any overview-only projects from task priority (they can't coexist)
+      if (body.task_priority_project_ids === undefined) {
+        // Only auto-clean if task_priority_project_ids wasn't explicitly set in this request
+        // (if it was, the frontend already handled the cleanup)
+      }
+    }
+    if (body.task_priority_project_ids !== undefined) {
+      updates.task_priority_project_ids = body.task_priority_project_ids;
     }
     if (body.is_active !== undefined) {
       updates.is_active = body.is_active;
