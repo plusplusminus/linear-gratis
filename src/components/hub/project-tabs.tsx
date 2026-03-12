@@ -7,6 +7,23 @@ import { ProjectIssueList } from "./project-issue-list";
 import { ProjectUpdates } from "./project-updates";
 import { ProjectOverview } from "./project-overview";
 
+export type ProjectLink = {
+  id: string;
+  label: string;
+  url: string;
+  createdAt: string;
+};
+
+export type ProjectDocument = {
+  id: string;
+  title: string;
+  content?: string;
+  slugId: string;
+  icon?: string;
+  color?: string;
+  updatedAt: string;
+};
+
 type ProjectTabsProps = {
   project: {
     id: string;
@@ -20,6 +37,8 @@ type ProjectTabsProps = {
     milestones: Array<{ id: string; name: string; targetDate?: string }>;
     status: { id: string; name: string; color: string; type: string };
   };
+  links: ProjectLink[];
+  documents: ProjectDocument[];
   isOverviewOnly: boolean;
   issues: LinearIssue[];
   states: Array<{ id: string; name: string; color: string; type: string }>;
@@ -36,6 +55,8 @@ type Tab = "overview" | "issues";
 
 export function ProjectTabs({
   project,
+  links,
+  documents,
   isOverviewOnly,
   issues,
   states,
@@ -54,7 +75,9 @@ export function ProjectTabs({
     project.priority > 0 ||
     !!project.health ||
     !!project.lead ||
-    project.milestones.length > 0;
+    project.milestones.length > 0 ||
+    links.length > 0 ||
+    documents.length > 0;
 
   const [activeTab, setActiveTab] = useState<Tab>(
     isOverviewOnly || issues.length === 0 ? "overview" : "issues"
@@ -101,7 +124,7 @@ export function ProjectTabs({
       {/* Tab content */}
       {activeTab === "overview" && (
         <div className="flex-1 overflow-auto">
-          <ProjectOverview project={project} />
+          <ProjectOverview project={project} links={links} documents={documents} />
           <ProjectUpdates hubId={hubId} projectId={projectId} />
         </div>
       )}

@@ -133,6 +133,8 @@ function buildProjectsQuery(since?: Date) {
         teams { nodes { id name key } }
         initiatives { nodes { id name } }
         projectMilestones { nodes { id name targetDate } }
+        projectLinks { nodes { id label url createdAt } }
+        documents { nodes { id title content slugId icon color updatedAt } }
         createdAt
         updatedAt
       }
@@ -281,6 +283,8 @@ type LinearGqlProject = {
   teams: { nodes: Array<{ id: string; name: string; key: string }> };
   initiatives: { nodes: Array<{ id: string; name: string }> };
   projectMilestones: { nodes: Array<{ id: string; name: string; targetDate?: string }> };
+  projectLinks: { nodes: Array<{ id: string; label: string; url: string; createdAt: string }> };
+  documents: { nodes: Array<{ id: string; title: string; content?: string; slugId: string; icon?: string; color?: string; updatedAt: string }> };
   createdAt: string;
   updatedAt: string;
 };
@@ -882,6 +886,8 @@ export async function fetchProjectsByIds(
           teams { nodes { id name key } }
           initiatives { nodes { id name } }
           projectMilestones { nodes { id name targetDate } }
+          projectLinks { nodes { id label url createdAt } }
+          documents { nodes { id title content slugId icon color updatedAt } }
           createdAt
           updatedAt
         }
@@ -1084,6 +1090,8 @@ export function mapProjectToRow(project: LinearGqlProject, userId: string) {
     teams: project.teams.nodes,
     initiatives: project.initiatives.nodes,
     milestones: project.projectMilestones.nodes,
+    links: project.projectLinks.nodes,
+    documents: project.documents.nodes,
   };
 
   return {

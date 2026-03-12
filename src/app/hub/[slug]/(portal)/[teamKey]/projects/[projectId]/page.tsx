@@ -125,6 +125,8 @@ export default async function ProjectViewPage({
       {/* Tabbed content */}
       <ProjectTabs
         project={project}
+        links={project.links}
+        documents={project.documents}
         isOverviewOnly={overviewOnly}
         issues={issues}
         states={metadata.states}

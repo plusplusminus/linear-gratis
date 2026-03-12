@@ -69,6 +69,8 @@ type ProjectData = {
   teams?: Array<{ id: string; name: string; key: string }>;
   initiatives?: Array<{ id: string; name: string }>;
   milestones?: Array<{ id: string; name: string; targetDate?: string }>;
+  links?: Array<{ id: string; label: string; url: string; createdAt: string }>;
+  documents?: Array<{ id: string; title: string; content?: string; slugId: string; icon?: string; color?: string; updatedAt: string }>;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -254,6 +256,8 @@ export function mapRowToProject(row: {
     teams: Array.isArray(d.teams) ? d.teams : [],
     initiatives: Array.isArray(d.initiatives) ? d.initiatives : [],
     milestones: Array.isArray(d.milestones) ? d.milestones : [],
+    links: Array.isArray(d.links) ? d.links : [],
+    documents: Array.isArray(d.documents) ? d.documents : [],
     createdAt: d.createdAt ?? row.created_at,
     updatedAt: d.updatedAt ?? row.updated_at,
   };

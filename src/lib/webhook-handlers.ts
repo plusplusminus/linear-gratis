@@ -309,6 +309,18 @@ export function mapInitiativeWebhookToRow(
 
 // -- Project event handler ---------------------------------------------------
 
+/** Fields in the data JSON blob that come from GraphQL nested relations
+ *  (initial sync / reconciliation) but are NOT present in webhook payloads.
+ *  We preserve these from the existing row so webhooks don't wipe them out. */
+const PROJECT_PRESERVED_FIELDS = [
+  "links",
+  "documents",
+  "milestones",
+  "labels",
+  "teams",
+  "initiatives",
+] as const;
+
 export async function handleProjectEvent(
   action: string,
   data: Record<string, unknown>,
@@ -326,6 +338,25 @@ export async function handleProjectEvent(
   }
 
   const row = mapProjectWebhookToRow(action, data, userId);
+
+  // Merge: preserve nested relation fields from the existing row's data blob
+  // that webhook payloads don't include (links, documents, milestones, etc.)
+  const { data: existing } = await supabaseAdmin
+    .from("synced_projects")
+    .select("data")
+    .eq("user_id", userId)
+    .eq("linear_id", project.id)
+    .single();
+
+  if (existing?.data && typeof existing.data === "object") {
+    const existingData = existing.data as Record<string, unknown>;
+    const rowData = row.data as Record<string, unknown>;
+    for (const field of PROJECT_PRESERVED_FIELDS) {
+      if (!(field in rowData) && field in existingData) {
+        rowData[field] = existingData[field];
+      }
+    }
+  }
 
   const { error } = await supabaseAdmin.from("synced_projects").upsert(row, {
     onConflict: "user_id,linear_id",
