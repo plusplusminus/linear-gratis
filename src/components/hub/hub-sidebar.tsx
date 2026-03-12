@@ -206,7 +206,7 @@ export function HubSidebar() {
           {!collapsed && (
             <div className="px-2 pb-0.5">
               <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
-                Actions
+                Quick Actions
               </span>
             </div>
           )}
@@ -228,20 +228,25 @@ export function HubSidebar() {
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* Footer navigation */}
+      <div className="border-t border-border py-1.5 px-1.5 space-y-0.5 shrink-0">
+        {canInteract && (
           <button
             onClick={() => setShowHistory(true)}
-            className={ctaClasses}
+            className={cn(
+              "flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm transition-colors w-full",
+              "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+            )}
             title={collapsed ? "My Submissions" : undefined}
             aria-label={collapsed ? "My Submissions" : undefined}
           >
             <ClipboardList className="w-4 h-4 shrink-0" />
             {!collapsed && <span className="truncate">My Submissions</span>}
           </button>
-        </div>
-      )}
-
-      {/* Docs */}
-      <div className="border-t border-border py-1.5 px-1.5 space-y-0.5 shrink-0">
+        )}
         {(() => {
           const isDocsActive = pathname.startsWith(`${basePath}/docs`);
           return (

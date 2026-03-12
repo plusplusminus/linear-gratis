@@ -117,7 +117,7 @@ export function AdminSidebar() {
         {!collapsed && (
           <div className="px-2 pb-0.5">
             <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
-              Actions
+              Quick Actions
             </span>
           </div>
         )}
