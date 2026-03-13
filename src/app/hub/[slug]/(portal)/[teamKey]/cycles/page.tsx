@@ -8,6 +8,7 @@ import {
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { IterationCw } from "lucide-react";
+import { CycleCardPills } from "@/components/hub/cycle-card-pills";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: "Cycles" };
@@ -43,6 +44,8 @@ type Cycle = {
   isCurrent: boolean;
   isUpcoming: boolean;
   team?: { id?: string; name?: string; key?: string };
+  documents: Array<{ id: string; title: string; content?: string; slugId: string; icon?: string; color?: string; updatedAt: string }>;
+  links: Array<{ id: string; label: string; url: string; createdAt: string }>;
 };
 
 function CycleCard({
@@ -121,6 +124,7 @@ function CycleCard({
           </div>
         )}
       </div>
+      <CycleCardPills documents={cycle.documents} links={cycle.links} />
     </div>
   );
 }

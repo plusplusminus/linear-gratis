@@ -5,10 +5,11 @@ import ReactMarkdown from "react-markdown";
 import { captureEvent } from "@/lib/posthog-client";
 import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import remarkGfm from "remark-gfm";
-import { FileText, X } from "lucide-react";
+import { FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import type { ProjectLink, ProjectDocument } from "./project-tabs";
+import { DocumentModal } from "./document-modal";
 
 type ProjectOverviewProps = {
   project: {
@@ -90,7 +91,19 @@ export function ProjectOverview({ project, links, documents }: ProjectOverviewPr
   const hasContent = project.content || project.description;
 
   const [openDoc, setOpenDoc] = useState<ProjectDocument | null>(null);
-  const hasDocumentsOrLinks = documents.length > 0 || links.length > 0;
+
+  const safeLinks = links.flatMap((link) => {
+    try {
+      const parsed = new URL(link.url);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return [];
+      const hostname = parsed.hostname.replace(/^www\./, "");
+      return [{ ...link, safeUrl: parsed.href, hostname, displayLabel: link.label || hostname || link.url }];
+    } catch {
+      return [];
+    }
+  });
+
+  const hasDocumentsOrLinks = documents.length > 0 || safeLinks.length > 0;
 
   return (
     <div className="px-6 py-5 space-y-0">
@@ -133,7 +146,7 @@ export function ProjectOverview({ project, links, documents }: ProjectOverviewPr
       {hasDocumentsOrLinks && (
         <div className={cn(hasMetadata && "border-t border-border pt-4", "pb-4")}>
           {documents.length > 0 && (
-            <div className={cn(links.length > 0 && "mb-3")}>
+            <div className={cn(safeLinks.length > 0 && "mb-3")}>
               <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
                 Documents
               </p>
@@ -141,7 +154,8 @@ export function ProjectOverview({ project, links, documents }: ProjectOverviewPr
                 {documents.map((doc) => (
                   <button
                     key={doc.id}
-                    onClick={() => doc.content ? setOpenDoc(doc) : undefined}
+                    disabled={!doc.content}
+                    onClick={() => doc.content && setOpenDoc(doc)}
                     className={cn(
                       "inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-xs",
                       doc.content
@@ -158,49 +172,40 @@ export function ProjectOverview({ project, links, documents }: ProjectOverviewPr
             </div>
           )}
 
-          {links.length > 0 && (
+          {safeLinks.length > 0 && (
             <div>
               <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
                 Resources
               </p>
               <div className="flex flex-wrap gap-2">
-                {links.map((link) => {
-                  let hostname = "";
-                  try {
-                    hostname = new URL(link.url).hostname.replace(/^www\./, "");
-                  } catch {
-                    // invalid URL
-                  }
-                  const displayLabel = link.label || hostname || link.url;
-
-                  return (
-                    <a
-                      key={link.id}
-                      href={link.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-xs hover:bg-muted/50 hover:border-border/80 transition-colors group"
+                {safeLinks.map((link) => (
+                  <a
+                    key={link.id}
+                    href={link.safeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-xs hover:bg-muted/50 hover:border-border/80 transition-colors group"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      className="w-3.5 h-3.5 text-muted-foreground shrink-0 group-hover:text-foreground transition-colors"
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
                     >
-                      <svg
-                        className="w-3.5 h-3.5 text-muted-foreground shrink-0 group-hover:text-foreground transition-colors"
-                        viewBox="0 0 16 16"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M6.5 3.5H3.5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3" />
-                        <path d="M9.5 2.5h4v4" />
-                        <path d="M13.5 2.5L7.5 8.5" />
-                      </svg>
-                      <span className="text-foreground">{displayLabel}</span>
-                      {hostname && displayLabel !== hostname && (
-                        <span className="text-muted-foreground text-[11px]">{hostname}</span>
-                      )}
-                    </a>
-                  );
-                })}
+                      <path d="M6.5 3.5H3.5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3" />
+                      <path d="M9.5 2.5h4v4" />
+                      <path d="M13.5 2.5L7.5 8.5" />
+                    </svg>
+                    <span className="text-foreground">{link.displayLabel}</span>
+                    {link.hostname && link.displayLabel !== link.hostname && (
+                      <span className="text-muted-foreground text-[11px]">{link.hostname}</span>
+                    )}
+                  </a>
+                ))}
               </div>
             </div>
           )}
@@ -256,60 +261,6 @@ export function ProjectOverview({ project, links, documents }: ProjectOverviewPr
       {openDoc && (
         <DocumentModal document={openDoc} onClose={() => setOpenDoc(null)} />
       )}
-    </div>
-  );
-}
-
-function DocumentModal({
-  document: doc,
-  onClose,
-}: {
-  document: ProjectDocument;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", handleKey);
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", handleKey);
-      document.body.style.overflow = "";
-    };
-  }, [onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] px-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="fixed inset-0 bg-black/50" />
-      <div className="relative bg-background rounded-xl border border-border shadow-xl w-full max-w-2xl max-h-[75vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center gap-3 px-6 py-4 border-b border-border shrink-0">
-          <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
-          {doc.icon && <span className="text-base shrink-0">{doc.icon}</span>}
-          <h2 className="text-sm font-semibold text-foreground truncate flex-1">{doc.title}</h2>
-          <span className="text-[11px] text-muted-foreground shrink-0">
-            Updated {formatDate(doc.updatedAt)}
-          </span>
-          <button
-            onClick={onClose}
-            className="p-1 -mr-1 rounded-md hover:bg-muted/50 transition-colors"
-          >
-            <X className="w-4 h-4 text-muted-foreground" />
-          </button>
-        </div>
-        {/* Content */}
-        <div className="flex-1 overflow-auto px-6 py-5">
-          <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-sm prose-headings:font-semibold prose-headings:mt-6 prose-headings:mb-2 prose-p:text-[13px] prose-p:leading-relaxed prose-p:my-2.5 prose-code:text-xs prose-pre:text-xs prose-pre:my-3 prose-ul:text-[13px] prose-ul:my-2.5 prose-ol:text-[13px] prose-ol:my-2.5 prose-li:my-0.5 prose-hr:my-5">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {doc.content!}
-            </ReactMarkdown>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

@@ -108,6 +108,8 @@ type CycleData = {
   completedScopeHistory?: number[];
   scopeHistory?: number[];
   team?: { id?: string; name?: string; key?: string };
+  links?: Array<{ id: string; label: string; url: string; createdAt: string }>;
+  documents?: Array<{ id: string; title: string; content?: string; slugId: string; icon?: string; color?: string; updatedAt: string }>;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -1157,6 +1159,8 @@ export function mapRowToCycle(row: {
     completedScopeHistory: d.completedScopeHistory ?? [],
     scopeHistory: d.scopeHistory ?? [],
     team: d.team ?? undefined,
+    links: Array.isArray(d.links) ? d.links : [],
+    documents: Array.isArray(d.documents) ? d.documents : [],
     createdAt: d.createdAt ?? row.created_at,
     updatedAt: d.updatedAt ?? row.updated_at,
   };

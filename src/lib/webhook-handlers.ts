@@ -370,6 +370,14 @@ export async function handleProjectEvent(
 
 // -- Cycle event handler -----------------------------------------------------
 
+/** Fields in the data JSON blob that come from GraphQL nested relations
+ *  (initial sync / reconciliation) but are NOT present in webhook payloads.
+ *  We preserve these from the existing row so webhooks don't wipe them out. */
+const CYCLE_PRESERVED_FIELDS = [
+  "links",
+  "documents",
+] as const;
+
 export async function handleCycleEvent(
   action: string,
   data: Record<string, unknown>,
@@ -387,6 +395,25 @@ export async function handleCycleEvent(
   }
 
   const row = mapCycleWebhookToRow(action, data, userId);
+
+  // Merge: preserve nested relation fields from the existing row's data blob
+  // that webhook payloads don't include (links, documents)
+  const { data: existing } = await supabaseAdmin
+    .from("synced_cycles")
+    .select("data")
+    .eq("user_id", userId)
+    .eq("linear_id", cycle.id)
+    .single();
+
+  if (existing?.data && typeof existing.data === "object") {
+    const existingData = existing.data as Record<string, unknown>;
+    const rowData = row.data as Record<string, unknown>;
+    for (const field of CYCLE_PRESERVED_FIELDS) {
+      if (!(field in rowData) && field in existingData) {
+        rowData[field] = existingData[field];
+      }
+    }
+  }
 
   const { error } = await supabaseAdmin.from("synced_cycles").upsert(row, {
     onConflict: "user_id,linear_id",
