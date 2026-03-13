@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { captureEvent } from "@/lib/posthog-client";
@@ -100,6 +101,7 @@ export function TeamTabs({
   cycles,
   cycleDetails,
   projects,
+  overviewOnlyProjectIds = [],
   initiatives,
   milestones,
   hubSlug,
@@ -113,6 +115,7 @@ export function TeamTabs({
   cycles?: Array<{ id: string; name: string; number: number }>;
   cycleDetails?: CycleDetail[];
   projects: Project[];
+  overviewOnlyProjectIds?: string[];
   initiatives: Initiative[];
   milestones: Milestone[];
   hubSlug: string;
@@ -123,6 +126,12 @@ export function TeamTabs({
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+
+  const overviewOnlySet = useMemo(() => new Set(overviewOnlyProjectIds), [overviewOnlyProjectIds]);
+  const visibleProjects = useMemo(
+    () => projects.filter((p) => !overviewOnlySet.has(p.id)),
+    [projects, overviewOnlySet]
+  );
 
   const requestedTab = (searchParams.get("tab") as Tab) || "issues";
   const activeTab = requestedTab === "issues" && issues.length === 0 ? "projects" : requestedTab;
@@ -162,7 +171,7 @@ export function TeamTabs({
           if (tab.key === "issues") return issues.length > 0;
           if (tab.key === "activity") return true;
           if (tab.key === "projects") return projects.length > 0;
-          if (tab.key === "roadmap") return projects.length > 0;
+          if (tab.key === "roadmap") return visibleProjects.length > 0;
           if (tab.key === "cycles") return (cycleDetails?.length ?? 0) > 0;
           if (tab.key === "initiatives") return initiatives.length > 0;
           if (tab.key === "milestones") return milestones.length > 0;
@@ -175,7 +184,7 @@ export function TeamTabs({
               : tab.key === "projects"
                 ? projects.length
                 : tab.key === "roadmap"
-                  ? projects.length
+                  ? visibleProjects.length
                   : tab.key === "cycles"
                     ? (cycleDetails?.length ?? 0)
                     : tab.key === "initiatives"
@@ -224,7 +233,7 @@ export function TeamTabs({
           states={states}
           labels={labels}
           cycles={cycles}
-          projects={projects.map((p) => ({
+          projects={visibleProjects.map((p) => ({
             id: p.id,
             name: p.name,
             color: p.color,
@@ -255,7 +264,7 @@ export function TeamTabs({
       )}
 
       {activeTab === "roadmap" && (
-        <RoadmapView projects={projects} />
+        <RoadmapView projects={visibleProjects} />
       )}
 
       {activeTab === "cycles" && (
