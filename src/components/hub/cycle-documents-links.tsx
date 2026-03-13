@@ -79,6 +79,7 @@ export function CycleDocumentsLinks({ documents, links }: CycleDocumentsLinksPro
                 className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-xs hover:bg-muted/50 hover:border-border/80 transition-colors group"
               >
                 <svg
+                  aria-hidden="true"
                   className="w-3.5 h-3.5 text-muted-foreground shrink-0 group-hover:text-foreground transition-colors"
                   viewBox="0 0 16 16"
                   fill="none"
