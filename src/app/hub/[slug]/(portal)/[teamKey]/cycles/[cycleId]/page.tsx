@@ -10,6 +10,7 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { IterationCw } from "lucide-react";
 import { ProjectIssueList } from "@/components/hub/project-issue-list";
+import { CycleDocumentsLinks } from "@/components/hub/cycle-documents-links";
 
 export async function generateMetadata({
   params,
@@ -133,6 +134,12 @@ export default async function CycleDetailPage({
           </span>
         </div>
       </div>
+
+      {/* Documents & Links */}
+      <CycleDocumentsLinks
+        documents={cycle.documents ?? []}
+        links={cycle.links ?? []}
+      />
 
       {/* Issue list */}
       <ProjectIssueList
