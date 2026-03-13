@@ -12,6 +12,7 @@ import {
   IterationCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CycleCardPills } from "./cycle-card-pills";
 import { ProjectIssueList } from "./project-issue-list";
 import { ActivityFeed } from "./activity-feed";
 import { RoadmapView } from "./roadmap-view";
@@ -73,6 +74,8 @@ type CycleDetail = {
   isCurrent: boolean;
   isUpcoming: boolean;
   stats?: { total: number; completed: number };
+  documents: Array<{ id: string; title: string; content?: string; slugId: string; icon?: string; color?: string; updatedAt: string }>;
+  links: Array<{ id: string; label: string; url: string; createdAt: string }>;
 };
 
 type Issue = {
@@ -524,70 +527,81 @@ function CycleCard({
       ? `${formatDate(cycle.startsAt)} – ${formatDate(cycle.endsAt)}`
       : null;
 
+  const hasPills = cycle.documents.length > 0 || cycle.links.length > 0;
+
   return (
-    <Link
-      href={href}
+    <div
       className={cn(
-        "flex items-center gap-3 border rounded-lg px-4 py-3 bg-card hover:bg-accent/50 transition-colors group",
+        "border rounded-lg bg-card transition-colors",
         cycle.isCurrent
           ? "border-l-2 border-l-primary/60 border-t-border border-r-border border-b-border bg-primary/[0.02]"
           : "border-border"
       )}
     >
-      <IterationCw
-        className={cn(
-          "w-3.5 h-3.5 shrink-0",
-          cycle.isCurrent ? "text-primary/70" : "text-muted-foreground"
-        )}
-      />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <p className="text-sm font-medium group-hover:text-primary transition-colors truncate">
-            {cycleName}
-          </p>
-          {cycle.isCurrent && (
-            <span className="text-[10px] font-medium text-primary/80 px-1.5 py-0.5 rounded bg-primary/10 shrink-0">
-              Current
-            </span>
+      <Link
+        href={href}
+        className="flex items-center gap-3 px-4 py-3 hover:bg-accent/50 transition-colors rounded-lg group"
+      >
+        <IterationCw
+          className={cn(
+            "w-3.5 h-3.5 shrink-0",
+            cycle.isCurrent ? "text-primary/70" : "text-muted-foreground"
           )}
-          {cycle.isUpcoming && (
-            <span className="text-[10px] font-medium text-muted-foreground px-1.5 py-0.5 rounded bg-muted shrink-0">
-              Upcoming
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-3 mt-0.5">
-          {dateRange && (
-            <span className="text-[10px] text-muted-foreground">
-              {dateRange}
-            </span>
-          )}
-          {total > 0 && (
-            <span className="text-[10px] text-muted-foreground tabular-nums">
-              {completed} / {total} tasks completed
-            </span>
-          )}
-        </div>
-      </div>
-      {total > 0 && (
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all"
-              style={{
-                width: `${progressPct}%`,
-                backgroundColor: cycle.isCurrent
-                  ? "var(--primary)"
-                  : "var(--muted-foreground)",
-              }}
-            />
+        />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium group-hover:text-primary transition-colors truncate">
+              {cycleName}
+            </p>
+            {cycle.isCurrent && (
+              <span className="text-[10px] font-medium text-primary/80 px-1.5 py-0.5 rounded bg-primary/10 shrink-0">
+                Current
+              </span>
+            )}
+            {cycle.isUpcoming && (
+              <span className="text-[10px] font-medium text-muted-foreground px-1.5 py-0.5 rounded bg-muted shrink-0">
+                Upcoming
+              </span>
+            )}
           </div>
-          <span className="text-[10px] tabular-nums text-muted-foreground w-7 text-right">
-            {progressPct}%
-          </span>
+          <div className="flex items-center gap-3 mt-0.5">
+            {dateRange && (
+              <span className="text-[10px] text-muted-foreground">
+                {dateRange}
+              </span>
+            )}
+            {total > 0 && (
+              <span className="text-[10px] text-muted-foreground tabular-nums">
+                {completed} / {total} tasks completed
+              </span>
+            )}
+          </div>
+        </div>
+        {total > 0 && (
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{
+                  width: `${progressPct}%`,
+                  backgroundColor: cycle.isCurrent
+                    ? "var(--primary)"
+                    : "var(--muted-foreground)",
+                }}
+              />
+            </div>
+            <span className="text-[10px] tabular-nums text-muted-foreground w-7 text-right">
+              {progressPct}%
+            </span>
+          </div>
+        )}
+      </Link>
+      {hasPills && (
+        <div className="px-4 pb-3">
+          <CycleCardPills documents={cycle.documents} links={cycle.links} />
         </div>
       )}
-    </Link>
+    </div>
   );
 }
 

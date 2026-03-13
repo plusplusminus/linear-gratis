@@ -87,6 +87,8 @@ export default async function TeamDashboardPage({
     isCurrent: c.isCurrent,
     isUpcoming: c.isUpcoming,
     stats: cycleStats[c.id],
+    documents: c.documents,
+    links: c.links,
   }));
 
   // Fetch issues and metadata for the Issues tab, excluding overview-only projects
