@@ -707,11 +707,15 @@ export async function fetchHubCycleIssues(
     throw error;
   }
 
+  const overviewOnlyIds = getOverviewOnlyProjectIds(mappings);
+
   return (data || []).reduce<RoadmapIssue[]>((acc, row) => {
     const r = row as { linear_id: string; data: Record<string, unknown>; created_at: string; updated_at: string; team_id: string };
     const d = r.data;
     const cycle = d.cycle as Record<string, unknown> | undefined;
     if (!cycle || cycle.id !== cycleLinearId) return acc;
+    const projectId = (d.project as Record<string, unknown> | undefined)?.id as string | undefined;
+    if (projectId && overviewOnlyIds.has(projectId)) return acc;
     const issue = stripAssignee({
       ...mapRowToLinearIssue(r),
       dueDate: (d.dueDate as string) ?? undefined,

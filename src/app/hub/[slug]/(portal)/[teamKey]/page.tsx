@@ -137,6 +137,7 @@ export default async function TeamDashboardPage({
         cycles={metadata.cycles}
         cycleDetails={cycleDetails}
         projects={projects}
+        overviewOnlyProjectIds={Array.from(overviewOnlyIds)}
         initiatives={initiatives}
         milestones={milestones}
         hubSlug={slug}

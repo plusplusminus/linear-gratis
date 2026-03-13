@@ -5,6 +5,8 @@ import {
   fetchHubCycles,
   fetchHubCycleIssues,
   fetchHubMetadata,
+  fetchHubProjects,
+  fetchOverviewOnlyProjectIds,
 } from "@/lib/hub-read";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
@@ -42,10 +44,16 @@ export default async function CycleDetailPage({
   const cycle = cycles.find((c) => c.id === cycleId);
   if (!cycle) notFound();
 
-  const [issues, metadata] = await Promise.all([
+  const [issues, metadata, allProjects, overviewOnlyIds] = await Promise.all([
     fetchHubCycleIssues(hub.id, cycleId),
     fetchHubMetadata(hub.id, { teamId: team.id }),
+    fetchHubProjects(hub.id),
+    fetchOverviewOnlyProjectIds(hub.id),
   ]);
+
+  const visibleProjects = allProjects
+    .filter((p) => !overviewOnlyIds.has(p.id))
+    .map((p) => ({ id: p.id, name: p.name, color: p.color }));
 
   const cycleName = cycle.name || `Cycle ${cycle.number}`;
 
@@ -147,6 +155,7 @@ export default async function CycleDetailPage({
         states={metadata.states}
         labels={metadata.labels}
         cycles={metadata.cycles}
+        projects={visibleProjects}
         hubSlug={slug}
         teamKey={teamKey}
         teamId={team.id}
