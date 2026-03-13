@@ -209,6 +209,8 @@ function buildCyclesQuery(since?: Date) {
         issueCountHistory
         completedScopeHistory
         scopeHistory
+        links { nodes { id label url createdAt } }
+        documents { nodes { id title content slugId icon color updatedAt } }
         team { id name key }
         createdAt
         updatedAt
@@ -321,6 +323,8 @@ type LinearGqlCycle = {
   issueCountHistory: number[];
   completedScopeHistory: number[];
   scopeHistory: number[];
+  links: { nodes: Array<{ id: string; label: string; url: string; createdAt: string }> };
+  documents: { nodes: Array<{ id: string; title: string; content?: string; slugId: string; icon?: string; color?: string; updatedAt: string }> };
   team: { id: string; name: string; key: string };
   createdAt: string;
   updatedAt: string;
@@ -925,6 +929,8 @@ export async function fetchCyclesByIds(
           issueCountHistory
           completedScopeHistory
           scopeHistory
+          links { nodes { id label url createdAt } }
+          documents { nodes { id title content slugId icon color updatedAt } }
           team { id name key }
           createdAt
           updatedAt
@@ -1129,6 +1135,12 @@ export function mapInitiativeToRow(initiative: LinearGqlInitiative, userId: stri
 }
 
 export function mapCycleToRow(cycle: LinearGqlCycle, userId: string) {
+  const data = {
+    ...cycle,
+    links: cycle.links.nodes,
+    documents: cycle.documents.nodes,
+  };
+
   return {
     linear_id: cycle.id,
     user_id: userId,
@@ -1140,7 +1152,7 @@ export function mapCycleToRow(cycle: LinearGqlCycle, userId: string) {
     created_at: cycle.createdAt,
     updated_at: cycle.updatedAt,
     synced_at: new Date().toISOString(),
-    data: cycle,
+    data,
   };
 }
 
