@@ -38,9 +38,8 @@ export function DocumentModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] px-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="fixed inset-0 bg-black/50" />
+      <div className="fixed inset-0 bg-black/50" onClick={onClose} />
       <div className="relative bg-background rounded-xl border border-border shadow-xl w-full max-w-2xl max-h-[75vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center gap-3 px-6 py-4 border-b border-border shrink-0">
@@ -52,6 +51,7 @@ export function DocumentModal({
           </span>
           <button
             onClick={onClose}
+            aria-label="Close"
             className="p-1 -mr-1 rounded-md hover:bg-muted/50 transition-colors"
           >
             <X className="w-4 h-4 text-muted-foreground" />

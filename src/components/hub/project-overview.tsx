@@ -167,17 +167,23 @@ export function ProjectOverview({ project, links, documents }: ProjectOverviewPr
               <div className="flex flex-wrap gap-2">
                 {links.map((link) => {
                   let hostname = "";
+                  let safeUrl = "";
                   try {
-                    hostname = new URL(link.url).hostname.replace(/^www\./, "");
+                    const parsed = new URL(link.url);
+                    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+                      safeUrl = parsed.href;
+                    }
+                    hostname = parsed.hostname.replace(/^www\./, "");
                   } catch {
                     // invalid URL
                   }
                   const displayLabel = link.label || hostname || link.url;
+                  if (!safeUrl) return null;
 
                   return (
                     <a
                       key={link.id}
-                      href={link.url}
+                      href={safeUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-xs hover:bg-muted/50 hover:border-border/80 transition-colors group"
