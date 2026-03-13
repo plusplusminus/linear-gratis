@@ -171,7 +171,7 @@ export function TeamTabs({
           if (tab.key === "issues") return issues.length > 0;
           if (tab.key === "activity") return true;
           if (tab.key === "projects") return projects.length > 0;
-          if (tab.key === "roadmap") return projects.length > 0;
+          if (tab.key === "roadmap") return visibleProjects.length > 0;
           if (tab.key === "cycles") return (cycleDetails?.length ?? 0) > 0;
           if (tab.key === "initiatives") return initiatives.length > 0;
           if (tab.key === "milestones") return milestones.length > 0;
@@ -184,7 +184,7 @@ export function TeamTabs({
               : tab.key === "projects"
                 ? projects.length
                 : tab.key === "roadmap"
-                  ? projects.length
+                  ? visibleProjects.length
                   : tab.key === "cycles"
                     ? (cycleDetails?.length ?? 0)
                     : tab.key === "initiatives"

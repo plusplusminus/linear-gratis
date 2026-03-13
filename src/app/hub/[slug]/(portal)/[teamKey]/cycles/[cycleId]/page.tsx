@@ -52,6 +52,7 @@ export default async function CycleDetailPage({
   ]);
 
   const visibleProjects = allProjects
+    .filter((p) => p.teams.some((t) => t.id === team.id))
     .filter((p) => !overviewOnlyIds.has(p.id))
     .map((p) => ({ id: p.id, name: p.name, color: p.color }));
 
