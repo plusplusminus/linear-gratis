@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { ListOrdered, Calculator } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LinearIssue } from "@/lib/linear";
 import { ProjectIssueList } from "./project-issue-list";
@@ -157,30 +158,36 @@ export function ProjectTabs({
 
       {activeTab === "priority" && taskPriorityEnabled && (
         <div className="flex flex-col flex-1 min-h-0">
-          {/* Mode toggle */}
-          <div className="flex items-center gap-1 px-6 pt-4">
-            <button
-              onClick={() => setPriorityMode("rank")}
-              className={cn(
-                "px-2.5 py-1 text-xs font-medium rounded-md transition-colors",
-                priorityMode === "rank"
-                  ? "bg-accent text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Ranking
-            </button>
-            <button
-              onClick={() => setPriorityMode("rice")}
-              className={cn(
-                "px-2.5 py-1 text-xs font-medium rounded-md transition-colors",
-                priorityMode === "rice"
-                  ? "bg-accent text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              RICE
-            </button>
+          {/* Mode toggle — matches epic-level priority toggle */}
+          <div className="flex justify-end px-6 pt-4">
+            <div className="flex items-center border border-border rounded-md overflow-hidden">
+              <button
+                onClick={() => setPriorityMode("rank")}
+                className={cn(
+                  "flex items-center gap-1 px-2 py-1 text-xs transition-colors",
+                  priorityMode === "rank"
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                title="Drag & drop ranking"
+              >
+                <ListOrdered className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Rank</span>
+              </button>
+              <button
+                onClick={() => setPriorityMode("rice")}
+                className={cn(
+                  "flex items-center gap-1 px-2 py-1 text-xs transition-colors",
+                  priorityMode === "rice"
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                title="RICE scoring"
+              >
+                <Calculator className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">RICE</span>
+              </button>
+            </div>
           </div>
 
           {priorityMode === "rank" ? (
