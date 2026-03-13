@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { FileText, X } from "lucide-react";
@@ -23,15 +23,28 @@ export function DocumentModal({
   document: ProjectDocument;
   onClose: () => void;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<Element | null>(null);
+
   useEffect(() => {
+    previousFocusRef.current = document.activeElement;
+
     function handleKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
     }
     window.addEventListener("keydown", handleKey);
     document.body.style.overflow = "hidden";
+
+    // Focus the dialog container
+    dialogRef.current?.focus();
+
     return () => {
       window.removeEventListener("keydown", handleKey);
       document.body.style.overflow = "";
+      // Restore focus to previously focused element
+      if (previousFocusRef.current instanceof HTMLElement) {
+        previousFocusRef.current.focus();
+      }
     };
   }, [onClose]);
 
@@ -40,12 +53,19 @@ export function DocumentModal({
       className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] px-4"
     >
       <div className="fixed inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-background rounded-xl border border-border shadow-xl w-full max-w-2xl max-h-[75vh] flex flex-col">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="document-modal-title"
+        tabIndex={-1}
+        className="relative bg-background rounded-xl border border-border shadow-xl w-full max-w-2xl max-h-[75vh] flex flex-col outline-none"
+      >
         {/* Header */}
         <div className="flex items-center gap-3 px-6 py-4 border-b border-border shrink-0">
           <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
           {doc.icon && <span className="text-base shrink-0">{doc.icon}</span>}
-          <h2 className="text-sm font-semibold text-foreground truncate flex-1">{doc.title}</h2>
+          <h2 id="document-modal-title" className="text-sm font-semibold text-foreground truncate flex-1">{doc.title}</h2>
           <span className="text-[11px] text-muted-foreground shrink-0">
             Updated {formatDate(doc.updatedAt)}
           </span>

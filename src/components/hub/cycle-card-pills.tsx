@@ -39,7 +39,8 @@ export function CycleCardPills({
         {documents.map((doc) => (
           <button
             key={doc.id}
-            onClick={() => (doc.content ? setOpenDoc(doc) : undefined)}
+            disabled={!doc.content}
+            onClick={() => doc.content && setOpenDoc(doc)}
             className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-xs ${
               doc.content
                 ? "hover:bg-muted/50 hover:border-border/80 transition-colors cursor-pointer"

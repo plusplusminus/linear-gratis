@@ -35,7 +35,8 @@ export function CycleDocumentsLinks({ documents, links }: CycleDocumentsLinksPro
             {documents.map((doc) => (
               <button
                 key={doc.id}
-                onClick={() => doc.content ? setOpenDoc(doc) : undefined}
+                disabled={!doc.content}
+                onClick={() => doc.content && setOpenDoc(doc)}
                 className={cn(
                   "inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-xs",
                   doc.content
