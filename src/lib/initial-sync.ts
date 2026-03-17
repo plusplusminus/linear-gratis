@@ -815,6 +815,10 @@ export async function diffEntities(
 // -- Batch-fetch-by-ID: fetch full entities for specific IDs -----------------
 
 const BATCH_IDS_SIZE = 50;
+/** Projects & initiatives have many nested relations, so Linear's query
+ *  complexity limit (10 000) is hit well before 50 items. Use a smaller
+ *  page size for these entity types. */
+const COMPLEX_BATCH_SIZE = 15;
 
 /**
  * Fetch full issue data for specific IDs using Linear's `nodes` query.
@@ -868,7 +872,7 @@ export async function fetchProjectsByIds(
 
   const query = `
     query ProjectsByIds($ids: [ID!]!, $after: String) {
-      projects(filter: { id: { in: $ids } }, first: ${BATCH_IDS_SIZE}, after: $after) {
+      projects(filter: { id: { in: $ids } }, first: ${COMPLEX_BATCH_SIZE}, after: $after) {
         pageInfo { hasNextPage endCursor }
         nodes {
           id
@@ -899,7 +903,7 @@ export async function fetchProjectsByIds(
     }
   `;
 
-  return batchFetchByIds<LinearGqlProject>(ids, accessToken, query, "projects", rateLimiter);
+  return batchFetchByIds<LinearGqlProject>(ids, accessToken, query, "projects", rateLimiter, COMPLEX_BATCH_SIZE);
 }
 
 /**
@@ -954,7 +958,7 @@ export async function fetchInitiativesByIds(
 
   const query = `
     query InitiativesByIds($ids: [ID!]!, $after: String) {
-      initiatives(filter: { id: { in: $ids } }, first: ${BATCH_IDS_SIZE}, after: $after) {
+      initiatives(filter: { id: { in: $ids } }, first: ${COMPLEX_BATCH_SIZE}, after: $after) {
         pageInfo { hasNextPage endCursor }
         nodes {
           id
@@ -978,7 +982,7 @@ export async function fetchInitiativesByIds(
     }
   `;
 
-  return batchFetchByIds<LinearGqlInitiative>(ids, accessToken, query, "initiatives", rateLimiter);
+  return batchFetchByIds<LinearGqlInitiative>(ids, accessToken, query, "initiatives", rateLimiter, COMPLEX_BATCH_SIZE);
 }
 
 /** Generic batch-fetch-by-ID using Linear's list queries with `id: { in: [...] }` filter.
@@ -988,17 +992,18 @@ async function batchFetchByIds<T extends { id: string }>(
   accessToken: string,
   query: string,
   rootField: string,
-  rateLimiter?: LinearRateLimiter
+  rateLimiter?: LinearRateLimiter,
+  batchSize: number = BATCH_IDS_SIZE
 ): Promise<T[]> {
   const all: T[] = [];
 
-  for (let i = 0; i < ids.length; i += BATCH_IDS_SIZE) {
+  for (let i = 0; i < ids.length; i += batchSize) {
     if (rateLimiter && !rateLimiter.canProceed()) {
       console.warn(`[rate-limit] batchFetchByIds stopping early — ${all.length}/${ids.length} fetched`, rateLimiter.getStatus());
       break;
     }
 
-    const batch = ids.slice(i, i + BATCH_IDS_SIZE);
+    const batch = ids.slice(i, i + batchSize);
     let after: string | null = null;
 
     // Paginate within this batch
@@ -1021,7 +1026,7 @@ async function batchFetchByIds<T extends { id: string }>(
       }
     }
 
-    if (i + BATCH_IDS_SIZE < ids.length) await sleep(PAGE_DELAY_MS);
+    if (i + batchSize < ids.length) await sleep(PAGE_DELAY_MS);
   }
 
   return all;
