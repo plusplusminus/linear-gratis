@@ -426,6 +426,13 @@ function mergeProjectVisibility(
 }
 
 /**
+ * Returns true if any mapping opts in to showing project-less issues.
+ */
+function shouldIncludeUnassigned(mappings: HubTeamMapping[]): boolean {
+  return mappings.some((m) => m.include_unassigned_issues);
+}
+
+/**
  * Check if a project is marked as overview-only for a specific team in the hub.
  * Overview-only projects show description/updates but not issues.
  */
@@ -649,19 +656,46 @@ export async function fetchHubRoadmapIssues(
     ? projectIds.filter((id) => allowedProjectIds.includes(id))
     : projectIds;
 
-  if (filteredProjectIds.length === 0) return [];
+  const includeUnassigned = shouldIncludeUnassigned(mappings);
+  if (filteredProjectIds.length === 0 && !includeUnassigned) return [];
 
-  const { data, error } = await supabaseAdmin
-    .from("synced_issues")
-    .select("linear_id, data, created_at, updated_at, team_id")
-    .eq("user_id", WORKSPACE_USER_ID)
-    .in("project_id", filteredProjectIds)
-    .order("updated_at", { ascending: false });
+  // Query 1: Issues belonging to specified projects
+  const projectQuery = filteredProjectIds.length > 0
+    ? supabaseAdmin
+        .from("synced_issues")
+        .select("linear_id, data, created_at, updated_at, team_id")
+        .eq("user_id", WORKSPACE_USER_ID)
+        .in("project_id", filteredProjectIds)
+        .order("updated_at", { ascending: false })
+    : null;
 
-  if (error) {
-    console.error("fetchHubRoadmapIssues error:", error);
-    throw error;
+  // Query 2: Issues with no project (when include_unassigned_issues is on)
+  const teamIds = mappings.map((m) => m.linear_team_id);
+  const unassignedQuery = includeUnassigned
+    ? supabaseAdmin
+        .from("synced_issues")
+        .select("linear_id, data, created_at, updated_at, team_id")
+        .eq("user_id", WORKSPACE_USER_ID)
+        .in("team_id", teamIds)
+        .is("project_id", null)
+        .order("updated_at", { ascending: false })
+    : null;
+
+  const [projectResult, unassignedResult] = await Promise.all([
+    projectQuery ?? Promise.resolve({ data: null, error: null }),
+    unassignedQuery ?? Promise.resolve({ data: null, error: null }),
+  ]);
+
+  if (projectResult.error) {
+    console.error("fetchHubRoadmapIssues error:", projectResult.error);
+    throw projectResult.error;
   }
+  if (unassignedResult.error) {
+    console.error("fetchHubRoadmapIssues unassigned error:", unassignedResult.error);
+    throw unassignedResult.error;
+  }
+
+  const data = [...(projectResult.data || []), ...(unassignedResult.data || [])];
 
   return (data || []).reduce<RoadmapIssue[]>((acc, row) => {
     const r = row as { linear_id: string; data: Record<string, unknown>; created_at: string; updated_at: string; team_id: string };
@@ -708,6 +742,8 @@ export async function fetchHubCycleIssues(
   }
 
   const overviewOnlyIds = getOverviewOnlyProjectIds(mappings);
+  const allowedProjectIds = mergeProjectVisibility(mappings);
+  const includeUnassigned = shouldIncludeUnassigned(mappings);
 
   return (data || []).reduce<RoadmapIssue[]>((acc, row) => {
     const r = row as { linear_id: string; data: Record<string, unknown>; created_at: string; updated_at: string; team_id: string };
@@ -715,7 +751,14 @@ export async function fetchHubCycleIssues(
     const cycle = d.cycle as Record<string, unknown> | undefined;
     if (!cycle || cycle.id !== cycleLinearId) return acc;
     const projectId = (d.project as Record<string, unknown> | undefined)?.id as string | undefined;
-    if (projectId && overviewOnlyIds.has(projectId)) return acc;
+    // Enforce project visibility: project-less issues require opt-in,
+    // project issues must be in the allowed set and not overview-only.
+    if (!projectId) {
+      if (!includeUnassigned) return acc;
+    } else {
+      if (allowedProjectIds && !allowedProjectIds.includes(projectId)) return acc;
+      if (overviewOnlyIds.has(projectId)) return acc;
+    }
     const issue = stripAssignee({
       ...mapRowToLinearIssue(r),
       dueDate: (d.dueDate as string) ?? undefined,
@@ -1344,6 +1387,11 @@ export async function fetchHubMetadata(
   const labelsMap = new Map<string, { id: string; name: string; color: string }>();
   const cyclesMap = new Map<string, { id: string; name: string; number: number }>();
 
+  // For scoping cycle extraction to only visible issues
+  const metaAllowedProjectIds = mergeProjectVisibility(mappings);
+  const metaOverviewOnlyIds = getOverviewOnlyProjectIds(mappings);
+  const metaIncludeUnassigned = shouldIncludeUnassigned(mappings);
+
   for (const row of data) {
     const d = row.data as Record<string, unknown>;
     const rowTeamId = (row as Record<string, unknown>).team_id as string;
@@ -1380,13 +1428,20 @@ export async function fetchHubMetadata(
         labelsMap.set(label.id, label);
       }
     }
+    // Only include cycles from issues that are actually visible (respects project scoping)
     const cycle = d.cycle as { id?: string; name?: string; number?: number } | undefined;
     if (cycle?.id) {
-      cyclesMap.set(cycle.id, {
-        id: cycle.id,
-        name: cycle.name ?? "",
-        number: cycle.number ?? 0,
-      });
+      const pid = (d.project as Record<string, unknown> | undefined)?.id as string | undefined;
+      const projectVisible = pid
+        ? (!metaAllowedProjectIds || metaAllowedProjectIds.includes(pid)) && !metaOverviewOnlyIds.has(pid)
+        : metaIncludeUnassigned;
+      if (projectVisible) {
+        cyclesMap.set(cycle.id, {
+          id: cycle.id,
+          name: cycle.name ?? "",
+          number: cycle.number ?? 0,
+        });
+      }
     }
     // No assignees — intentionally omitted for client hub view
   }
