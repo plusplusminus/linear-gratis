@@ -1,7 +1,20 @@
 import { supabaseAdmin } from "@/lib/supabase";
 import { encryptToken, decryptToken } from "@/lib/encryption";
+import { getWorkspaceToken } from "./workspace";
 
 const LINEAR_TOKEN_URL = "https://api.linear.app/oauth/token";
+
+/**
+ * Thrown for OAuth credential validation failures (invalid client ID/secret,
+ * token acquisition failures, etc). Callers can check `instanceof` to
+ * distinguish user-facing 400 errors from unexpected 500 errors.
+ */
+export class LinearOAuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LinearOAuthError";
+  }
+}
 
 type OAuthCredentials = {
   clientId: string;
@@ -115,7 +128,7 @@ async function acquireClientCredentialsToken(
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Linear OAuth token request failed (${res.status}): ${text}`);
+    throw new LinearOAuthError(`Linear OAuth token request failed (${res.status}): ${text}`);
   }
 
   const json = (await res.json()) as {
@@ -128,7 +141,7 @@ async function acquireClientCredentialsToken(
   };
 
   if (json.error) {
-    throw new Error(`Linear OAuth error: ${json.error_description || json.error}`);
+    throw new LinearOAuthError(`Linear OAuth error: ${json.error_description || json.error}`);
   }
 
   return { token: json.access_token, expiresIn: json.expires_in };
@@ -217,7 +230,6 @@ export async function getWriteToken(): Promise<{
   }
 
   // Fall back to personal workspace token
-  const { getWorkspaceToken } = await import("./workspace");
   const personalToken = await getWorkspaceToken();
   return { token: personalToken, isOAuthApp: false };
 }
@@ -250,7 +262,7 @@ export async function validateOAuthCredentials(
   };
 
   if (json.errors || !json.data?.viewer) {
-    throw new Error(
+    throw new LinearOAuthError(
       "Token acquired but viewer query failed: " +
         (json.errors?.map((e) => e.message).join(", ") || "unknown error")
     );

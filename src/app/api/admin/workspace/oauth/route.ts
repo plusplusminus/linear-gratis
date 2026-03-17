@@ -5,6 +5,7 @@ import {
   setOAuthCredentials,
   clearOAuthCredentials,
   getOAuthCredentials,
+  LinearOAuthError,
 } from "@/lib/linear-oauth";
 import { getWorkspaceSetting, setWorkspaceSetting } from "@/lib/workspace";
 
@@ -53,8 +54,8 @@ export async function POST(request: Request) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Internal server error";
-    const status = message.includes("OAuth") ? 400 : 500;
-    console.error("POST /api/admin/workspace/oauth error:", message);
+    const status = error instanceof LinearOAuthError ? 400 : 500;
+    console.error("POST /api/admin/workspace/oauth error:", error);
     return NextResponse.json({ error: message }, { status });
   }
 }

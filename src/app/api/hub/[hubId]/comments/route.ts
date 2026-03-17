@@ -180,6 +180,9 @@ export async function PATCH(
     }
 
     try {
+      // Avatar URL is not persisted in hub_comments (it's transient from the
+      // WorkOS user profile at request time), so retries won't have an avatar.
+      // The author name is still attributed via createAsUser.
       const linearCommentId = await pushCommentToLinear(
         comment.issue_linear_id,
         comment.body,
