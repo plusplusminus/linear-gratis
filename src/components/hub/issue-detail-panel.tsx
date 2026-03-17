@@ -318,6 +318,12 @@ export function IssueDetailPanel({
 
     let cancelled = false;
     setLoading(true);
+    setIssue(null);
+    setComments([]);
+    setHubLabels([]);
+    setWorkflowLabelIds([]);
+    setWorkflowRules([]);
+    setHistory([]);
 
     async function fetchIssue() {
       try {
@@ -326,29 +332,35 @@ export function IssueDetailPanel({
           fetch(`/api/hub/${hubId}/issues/${activeId}/history`),
         ]);
 
-        if (!cancelled && issueResult.status === "fulfilled" && issueResult.value.ok) {
-          const data = (await issueResult.value.json()) as {
-            issue: IssueDetail;
-            comments: Comment[];
-            hubLabels: Array<{ id: string; name: string; color: string }>;
-            workflowLabelIds?: string[];
-            workflowRules?: Array<{ labelId: string; triggerType: string; description: string }>;
-          };
-          setIssue(data.issue);
-          setComments(data.comments);
-          setHubLabels(data.hubLabels ?? []);
-          setWorkflowLabelIds(data.workflowLabelIds ?? []);
-          setWorkflowRules(data.workflowRules ?? []);
-        }
+        if (!cancelled) {
+          if (issueResult.status === "fulfilled" && issueResult.value.ok) {
+            const data = (await issueResult.value.json()) as {
+              issue: IssueDetail;
+              comments: Comment[];
+              hubLabels: Array<{ id: string; name: string; color: string }>;
+              workflowLabelIds?: string[];
+              workflowRules?: Array<{ labelId: string; triggerType: string; description: string }>;
+            };
+            setIssue(data.issue);
+            setComments(data.comments);
+            setHubLabels(data.hubLabels ?? []);
+            setWorkflowLabelIds(data.workflowLabelIds ?? []);
+            setWorkflowRules(data.workflowRules ?? []);
+          }
 
-        if (!cancelled && historyResult.status === "fulfilled" && historyResult.value.ok) {
-          const historyData = (await historyResult.value.json()) as {
-            history: HistoryEntry[];
-          };
-          setHistory(historyData.history ?? []);
+          if (historyResult.status === "fulfilled" && historyResult.value.ok) {
+            const historyData = (await historyResult.value.json()) as {
+              history: HistoryEntry[];
+            };
+            setHistory(historyData.history ?? []);
+          }
         }
       } catch {
-        // silently fail
+        if (!cancelled) {
+          setIssue(null);
+          setComments([]);
+          setHistory([]);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
