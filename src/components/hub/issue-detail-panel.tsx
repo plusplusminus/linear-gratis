@@ -236,6 +236,7 @@ export function IssueDetailPanel({
   const [workflowRules, setWorkflowRules] = useState<Array<{ labelId: string; triggerType: string; description: string }>>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [issueError, setIssueError] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
   const [descOverflows, setDescOverflows] = useState(false);
   const descRef = useRef<HTMLDivElement>(null);
@@ -318,6 +319,7 @@ export function IssueDetailPanel({
 
     let cancelled = false;
     setLoading(true);
+    setIssueError(false);
     setIssue(null);
     setComments([]);
     setHubLabels([]);
@@ -346,6 +348,8 @@ export function IssueDetailPanel({
             setHubLabels(data.hubLabels ?? []);
             setWorkflowLabelIds(data.workflowLabelIds ?? []);
             setWorkflowRules(data.workflowRules ?? []);
+          } else {
+            setIssueError(true);
           }
 
           if (historyResult.status === "fulfilled" && historyResult.value.ok) {
@@ -357,9 +361,7 @@ export function IssueDetailPanel({
         }
       } catch {
         if (!cancelled) {
-          setIssue(null);
-          setComments([]);
-          setHistory([]);
+          setIssueError(true);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -431,6 +433,18 @@ export function IssueDetailPanel({
             <div className="h-5 w-24 bg-muted/50 rounded animate-pulse" />
             <div className="h-6 w-64 bg-muted/50 rounded animate-pulse" />
             <div className="h-40 bg-muted/50 rounded animate-pulse" />
+          </div>
+        ) : issueError ? (
+          <div className="flex flex-col items-center justify-center flex-1 p-6 text-center">
+            <AlertCircle className="w-5 h-5 text-muted-foreground mb-2" />
+            <p className="text-sm text-muted-foreground">Failed to load task</p>
+            <button
+              type="button"
+              onClick={handleClose}
+              className="mt-3 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Close
+            </button>
           </div>
         ) : issue ? (
           <>
