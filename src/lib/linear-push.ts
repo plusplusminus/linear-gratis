@@ -171,7 +171,7 @@ export async function pushCommentToLinear(
             ...baseVars,
             body,
             createAsUser: trimmedAuthorName,
-            displayIconUrl: author?.authorAvatarUrl ?? null,
+            displayIconUrl: author?.authorAvatarUrl || undefined,
           },
         }),
       });
