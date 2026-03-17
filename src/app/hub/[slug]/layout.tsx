@@ -13,7 +13,7 @@ export async function generateMetadata({
   return {
     title: {
       default: hubName,
-      template: `%s — ${hubName} | PPM Client Hub`,
+      template: `%s — ${hubName} | Pulse`,
     },
   };
 }

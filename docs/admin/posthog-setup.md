@@ -1,11 +1,11 @@
 # PostHog Setup Guide
 
-Step-by-step guide to configure PostHog for Linear Gratis analytics.
+Step-by-step guide to configure PostHog for Pulse analytics.
 
 ## 1. Create the Project
 
 - Go to [app.posthog.com](https://app.posthog.com) and create a new project
-- Name it **Linear Gratis** (or **PPM Client Hub**)
+- Name it **Pulse**
 - Select **US** region (matches the `https://us.i.posthog.com` host)
 - Copy the **Project API Key** and set it as `NEXT_PUBLIC_POSTHOG_KEY` in your Vercel environment variables
 

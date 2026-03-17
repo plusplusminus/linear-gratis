@@ -106,7 +106,7 @@ export default function CustomerExperiencePage() {
                 </CardHeader>
                 <CardContent className="text-sm text-muted-foreground space-y-3">
                   <p>
-                    A clean, single-column form centred on the page. If you&apos;ve configured branding, your logo, colours, and fonts are applied — no PPM Client Hub branding visible (if disabled).
+                    A clean, single-column form centred on the page. If you&apos;ve configured branding, your logo, colours, and fonts are applied — no Pulse branding visible (if disabled).
                   </p>
                   <p>The form collects:</p>
                   <ul className="list-disc list-inside space-y-1">
@@ -387,12 +387,12 @@ export default function CustomerExperiencePage() {
                     All three page types support the full branding system. What customers see when branding is applied:
                   </p>
                   <ul className="list-disc list-inside space-y-1">
-                    <li>Your logo replaces all PPM Client Hub branding</li>
+                    <li>Your logo replaces all Pulse branding</li>
                     <li>Your primary colour on buttons, links, and accents</li>
                     <li>Custom body and heading fonts</li>
                     <li>Custom favicon</li>
                     <li>Custom footer text</li>
-                    <li>&quot;Powered by PPM Client Hub&quot; removed (if toggled off)</li>
+                    <li>&quot;Powered by Pulse&quot; removed (if toggled off)</li>
                   </ul>
                   <p>
                     Branding is configured per hub in the admin settings and applies across all hub pages.

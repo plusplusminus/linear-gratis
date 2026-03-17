@@ -1,4 +1,17 @@
 {
+  "redirects": [
+    {
+      "source": "/:path(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "clienthub.plusplusminus.co.za"
+        }
+      ],
+      "destination": "https://pulse.plusplusminus.co.za/:path",
+      "permanent": true
+    }
+  ],
   "crons": [
     {
       "path": "/api/sync/reconcile",
