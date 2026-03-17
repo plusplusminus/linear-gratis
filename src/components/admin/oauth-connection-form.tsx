@@ -1,27 +1,47 @@
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import { Check, Unplug, Users, KeyRound } from "lucide-react";
+import { Check, Unplug, Users, ExternalLink } from "lucide-react";
 
 interface OAuthStatus {
-  configured: boolean;
-  app?: { name: string | null };
-  clientId?: string | null;
+  envConfigured: boolean;
+  authorized: boolean;
+  app?: { name: string | null } | null;
   connectedAt?: string | null;
 }
 
 export function OAuthConnectionForm() {
   const [status, setStatus] = useState<OAuthStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const [clientId, setClientId] = useState("");
-  const [clientSecret, setClientSecret] = useState("");
   const [isPending, startTransition] = useTransition();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     fetchStatus();
   }, []);
+
+  // Handle redirect results from OAuth callback
+  useEffect(() => {
+    if (searchParams.get("oauth_success") === "true") {
+      toast.success("Linear OAuth app connected");
+      // Clean URL without triggering navigation
+      window.history.replaceState({}, "", "/admin/settings/linear");
+      fetchStatus();
+    }
+    const oauthError = searchParams.get("oauth_error");
+    if (oauthError) {
+      const messages: Record<string, string> = {
+        denied: "OAuth authorization was denied",
+        missing_params: "Missing parameters from Linear callback",
+        invalid_state: "Invalid state — please try again",
+        exchange_failed: "Failed to exchange authorization code",
+      };
+      toast.error(messages[oauthError] ?? "OAuth connection failed");
+      window.history.replaceState({}, "", "/admin/settings/linear");
+    }
+  }, [searchParams]);
 
   async function fetchStatus() {
     try {
@@ -30,37 +50,15 @@ export function OAuthConnectionForm() {
       const data: OAuthStatus = await res.json();
       setStatus(data);
     } catch {
-      setStatus({ configured: false });
+      setStatus({ envConfigured: false, authorized: false });
     } finally {
       setLoading(false);
     }
   }
 
   function connect() {
-    if (!clientId.trim() || !clientSecret.trim()) return;
-
-    startTransition(async () => {
-      try {
-        const res = await fetch("/api/admin/workspace/oauth", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            clientId: clientId.trim(),
-            clientSecret: clientSecret.trim(),
-          }),
-        });
-        if (!res.ok) {
-          const err = (await res.json()) as { error?: string };
-          throw new Error(err.error ?? "Failed to connect");
-        }
-        toast.success("Linear OAuth app connected");
-        setClientId("");
-        setClientSecret("");
-        await fetchStatus();
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed to connect");
-      }
-    });
+    // Navigate to the OAuth initiation endpoint — it redirects to Linear
+    window.location.href = "/api/admin/workspace/oauth?action=connect";
   }
 
   function disconnect() {
@@ -95,17 +93,43 @@ export function OAuthConnectionForm() {
     );
   }
 
-  const connected = status?.configured ?? false;
+  // Env vars not set — nothing to show except a note for developers
+  if (!status?.envConfigured) {
+    return (
+      <div className="max-w-lg">
+        <h2 className="text-lg font-semibold mb-1">Comment Attribution</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Connect a Linear OAuth app so client comments show the author&apos;s name
+          in Linear instead of the workspace token owner.
+        </p>
+        <div className="border border-border rounded-lg p-4 bg-card">
+          <p className="text-sm text-muted-foreground">
+            OAuth app credentials are not configured. Set{" "}
+            <code className="text-xs bg-muted px-1 py-0.5 rounded font-mono">
+              LINEAR_OAUTH_CLIENT_ID
+            </code>{" "}
+            and{" "}
+            <code className="text-xs bg-muted px-1 py-0.5 rounded font-mono">
+              LINEAR_OAUTH_CLIENT_SECRET
+            </code>{" "}
+            environment variables to enable this feature.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const authorized = status?.authorized ?? false;
 
   return (
     <div className="max-w-lg">
       <h2 className="text-lg font-semibold mb-1">Comment Attribution</h2>
       <p className="text-sm text-muted-foreground mb-4">
-        Connect a Linear OAuth app so client comments show the author&apos;s name in
-        Linear instead of the workspace token owner.
+        Connect a Linear OAuth app so client comments show the author&apos;s name
+        in Linear instead of the workspace token owner.
       </p>
 
-      {connected ? (
+      {authorized ? (
         <div className="space-y-4">
           {/* Connected state */}
           <div className="border border-border rounded-lg p-4 bg-card">
@@ -114,27 +138,19 @@ export function OAuthConnectionForm() {
                 <Check className="w-4 h-4 text-[var(--badge-green-text)]" />
               </div>
               <div>
-                <p className="text-sm font-medium">OAuth App Connected</p>
+                <p className="text-sm font-medium">Connected</p>
                 <p className="text-xs text-muted-foreground">
                   {status?.app?.name ?? "Linear OAuth App"}
                 </p>
               </div>
             </div>
 
-            <div className="space-y-1.5 text-xs text-muted-foreground">
-              {status?.clientId && (
-                <div className="flex items-center gap-1.5">
-                  <KeyRound className="w-3 h-3" />
-                  <span className="font-mono">{status.clientId}</span>
-                </div>
-              )}
-              {status?.connectedAt && (
-                <p>
-                  Connected {new Date(status.connectedAt).toLocaleDateString()} at{" "}
-                  {new Date(status.connectedAt).toLocaleTimeString()}
-                </p>
-              )}
-            </div>
+            {status?.connectedAt && (
+              <p className="text-xs text-muted-foreground">
+                Connected {new Date(status.connectedAt).toLocaleDateString()} at{" "}
+                {new Date(status.connectedAt).toLocaleTimeString()}
+              </p>
+            )}
 
             <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/50 rounded px-2.5 py-1.5">
               <Users className="w-3.5 h-3.5 shrink-0" />
@@ -149,11 +165,11 @@ export function OAuthConnectionForm() {
           <div className="border border-destructive/30 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
               <Unplug className="w-4 h-4 text-destructive" />
-              <p className="text-sm font-medium">Disconnect OAuth App</p>
+              <p className="text-sm font-medium">Disconnect</p>
             </div>
             <p className="text-xs text-muted-foreground mb-3">
-              Client comments will revert to showing the workspace token owner&apos;s
-              name in Linear.
+              Client comments will revert to showing the workspace token
+              owner&apos;s name in Linear.
             </p>
             <button
               onClick={disconnect}
@@ -165,67 +181,33 @@ export function OAuthConnectionForm() {
           </div>
         </div>
       ) : (
-        /* Disconnected state */
-        <div className="border border-border rounded-lg p-6 bg-card">
-          <div className="flex items-center gap-2.5 mb-4">
-            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-              <Users className="w-4 h-4 text-muted-foreground" />
+        /* Not connected — show Connect button */
+        <div className="border border-[var(--badge-blue-bg)] bg-[var(--badge-blue-bg)]/10 rounded-lg p-6">
+          <div className="flex items-center gap-2.5 mb-3">
+            <div className="w-8 h-8 rounded-full bg-[var(--badge-blue-bg)] flex items-center justify-center">
+              <Users className="w-4 h-4 text-[var(--badge-blue-text)]" />
             </div>
             <div>
               <p className="text-sm font-medium">Not connected</p>
               <p className="text-xs text-muted-foreground">
-                Enter your Linear OAuth app credentials
+                Authorize Pulse to post comments with client attribution
               </p>
             </div>
           </div>
 
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="clientId" className="block text-xs font-medium mb-1">
-                Client ID
-              </label>
-              <input
-                id="clientId"
-                type="text"
-                value={clientId}
-                onChange={(e) => setClientId(e.target.value)}
-                placeholder="Your OAuth app Client ID"
-                className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background font-mono focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent placeholder:text-muted-foreground/60"
-              />
-            </div>
+          <p className="text-xs text-muted-foreground mb-4">
+            This will redirect you to Linear to authorize the Pulse OAuth app.
+            Once authorized, client comments will show the author&apos;s name
+            instead of the workspace token owner.
+          </p>
 
-            <div>
-              <label htmlFor="clientSecret" className="block text-xs font-medium mb-1">
-                Client Secret
-              </label>
-              <input
-                id="clientSecret"
-                type="password"
-                value={clientSecret}
-                onChange={(e) => setClientSecret(e.target.value)}
-                placeholder="Your OAuth app Client Secret"
-                className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background font-mono focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent placeholder:text-muted-foreground/60"
-              />
-            </div>
-
-            <p className="text-[10px] text-muted-foreground">
-              Create an OAuth app at Linear Settings → API → OAuth Applications.
-              Enable &ldquo;Client credentials&rdquo; in the app settings.
-            </p>
-
-            <button
-              onClick={connect}
-              disabled={!clientId.trim() || !clientSecret.trim() || isPending}
-              className={cn(
-                "w-full px-4 py-2 text-sm font-medium rounded-md transition-colors",
-                clientId.trim() && clientSecret.trim()
-                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                  : "bg-muted text-muted-foreground cursor-not-allowed"
-              )}
-            >
-              {isPending ? "Validating..." : "Connect"}
-            </button>
-          </div>
+          <button
+            onClick={connect}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
+            <ExternalLink className="w-4 h-4" />
+            Connect to Linear
+          </button>
         </div>
       )}
     </div>

@@ -25,6 +25,11 @@ export function AdminSidebar() {
   );
   const tokenConnected = tokenStatus?.configured ?? false;
 
+  const { data: oauthStatus } = useFetch<{ envConfigured: boolean; authorized: boolean }>(
+    "/api/admin/workspace/oauth"
+  );
+  const oauthNeedsSetup = oauthStatus?.envConfigured && !oauthStatus?.authorized;
+
   const { data: syncHealth } = useFetch<{ status: string }>(
     "/api/admin/sync/health"
   );
@@ -191,7 +196,9 @@ export function AdminSidebar() {
             <span
               className={cn(
                 "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-sidebar",
-                tokenConnected ? "bg-green-500" : "bg-red-500"
+                !tokenConnected ? "bg-red-500" :
+                oauthNeedsSetup ? "bg-yellow-500" :
+                "bg-green-500"
               )}
             />
           </div>
