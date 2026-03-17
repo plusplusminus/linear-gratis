@@ -49,6 +49,27 @@ export default function RootLayout({
                   document.documentElement.classList.remove('dark')
                 }
               } catch (_) {}
+
+              console.log(
+                '%c\\n' +
+                '    ██████╗ ██╗   ██╗██╗     ███████╗███████╗\\n' +
+                '    ██╔══██╗██║   ██║██║     ██╔════╝██╔════╝\\n' +
+                '    ██████╔╝██║   ██║██║     ███████╗█████╗  \\n' +
+                '    ██╔═══╝ ██║   ██║██║     ╚════██║██╔══╝  \\n' +
+                '    ██║     ╚██████╔╝███████╗███████║███████╗\\n' +
+                '    ╚═╝      ╚═════╝ ╚══════╝╚══════╝╚══════╝\\n',
+                'color: #a855f7; font-size: 12px; font-family: monospace;'
+              );
+              console.log(
+                '%c    Hey there, curious one. 👀\\n' +
+                '    Like what you see under the hood?\\n\\n' +
+                '    We build things at plusplusminus.co.za\\n',
+                'color: #c084fc; font-size: 13px; font-family: monospace;'
+              );
+              console.log(
+                '%c    ⚡ Powered by Next.js, Tailwind, Linear & good vibes',
+                'color: #6b7280; font-size: 11px; font-family: monospace;'
+              );
             `,
           }}
         />
