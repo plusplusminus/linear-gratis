@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { captureEvent } from "@/lib/posthog-client";
 import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import ReactMarkdown, { type Components } from "react-markdown";
@@ -47,7 +47,7 @@ import {
   Check,
 } from "lucide-react";
 
-type IssueDetail = {
+export type IssueDetail = {
   id: string;
   identifier: string;
   title: string;
@@ -62,7 +62,7 @@ type IssueDetail = {
   updatedAt: string;
 };
 
-type Comment = {
+export type Comment = {
   id: string;
   linearId?: string;
   body: string;
@@ -77,7 +77,7 @@ type Comment = {
   children?: Comment[];
 };
 
-type HistoryEntry = {
+export type HistoryEntry = {
   id: string;
   createdAt: string;
   type: "state" | "priority" | "label" | "workflow";
@@ -168,7 +168,7 @@ function MarkdownImage({
   );
 }
 
-function useMarkdownComponents(onImageClick: (src: string, alt?: string) => void): Components {
+export function useMarkdownComponents(onImageClick: (src: string, alt?: string) => void): Components {
   return useMemo(() => ({
     img: (props: React.ComponentPropsWithoutRef<"img">) => (
       <MarkdownImage {...props} onImageClick={onImageClick} />
@@ -227,6 +227,7 @@ export function IssueDetailPanel({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const [issue, setIssue] = useState<IssueDetail | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [replyingTo, setReplyingTo] = useState<{ parentId: string; authorName: string } | null>(null);
@@ -273,12 +274,18 @@ export function IssueDetailPanel({
     if (issueId) setClosing(false);
   }, [issueId]);
 
-  // Build a shareable URL for the current task
+  // Build a standalone task URL: /hub/[slug]/[teamKey]/task/[issueId]
   const getTaskUrl = useCallback(() => {
-    const url = new URL(window.location.href);
-    if (activeId) url.searchParams.set("issue", activeId);
-    return url.toString();
-  }, [activeId]);
+    if (!activeId) return window.location.href;
+    // pathname is e.g. /hub/my-portal/ENG/projects/abc or /hub/my-portal/ENG/cycles/xyz
+    // Extract slug and teamKey from the first segments
+    const segments = pathname.split("/").filter(Boolean);
+    // segments: ["hub", slug, teamKey, ...]
+    const slug = segments[1];
+    const teamKey = segments[2];
+    if (!slug || !teamKey) return window.location.href;
+    return `${window.location.origin}/hub/${slug}/${teamKey}/task/${activeId}`;
+  }, [activeId, pathname]);
 
   const handleCopyLink = useCallback(async () => {
     try {
@@ -604,7 +611,7 @@ export function IssueDetailPanel({
 
 // -- Sub-components ──────────────────────────────────────────────────────────
 
-function StatusBadge({
+export function StatusBadge({
   state,
 }: {
   state: { name: string; color: string; type: string };
@@ -646,7 +653,7 @@ function StatusIcon({
   }
 }
 
-function PriorityIcon({ priority }: { priority: number }) {
+export function PriorityIcon({ priority }: { priority: number }) {
   const cls = "w-3.5 h-3.5";
   switch (priority) {
     case 1:
@@ -662,7 +669,7 @@ function PriorityIcon({ priority }: { priority: number }) {
   }
 }
 
-function DueDateBadge({ dueDate }: { dueDate: string }) {
+export function DueDateBadge({ dueDate }: { dueDate: string }) {
   const date = new Date(dueDate);
   const now = new Date();
   const isOverdue = date < now;
@@ -692,7 +699,7 @@ function DueDateBadge({ dueDate }: { dueDate: string }) {
   );
 }
 
-function CommentThread({
+export function CommentThread({
   comment,
   onReply,
   hubId,
@@ -729,7 +736,7 @@ function CommentThread({
   );
 }
 
-function CommentBubble({
+export function CommentBubble({
   comment,
   compact,
   onReply,
@@ -938,7 +945,7 @@ function CollapsibleHistory({ history }: { history: HistoryEntry[] }) {
   );
 }
 
-function HistoryItem({ entry }: { entry: HistoryEntry }) {
+export function HistoryItem({ entry }: { entry: HistoryEntry }) {
   const isWorkflow = entry.type === "workflow";
 
   return (
@@ -1103,7 +1110,7 @@ function WorkflowHistoryContent({ entry }: { entry: HistoryEntry }) {
   );
 }
 
-function RelativeTime({ dateStr }: { dateStr: string }) {
+export function RelativeTime({ dateStr }: { dateStr: string }) {
   const date = new Date(dateStr);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
