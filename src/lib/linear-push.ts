@@ -157,25 +157,41 @@ export async function pushCommentToLinear(
   // Try createAsUser attribution with OAuth app token
   if (isOAuthApp && trimmedAuthorName) {
     try {
-      return await executeCommentCreate(
-        token,
-        COMMENT_CREATE_AS_USER_MUTATION,
-        {
-          ...baseVars,
-          body,
-          createAsUser: trimmedAuthorName,
-          displayIconUrl: author?.authorAvatarUrl ?? null,
+      // Direct single-attempt call (no retries) — if createAsUser isn't
+      // supported, we want to fail fast and fall back, not retry 3 times.
+      const res = await fetch(LINEAR_API, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token.trim()}`,
         },
-        rateLimiter
-      );
-    } catch (err) {
-      // If createAsUser isn't supported for this token type, fall back
-      const msg = err instanceof Error ? err.message : "";
-      if (msg.includes("Validation Error") || msg.includes("Unknown argument")) {
-        console.warn("createAsUser not supported, falling back to bold prefix:", msg);
-      } else {
-        throw err;
+        body: JSON.stringify({
+          query: COMMENT_CREATE_AS_USER_MUTATION,
+          variables: {
+            ...baseVars,
+            body,
+            createAsUser: trimmedAuthorName,
+            displayIconUrl: author?.authorAvatarUrl ?? null,
+          },
+        }),
+      });
+
+      const json = (await res.json()) as {
+        data?: { commentCreate?: { success: boolean; comment?: { id: string } } };
+        errors?: Array<{ message: string; extensions?: { code?: string } }>;
+      };
+
+      if (json.data?.commentCreate?.success && json.data.commentCreate.comment) {
+        return json.data.commentCreate.comment.id;
       }
+
+      // Log the full error for debugging
+      const errorDetail = json.errors
+        ? JSON.stringify(json.errors)
+        : `status=${res.status}, success=${json.data?.commentCreate?.success}`;
+      console.warn("createAsUser attempt failed, falling back to bold prefix. Error:", errorDetail);
+    } catch (err) {
+      console.warn("createAsUser attempt threw, falling back to bold prefix:", err);
     }
   }
 
@@ -503,26 +519,53 @@ export async function createIssueInLinear(
     cycleId: params.cycleId ?? undefined,
   };
 
-  // Try createAsUser attribution with OAuth app token
+  // Try createAsUser attribution with OAuth app token (single attempt, no retries)
   if (isOAuthApp && trimmedAuthorName) {
     try {
-      return await executeIssueCreate(
-        token,
-        ISSUE_CREATE_AS_USER_MUTATION,
-        {
-          ...baseVars,
-          createAsUser: trimmedAuthorName,
-          displayIconUrl: author?.authorAvatarUrl ?? undefined,
+      const res = await fetch(LINEAR_API, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token.trim()}`,
         },
-        rateLimiter
-      );
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "";
-      if (msg.includes("Validation Error") || msg.includes("Unknown argument")) {
-        console.warn("createAsUser not supported for issues, falling back to description prefix:", msg);
-      } else {
-        throw err;
+        body: JSON.stringify({
+          query: ISSUE_CREATE_AS_USER_MUTATION,
+          variables: {
+            ...baseVars,
+            createAsUser: trimmedAuthorName,
+            displayIconUrl: author?.authorAvatarUrl ?? undefined,
+          },
+        }),
+      });
+
+      if (rateLimiter) rateLimiter.updateFromResponse(res);
+
+      const json = (await res.json()) as {
+        data?: { issueCreate?: { success: boolean; issue?: CreatedIssue & { labels: { nodes: Array<{ id: string; name: string; color: string }> } } } };
+        errors?: Array<{ message: string }>;
+      };
+
+      if (json.data?.issueCreate?.success && json.data.issueCreate.issue) {
+        const issue = json.data.issueCreate.issue;
+        return {
+          id: issue.id,
+          identifier: issue.identifier,
+          title: issue.title,
+          priority: issue.priority,
+          priorityLabel: issue.priorityLabel,
+          url: issue.url,
+          state: issue.state,
+          labels: issue.labels.nodes,
+          createdAt: issue.createdAt,
+        };
       }
+
+      const errorDetail = json.errors
+        ? JSON.stringify(json.errors)
+        : `status=${res.status}, success=${json.data?.issueCreate?.success}`;
+      console.warn("createAsUser attempt failed for issue, falling back. Error:", errorDetail);
+    } catch (err) {
+      console.warn("createAsUser attempt threw for issue, falling back:", err);
     }
   }
 
