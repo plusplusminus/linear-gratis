@@ -61,14 +61,17 @@ export async function POST(
       );
     }
 
-    // Push to Linear (non-blocking for the response — we update status after)
-    const linearBody = `**${authorName}:** ${body.trim()}`;
-
+    // Push to Linear with author attribution (createAsUser if OAuth app configured)
     try {
       const linearCommentId = await pushCommentToLinear(
         issueLinearId,
-        linearBody,
-        parentId
+        body.trim(),
+        parentId,
+        undefined,
+        {
+          authorName,
+          authorAvatarUrl: user.profilePictureUrl ?? undefined,
+        }
       );
 
       await supabaseAdmin
@@ -176,13 +179,15 @@ export async function PATCH(
       );
     }
 
-    const linearBody = `**${comment.author_name}:** ${comment.body}`;
-
     try {
       const linearCommentId = await pushCommentToLinear(
         comment.issue_linear_id,
-        linearBody,
-        comment.parent_comment_id ?? undefined
+        comment.body,
+        comment.parent_comment_id ?? undefined,
+        undefined,
+        {
+          authorName: comment.author_name,
+        }
       );
 
       await supabaseAdmin

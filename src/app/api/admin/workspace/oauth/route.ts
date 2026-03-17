@@ -1,0 +1,111 @@
+import { NextResponse } from "next/server";
+import { withAdminAuth } from "@/lib/admin-auth";
+import {
+  validateOAuthCredentials,
+  setOAuthCredentials,
+  clearOAuthCredentials,
+  getOAuthCredentials,
+} from "@/lib/linear-oauth";
+import { getWorkspaceSetting, setWorkspaceSetting } from "@/lib/workspace";
+
+// POST: Validate and store OAuth app credentials
+export async function POST(request: Request) {
+  try {
+    const auth = await withAdminAuth();
+    if ("error" in auth) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+    const { user } = auth;
+
+    const body = (await request.json()) as {
+      clientId?: string;
+      clientSecret?: string;
+    };
+
+    if (!body.clientId || !body.clientSecret) {
+      return NextResponse.json(
+        { error: "Both clientId and clientSecret are required" },
+        { status: 400 }
+      );
+    }
+
+    // Validate by acquiring a test token
+    const { appName } = await validateOAuthCredentials(
+      body.clientId,
+      body.clientSecret
+    );
+
+    // Store credentials
+    await setOAuthCredentials(body.clientId, body.clientSecret, user.id);
+
+    // Store metadata for display
+    await setWorkspaceSetting("linear_oauth_app_name", appName, user.id);
+    await setWorkspaceSetting(
+      "linear_oauth_connected_at",
+      new Date().toISOString(),
+      user.id
+    );
+
+    return NextResponse.json({
+      success: true,
+      app: { name: appName },
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Internal server error";
+    const status = message.includes("OAuth") ? 400 : 500;
+    console.error("POST /api/admin/workspace/oauth error:", message);
+    return NextResponse.json({ error: message }, { status });
+  }
+}
+
+// GET: Check OAuth app configuration status
+export async function GET() {
+  try {
+    const auth = await withAdminAuth();
+    if ("error" in auth) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
+    const credentials = await getOAuthCredentials();
+    if (!credentials) {
+      return NextResponse.json({ configured: false });
+    }
+
+    const appName = await getWorkspaceSetting("linear_oauth_app_name");
+    const connectedAt = await getWorkspaceSetting("linear_oauth_connected_at");
+
+    return NextResponse.json({
+      configured: true,
+      app: { name: appName },
+      clientId: credentials.clientId,
+      connectedAt,
+    });
+  } catch (error) {
+    console.error("GET /api/admin/workspace/oauth error:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE: Remove OAuth app credentials
+export async function DELETE() {
+  try {
+    const auth = await withAdminAuth();
+    if ("error" in auth) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
+    await clearOAuthCredentials();
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("DELETE /api/admin/workspace/oauth error:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}

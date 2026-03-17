@@ -18,6 +18,8 @@ export async function POST(
       );
     }
 
+    const { user } = auth;
+
     const body = (await request.json()) as {
       title?: string;
       description?: string;
@@ -50,14 +52,25 @@ export async function POST(
       }
     }
 
-    const issue = await createIssueInLinear({
-      teamId: body.teamId,
-      title: body.title.trim(),
-      description: body.description?.trim() || undefined,
-      priority: body.priority,
-      labelIds: labelIds.length > 0 ? labelIds : undefined,
-      projectId: body.projectId || undefined,
-    });
+    const authorName = [user.firstName, user.lastName]
+      .filter(Boolean)
+      .join(" ") || user.email;
+
+    const issue = await createIssueInLinear(
+      {
+        teamId: body.teamId,
+        title: body.title.trim(),
+        description: body.description?.trim() || undefined,
+        priority: body.priority,
+        labelIds: labelIds.length > 0 ? labelIds : undefined,
+        projectId: body.projectId || undefined,
+      },
+      undefined,
+      {
+        authorName,
+        authorAvatarUrl: user.profilePictureUrl ?? undefined,
+      }
+    );
 
     return NextResponse.json({ issue });
   } catch (error) {

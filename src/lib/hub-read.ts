@@ -833,6 +833,19 @@ export async function fetchHubComments(
     isTeamComment: false,
   }));
 
+  // Deduplicate: when a hub comment has been pushed to Linear and synced back,
+  // the synced_comments version would show a duplicate. Remove synced comments
+  // whose linear_id matches a hub comment's linear_comment_id.
+  const pushedHubLinearIds = new Set(
+    hubComments
+      .filter((c) => c.linearId && c.push_status === "pushed")
+      .map((c) => c.linearId!)
+  );
+
+  const deduplicatedLinearComments = linearComments.filter(
+    (c) => !pushedHubLinearIds.has(c.linearId)
+  );
+
   // Merge and sort by createdAt
   type FlatComment = {
     id: string;
@@ -847,7 +860,7 @@ export async function fetchHubComments(
     push_status?: string;
     push_error?: string;
   };
-  const all: FlatComment[] = [...linearComments, ...hubComments].sort(
+  const all: FlatComment[] = [...deduplicatedLinearComments, ...hubComments].sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   );
 
