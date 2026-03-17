@@ -68,7 +68,11 @@ export async function pushCommentToLinear(
     throw new RateLimitDeferredError("pushCommentToLinear deferred due to rate limit");
   }
 
-  const { token, isOAuthApp } = await getWriteToken();
+  // Only look up the OAuth app token when we have author info to attribute.
+  // Avoids unnecessary DB lookups when no attribution is needed.
+  const { token, isOAuthApp } = author
+    ? await getWriteToken()
+    : { token: await getWorkspaceToken(), isOAuthApp: false };
 
   // If using OAuth app token, use createAsUser for attribution.
   // If using personal token, fall back to bold prefix in body.
