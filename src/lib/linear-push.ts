@@ -1,4 +1,5 @@
 import { getWorkspaceToken } from "./workspace";
+import { getWriteToken } from "./linear-oauth";
 import { LinearRateLimiter } from "./linear-rate-limiter";
 
 const LINEAR_API = "https://api.linear.app/graphql";
@@ -16,9 +17,33 @@ export class RateLimitDeferredError extends Error {
   }
 }
 
+/**
+ * Author attribution info for createAsUser (OAuth app tokens only).
+ */
+export type AuthorAttribution = {
+  authorName: string;
+  authorAvatarUrl?: string;
+};
+
+/**
+ * Resolve the appropriate token for a write operation.
+ * Only looks up the OAuth app token when author info is provided
+ * (avoids unnecessary DB lookups otherwise).
+ */
+async function resolveWriteToken(
+  author?: AuthorAttribution
+): Promise<{ token: string; isOAuthApp: boolean }> {
+  if (author) {
+    return getWriteToken();
+  }
+  return { token: await getWorkspaceToken(), isOAuthApp: false };
+}
+
+// -- Comment mutations ────────────────────────────────────────────────────────
+
 const COMMENT_CREATE_MUTATION = `
-  mutation CommentCreate($issueId: String!, $body: String!, $parentId: String) {
-    commentCreate(input: { issueId: $issueId, body: $body, parentId: $parentId }) {
+  mutation CommentCreate($issueId: String!, $body: String!, $parentId: String, $createAsUser: String, $displayIconUrl: String) {
+    commentCreate(input: { issueId: $issueId, body: $body, parentId: $parentId, createAsUser: $createAsUser, displayIconUrl: $displayIconUrl }) {
       success
       comment {
         id
@@ -29,6 +54,9 @@ const COMMENT_CREATE_MUTATION = `
 
 /**
  * Push a comment to Linear via GraphQL API.
+ * When an OAuth app token is available, uses createAsUser for proper attribution.
+ * Falls back to personal token with bold author prefix if OAuth is not configured.
+ *
  * Retries up to 3 times on rate limit errors with exponential backoff.
  * Returns the Linear comment ID on success, or throws on failure.
  */
@@ -36,13 +64,31 @@ export async function pushCommentToLinear(
   issueLinearId: string,
   body: string,
   parentId?: string,
-  rateLimiter?: LinearRateLimiter
+  rateLimiter?: LinearRateLimiter,
+  author?: AuthorAttribution
 ): Promise<string> {
   if (rateLimiter && !rateLimiter.canProceed()) {
     throw new RateLimitDeferredError("pushCommentToLinear deferred due to rate limit");
   }
 
-  const token = await getWorkspaceToken();
+  const { token, isOAuthApp } = await resolveWriteToken(author);
+
+  // If using OAuth app token, use createAsUser for attribution.
+  // If using personal token, fall back to bold prefix in body.
+  let commentBody = body;
+  let createAsUser: string | null = null;
+  let displayIconUrl: string | null = null;
+
+  const trimmedAuthorName = author?.authorName?.trim() || null;
+
+  if (isOAuthApp && trimmedAuthorName) {
+    createAsUser = trimmedAuthorName;
+    displayIconUrl = author?.authorAvatarUrl ?? null;
+  } else if (trimmedAuthorName) {
+    // Fallback: prepend bold author name to body
+    commentBody = `**${trimmedAuthorName}:** ${body}`;
+  }
+
   const MAX_RETRIES = 3;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -50,11 +96,17 @@ export async function pushCommentToLinear(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: token.trim(),
+        Authorization: `Bearer ${token.trim()}`,
       },
       body: JSON.stringify({
         query: COMMENT_CREATE_MUTATION,
-        variables: { issueId: issueLinearId, body, parentId: parentId ?? null },
+        variables: {
+          issueId: issueLinearId,
+          body: commentBody,
+          parentId: parentId ?? null,
+          createAsUser,
+          displayIconUrl,
+        },
       }),
     });
 
@@ -107,6 +159,8 @@ export async function pushCommentToLinear(
   throw new Error("Linear rate limit: max retries exceeded");
 }
 
+// -- Label updates ────────────────────────────────────────────────────────────
+
 const ISSUE_UPDATE_LABELS_MUTATION = `
   mutation IssueUpdateLabels($issueId: String!, $labelIds: [String!]!) {
     issueUpdate(id: $issueId, input: { labelIds: $labelIds }) {
@@ -127,7 +181,9 @@ const ISSUE_UPDATE_LABELS_MUTATION = `
 
 /**
  * Update labels on a Linear issue.
- * Returns the updated label list on success.
+ * Uses the personal workspace token intentionally — label updates are admin
+ * operations with no createAsUser support on issueUpdate, so the OAuth app
+ * token would add no attribution value.
  */
 export async function updateIssueLabels(
   issueLinearId: string,
@@ -144,7 +200,7 @@ export async function updateIssueLabels(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: token.trim(),
+      Authorization: `Bearer ${token.trim()}`,
     },
     body: JSON.stringify({
       query: ISSUE_UPDATE_LABELS_MUTATION,
@@ -195,7 +251,9 @@ const ISSUE_CREATE_MUTATION = `
     $labelIds: [String!],
     $projectId: String,
     $stateId: String,
-    $cycleId: String
+    $cycleId: String,
+    $createAsUser: String,
+    $displayIconUrl: String
   ) {
     issueCreate(input: {
       teamId: $teamId,
@@ -205,7 +263,9 @@ const ISSUE_CREATE_MUTATION = `
       labelIds: $labelIds,
       projectId: $projectId,
       stateId: $stateId,
-      cycleId: $cycleId
+      cycleId: $cycleId,
+      createAsUser: $createAsUser,
+      displayIconUrl: $displayIconUrl
     }) {
       success
       issue {
@@ -259,35 +319,57 @@ export type CreatedIssue = {
 
 /**
  * Create an issue in Linear via GraphQL API.
+ * When an OAuth app token is available and author is provided,
+ * uses createAsUser for proper attribution.
+ * When using personal token with author, prepends author name to description.
+ *
  * Returns the created issue data on success, or throws on failure.
  */
 export async function createIssueInLinear(
   params: CreateIssueParams,
-  rateLimiter?: LinearRateLimiter
+  rateLimiter?: LinearRateLimiter,
+  author?: AuthorAttribution
 ): Promise<CreatedIssue> {
   if (rateLimiter && !rateLimiter.canProceed()) {
     throw new RateLimitDeferredError("createIssueInLinear deferred due to rate limit");
   }
 
-  const token = await getWorkspaceToken();
+  const { token, isOAuthApp } = await resolveWriteToken(author);
+
+  let createAsUser: string | undefined;
+  let displayIconUrl: string | undefined;
+  let description = params.description;
+
+  const trimmedAuthorName = author?.authorName?.trim() || null;
+
+  if (isOAuthApp && trimmedAuthorName) {
+    createAsUser = trimmedAuthorName;
+    displayIconUrl = author?.authorAvatarUrl;
+  } else if (trimmedAuthorName) {
+    // Fallback: prepend author attribution to description
+    const prefix = `*Submitted by ${trimmedAuthorName}*`;
+    description = description ? `${prefix}\n\n${description}` : prefix;
+  }
 
   const res = await fetch(LINEAR_API, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: token.trim(),
+      Authorization: `Bearer ${token.trim()}`,
     },
     body: JSON.stringify({
       query: ISSUE_CREATE_MUTATION,
       variables: {
         teamId: params.teamId,
         title: params.title,
-        description: params.description ?? undefined,
+        description: description ?? undefined,
         priority: params.priority ?? undefined,
         labelIds: params.labelIds?.length ? params.labelIds : undefined,
         projectId: params.projectId ?? undefined,
         stateId: params.stateId ?? undefined,
         cycleId: params.cycleId ?? undefined,
+        createAsUser: createAsUser ?? undefined,
+        displayIconUrl: displayIconUrl ?? undefined,
       },
     }),
   });
