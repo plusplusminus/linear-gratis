@@ -54,6 +54,13 @@ export function IssueFullView({
   // Fetch issue data
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
+    setIssue(null);
+    setComments([]);
+    setHistory([]);
+    setHubLabels([]);
+    setWorkflowLabelIds([]);
+    setWorkflowRules([]);
 
     async function fetchIssue() {
       try {

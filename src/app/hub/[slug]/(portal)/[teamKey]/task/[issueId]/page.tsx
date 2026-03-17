@@ -33,7 +33,7 @@ export default async function TaskViewPage({
   if (!team) notFound();
 
   const issue = await fetchHubIssueDetail(hub.id, issueId);
-  if (!issue) notFound();
+  if (!issue || issue.teamId !== team.id) notFound();
 
   return (
     <div className="flex flex-col h-full">

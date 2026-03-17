@@ -277,12 +277,10 @@ export function IssueDetailPanel({
   // Build a standalone task URL: /hub/[slug]/[teamKey]/task/[issueId]
   const getTaskUrl = useCallback(() => {
     if (!activeId) return window.location.href;
-    // pathname is e.g. /hub/my-portal/ENG/projects/abc or /hub/my-portal/ENG/cycles/xyz
-    // Extract slug and teamKey from the first segments
     const segments = pathname.split("/").filter(Boolean);
-    // segments: ["hub", slug, teamKey, ...]
-    const slug = segments[1];
-    const teamKey = segments[2];
+    const hubIdx = segments.indexOf("hub");
+    const slug = hubIdx >= 0 ? segments[hubIdx + 1] : undefined;
+    const teamKey = hubIdx >= 0 ? segments[hubIdx + 2] : undefined;
     if (!slug || !teamKey) return window.location.href;
     return `${window.location.origin}/hub/${slug}/${teamKey}/task/${activeId}`;
   }, [activeId, pathname]);
@@ -306,7 +304,7 @@ export function IssueDetailPanel({
   }, []);
 
   const handleOpenNewWindow = useCallback(() => {
-    window.open(getTaskUrl(), "_blank");
+    window.open(getTaskUrl(), "_blank", "noopener,noreferrer");
   }, [getTaskUrl]);
 
   // Fetch issue data
