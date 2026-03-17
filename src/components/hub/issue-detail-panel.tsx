@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { captureEvent } from "@/lib/posthog-client";
 import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import ReactMarkdown, { type Components } from "react-markdown";
@@ -47,7 +47,7 @@ import {
   Check,
 } from "lucide-react";
 
-type IssueDetail = {
+export type IssueDetail = {
   id: string;
   identifier: string;
   title: string;
@@ -62,7 +62,7 @@ type IssueDetail = {
   updatedAt: string;
 };
 
-type Comment = {
+export type Comment = {
   id: string;
   linearId?: string;
   body: string;
@@ -77,7 +77,7 @@ type Comment = {
   children?: Comment[];
 };
 
-type HistoryEntry = {
+export type HistoryEntry = {
   id: string;
   createdAt: string;
   type: "state" | "priority" | "label" | "workflow";
@@ -168,7 +168,7 @@ function MarkdownImage({
   );
 }
 
-function useMarkdownComponents(onImageClick: (src: string, alt?: string) => void): Components {
+export function useMarkdownComponents(onImageClick: (src: string, alt?: string) => void): Components {
   return useMemo(() => ({
     img: (props: React.ComponentPropsWithoutRef<"img">) => (
       <MarkdownImage {...props} onImageClick={onImageClick} />
@@ -227,6 +227,7 @@ export function IssueDetailPanel({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const [issue, setIssue] = useState<IssueDetail | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [replyingTo, setReplyingTo] = useState<{ parentId: string; authorName: string } | null>(null);
@@ -235,6 +236,7 @@ export function IssueDetailPanel({
   const [workflowRules, setWorkflowRules] = useState<Array<{ labelId: string; triggerType: string; description: string }>>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [issueError, setIssueError] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
   const [descOverflows, setDescOverflows] = useState(false);
   const descRef = useRef<HTMLDivElement>(null);
@@ -273,12 +275,16 @@ export function IssueDetailPanel({
     if (issueId) setClosing(false);
   }, [issueId]);
 
-  // Build a shareable URL for the current task
+  // Build a standalone task URL: /hub/[slug]/[teamKey]/task/[issueId]
   const getTaskUrl = useCallback(() => {
-    const url = new URL(window.location.href);
-    if (activeId) url.searchParams.set("issue", activeId);
-    return url.toString();
-  }, [activeId]);
+    if (!activeId) return window.location.href;
+    const segments = pathname.split("/").filter(Boolean);
+    const hubIdx = segments.indexOf("hub");
+    const slug = hubIdx >= 0 ? segments[hubIdx + 1] : undefined;
+    const teamKey = hubIdx >= 0 ? segments[hubIdx + 2] : undefined;
+    if (!slug || !teamKey) return window.location.href;
+    return `${window.location.origin}/hub/${encodeURIComponent(slug)}/${encodeURIComponent(teamKey)}/task/${encodeURIComponent(activeId)}`;
+  }, [activeId, pathname]);
 
   const handleCopyLink = useCallback(async () => {
     try {
@@ -299,7 +305,7 @@ export function IssueDetailPanel({
   }, []);
 
   const handleOpenNewWindow = useCallback(() => {
-    window.open(getTaskUrl(), "_blank");
+    window.open(getTaskUrl(), "_blank", "noopener,noreferrer");
   }, [getTaskUrl]);
 
   // Fetch issue data
@@ -313,37 +319,50 @@ export function IssueDetailPanel({
 
     let cancelled = false;
     setLoading(true);
+    setIssueError(false);
+    setIssue(null);
+    setComments([]);
+    setHubLabels([]);
+    setWorkflowLabelIds([]);
+    setWorkflowRules([]);
+    setHistory([]);
 
     async function fetchIssue() {
       try {
-        const [issueRes, historyRes] = await Promise.all([
+        const [issueResult, historyResult] = await Promise.allSettled([
           fetch(`/api/hub/${hubId}/issues/${activeId}`),
           fetch(`/api/hub/${hubId}/issues/${activeId}/history`),
         ]);
 
-        if (!cancelled && issueRes.ok) {
-          const data = (await issueRes.json()) as {
-            issue: IssueDetail;
-            comments: Comment[];
-            hubLabels: Array<{ id: string; name: string; color: string }>;
-            workflowLabelIds?: string[];
-            workflowRules?: Array<{ labelId: string; triggerType: string; description: string }>;
-          };
-          setIssue(data.issue);
-          setComments(data.comments);
-          setHubLabels(data.hubLabels ?? []);
-          setWorkflowLabelIds(data.workflowLabelIds ?? []);
-          setWorkflowRules(data.workflowRules ?? []);
-        }
+        if (!cancelled) {
+          if (issueResult.status === "fulfilled" && issueResult.value.ok) {
+            const data = (await issueResult.value.json()) as {
+              issue: IssueDetail;
+              comments: Comment[];
+              hubLabels: Array<{ id: string; name: string; color: string }>;
+              workflowLabelIds?: string[];
+              workflowRules?: Array<{ labelId: string; triggerType: string; description: string }>;
+            };
+            setIssue(data.issue);
+            setComments(data.comments);
+            setHubLabels(data.hubLabels ?? []);
+            setWorkflowLabelIds(data.workflowLabelIds ?? []);
+            setWorkflowRules(data.workflowRules ?? []);
+          } else {
+            setIssueError(true);
+          }
 
-        if (!cancelled && historyRes.ok) {
-          const historyData = (await historyRes.json()) as {
-            history: HistoryEntry[];
-          };
-          setHistory(historyData.history ?? []);
+          if (historyResult.status === "fulfilled" && historyResult.value.ok) {
+            const historyData = (await historyResult.value.json()) as {
+              history: HistoryEntry[];
+            };
+            setHistory(historyData.history ?? []);
+          }
         }
       } catch {
-        // silently fail
+        if (!cancelled) {
+          setIssueError(true);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -414,6 +433,18 @@ export function IssueDetailPanel({
             <div className="h-5 w-24 bg-muted/50 rounded animate-pulse" />
             <div className="h-6 w-64 bg-muted/50 rounded animate-pulse" />
             <div className="h-40 bg-muted/50 rounded animate-pulse" />
+          </div>
+        ) : issueError ? (
+          <div className="flex flex-col items-center justify-center flex-1 p-6 text-center">
+            <AlertCircle className="w-5 h-5 text-muted-foreground mb-2" />
+            <p className="text-sm text-muted-foreground">Failed to load task</p>
+            <button
+              type="button"
+              onClick={handleClose}
+              className="mt-3 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Close
+            </button>
           </div>
         ) : issue ? (
           <>
@@ -604,7 +635,7 @@ export function IssueDetailPanel({
 
 // -- Sub-components ──────────────────────────────────────────────────────────
 
-function StatusBadge({
+export function StatusBadge({
   state,
 }: {
   state: { name: string; color: string; type: string };
@@ -646,7 +677,7 @@ function StatusIcon({
   }
 }
 
-function PriorityIcon({ priority }: { priority: number }) {
+export function PriorityIcon({ priority }: { priority: number }) {
   const cls = "w-3.5 h-3.5";
   switch (priority) {
     case 1:
@@ -662,7 +693,7 @@ function PriorityIcon({ priority }: { priority: number }) {
   }
 }
 
-function DueDateBadge({ dueDate }: { dueDate: string }) {
+export function DueDateBadge({ dueDate }: { dueDate: string }) {
   const date = new Date(dueDate);
   const now = new Date();
   const isOverdue = date < now;
@@ -692,7 +723,7 @@ function DueDateBadge({ dueDate }: { dueDate: string }) {
   );
 }
 
-function CommentThread({
+export function CommentThread({
   comment,
   onReply,
   hubId,
@@ -729,7 +760,7 @@ function CommentThread({
   );
 }
 
-function CommentBubble({
+export function CommentBubble({
   comment,
   compact,
   onReply,
@@ -938,7 +969,7 @@ function CollapsibleHistory({ history }: { history: HistoryEntry[] }) {
   );
 }
 
-function HistoryItem({ entry }: { entry: HistoryEntry }) {
+export function HistoryItem({ entry }: { entry: HistoryEntry }) {
   const isWorkflow = entry.type === "workflow";
 
   return (
@@ -1103,7 +1134,7 @@ function WorkflowHistoryContent({ entry }: { entry: HistoryEntry }) {
   );
 }
 
-function RelativeTime({ dateStr }: { dateStr: string }) {
+export function RelativeTime({ dateStr }: { dateStr: string }) {
   const date = new Date(dateStr);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
