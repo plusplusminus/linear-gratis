@@ -26,6 +26,15 @@ export type AuthorAttribution = {
 };
 
 /**
+ * Generate a fallback avatar URL from a name using ui-avatars.com.
+ * Returns a colored initial-based avatar matching Linear's purple theme.
+ */
+function generateAvatarUrl(name: string): string {
+  const encoded = encodeURIComponent(name.trim());
+  return `https://ui-avatars.com/api/?name=${encoded}&size=64&background=5E6AD2&color=fff&bold=true`;
+}
+
+/**
  * Resolve the appropriate token for a write operation.
  * Only looks up the OAuth app token when author info is provided
  * (avoids unnecessary DB lookups otherwise).
@@ -171,7 +180,7 @@ export async function pushCommentToLinear(
             ...baseVars,
             body,
             createAsUser: trimmedAuthorName,
-            displayIconUrl: author?.authorAvatarUrl || undefined,
+            displayIconUrl: author?.authorAvatarUrl || generateAvatarUrl(trimmedAuthorName),
           },
         }),
       });
@@ -533,7 +542,7 @@ export async function createIssueInLinear(
           variables: {
             ...baseVars,
             createAsUser: trimmedAuthorName,
-            displayIconUrl: author?.authorAvatarUrl ?? undefined,
+            displayIconUrl: author?.authorAvatarUrl || (trimmedAuthorName ? generateAvatarUrl(trimmedAuthorName) : undefined),
           },
         }),
       });
