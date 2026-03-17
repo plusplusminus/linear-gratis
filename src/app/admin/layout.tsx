@@ -6,7 +6,7 @@ import { AdminShell } from "@/components/admin/admin-shell";
 export const metadata = {
   title: {
     default: "Admin",
-    template: "%s — Admin | PPM Client Hub",
+    template: "%s — Admin | Pulse",
   },
 };
 

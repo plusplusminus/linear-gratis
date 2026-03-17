@@ -18,10 +18,10 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "PPM Client Hub",
-    template: "%s | PPM Client Hub",
+    default: "Pulse",
+    template: "%s | Pulse",
   },
-  description: "Client hub portal for Linear",
+  description: "Client hub portal powered by Linear",
   icons: {
     icon: [
       { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
@@ -43,7 +43,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               try {
-                if (localStorage.getItem('linear-integration-theme') === 'dark' || (!('linear-integration-theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                if (localStorage.getItem('pulse-theme') === 'dark' || (!('pulse-theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                   document.documentElement.classList.add('dark')
                 } else {
                   document.documentElement.classList.remove('dark')
@@ -58,7 +58,7 @@ export default function RootLayout({
       >
         <ThemeProvider
           defaultTheme="system"
-          storageKey="linear-integration-theme"
+          storageKey="pulse-theme"
         >
           <AuthKitProvider>
             <PostHogProvider>
