@@ -63,7 +63,7 @@ export default function RootLayout({
               console.log(
                 '%c    Hey there, curious one. 👀\\n' +
                 '    Like what you see under the hood?\\n\\n' +
-                '    We build things at plusplusminus.co.za\\n',
+                '    We build cool things at plusplusminus.co.za\\n',
                 'color: #c084fc; font-size: 13px; font-family: monospace;'
               );
               console.log(
