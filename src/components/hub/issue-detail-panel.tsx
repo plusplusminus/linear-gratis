@@ -42,6 +42,9 @@ import {
   File,
   Image,
   ImageOff,
+  ExternalLink,
+  Link,
+  Check,
 } from "lucide-react";
 
 type IssueDetail = {
@@ -237,6 +240,8 @@ export function IssueDetailPanel({
   const descRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const [lightboxImage, setLightboxImage] = useState<{ src: string; alt?: string } | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const mdComponents = useMarkdownComponents((src, alt) => setLightboxImage({ src, alt }));
 
@@ -267,6 +272,35 @@ export function IssueDetailPanel({
   useEffect(() => {
     if (issueId) setClosing(false);
   }, [issueId]);
+
+  // Build a shareable URL for the current task
+  const getTaskUrl = useCallback(() => {
+    const url = new URL(window.location.href);
+    if (activeId) url.searchParams.set("issue", activeId);
+    return url.toString();
+  }, [activeId]);
+
+  const handleCopyLink = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(getTaskUrl());
+      setLinkCopied(true);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      // clipboard API unavailable — silently fail
+    }
+  }, [getTaskUrl]);
+
+  // Clean up copy timer on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
+  const handleOpenNewWindow = useCallback(() => {
+    window.open(getTaskUrl(), "_blank");
+  }, [getTaskUrl]);
 
   // Fetch issue data
   useEffect(() => {
@@ -406,12 +440,38 @@ export function IssueDetailPanel({
                   </span>
                 )}
               </div>
-              <button
-                onClick={handleClose}
-                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0 ml-2"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-0.5 shrink-0 ml-2">
+                <button
+                  type="button"
+                  onClick={handleOpenNewWindow}
+                  title="Open in new window"
+                  aria-label="Open in new window"
+                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  title="Copy task link"
+                  aria-label="Copy task link"
+                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                >
+                  {linkCopied ? (
+                    <Check className="w-3.5 h-3.5 text-green-500" />
+                  ) : (
+                    <Link className="w-3.5 h-3.5" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  aria-label="Close panel"
+                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             {/* Scrollable content */}
