@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withHubAuthWrite, type HubAuthError } from "@/lib/hub-auth";
 import { getHubVisibleLabelIds } from "@/lib/hub-read";
 import { createIssueInLinear } from "@/lib/linear-push";
+import { isPPMAdmin } from "@/lib/ppm-admin";
 
 export async function POST(
   request: Request,
@@ -56,6 +57,13 @@ export async function POST(
       .filter(Boolean)
       .join(" ") || user.email;
 
+    // PPM admins have Linear accounts — skip createAsUser so the issue
+    // is created as their actual Linear identity.
+    const isAdmin = await isPPMAdmin(user.id, user.email);
+    const author = isAdmin
+      ? undefined
+      : { authorName, authorAvatarUrl: user.profilePictureUrl ?? undefined };
+
     const issue = await createIssueInLinear(
       {
         teamId: body.teamId,
@@ -66,10 +74,7 @@ export async function POST(
         projectId: body.projectId || undefined,
       },
       undefined,
-      {
-        authorName,
-        authorAvatarUrl: user.profilePictureUrl ?? undefined,
-      }
+      author
     );
 
     return NextResponse.json({ issue });
