@@ -3,6 +3,7 @@ import { encryptToken, decryptToken } from "@/lib/encryption";
 import { getWorkspaceToken } from "./workspace";
 
 const LINEAR_TOKEN_URL = "https://api.linear.app/oauth/token";
+const FETCH_TIMEOUT_MS = 10_000;
 
 /**
  * Thrown for OAuth credential validation failures (invalid client ID/secret,
@@ -28,6 +29,30 @@ type CachedToken = {
 
 // In-memory cache to avoid DB reads on every request
 let tokenCache: CachedToken | null = null;
+
+/**
+ * Fetch with a timeout to avoid hanging on unresponsive endpoints.
+ */
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs = FETCH_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new LinearOAuthError(
+        `Linear API request timed out after ${timeoutMs}ms`
+      );
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /**
  * Read OAuth app credentials from workspace_settings.
@@ -101,7 +126,13 @@ export async function clearOAuthCredentials(): Promise<void> {
   ];
 
   for (const key of keys) {
-    await supabaseAdmin.from("workspace_settings").delete().eq("key", key);
+    const { error } = await supabaseAdmin
+      .from("workspace_settings")
+      .delete()
+      .eq("key", key);
+    if (error) {
+      throw new Error(`Failed to delete OAuth setting '${key}': ${error.message}`);
+    }
   }
 
   tokenCache = null;
@@ -120,7 +151,7 @@ async function acquireClientCredentialsToken(
     scope: "read,write",
   });
 
-  const res = await fetch(LINEAR_TOKEN_URL, {
+  const res = await fetchWithTimeout(LINEAR_TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: body.toString(),
@@ -192,27 +223,33 @@ export async function getOAuthAppToken(): Promise<string | null> {
   const encrypted = encryptToken(token);
   const now = new Date().toISOString();
 
-  await Promise.all([
-    supabaseAdmin.from("workspace_settings").upsert(
-      { key: "linear_oauth_token", value: encrypted, updated_at: now },
-      { onConflict: "key" }
-    ),
-    supabaseAdmin.from("workspace_settings").upsert(
-      { key: "linear_oauth_token_expires_at", value: String(expiresAt), updated_at: now },
-      { onConflict: "key" }
-    ),
-  ]);
+  const tokenUpsert = await supabaseAdmin.from("workspace_settings").upsert(
+    { key: "linear_oauth_token", value: encrypted, updated_at: now },
+    { onConflict: "key" }
+  );
+  if (tokenUpsert.error) {
+    console.error("Failed to cache OAuth token:", tokenUpsert.error);
+  }
 
-  // Cache in memory
+  const expiryUpsert = await supabaseAdmin.from("workspace_settings").upsert(
+    { key: "linear_oauth_token_expires_at", value: String(expiresAt), updated_at: now },
+    { onConflict: "key" }
+  );
+  if (expiryUpsert.error) {
+    console.error("Failed to cache OAuth token expiry:", expiryUpsert.error);
+  }
+
+  // Cache in memory regardless — the token is valid even if DB persistence failed
   tokenCache = { token, expiresAt };
 
   return token;
 }
 
 /**
- * Get the token to use for write operations (comments, issues).
- * Prefers the OAuth app token (which supports createAsUser attribution).
- * Falls back to the personal workspace token if OAuth is not configured.
+ * Resolve the appropriate token for write operations.
+ * When author info is available, prefers the OAuth app token
+ * (which supports createAsUser attribution). Falls back to the
+ * personal workspace token.
  *
  * Returns { token, isOAuthApp } so callers know whether to use createAsUser.
  */
@@ -245,7 +282,7 @@ export async function validateOAuthCredentials(
   const { token } = await acquireClientCredentialsToken({ clientId, clientSecret });
 
   // Use the token to get app info
-  const res = await fetch("https://api.linear.app/graphql", {
+  const res = await fetchWithTimeout("https://api.linear.app/graphql", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

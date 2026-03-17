@@ -25,6 +25,20 @@ export type AuthorAttribution = {
   authorAvatarUrl?: string;
 };
 
+/**
+ * Resolve the appropriate token for a write operation.
+ * Only looks up the OAuth app token when author info is provided
+ * (avoids unnecessary DB lookups otherwise).
+ */
+async function resolveWriteToken(
+  author?: AuthorAttribution
+): Promise<{ token: string; isOAuthApp: boolean }> {
+  if (author) {
+    return getWriteToken();
+  }
+  return { token: await getWorkspaceToken(), isOAuthApp: false };
+}
+
 // -- Comment mutations ────────────────────────────────────────────────────────
 
 const COMMENT_CREATE_MUTATION = `
@@ -68,11 +82,7 @@ export async function pushCommentToLinear(
     throw new RateLimitDeferredError("pushCommentToLinear deferred due to rate limit");
   }
 
-  // Only look up the OAuth app token when we have author info to attribute.
-  // Avoids unnecessary DB lookups when no attribution is needed.
-  const { token, isOAuthApp } = author
-    ? await getWriteToken()
-    : { token: await getWorkspaceToken(), isOAuthApp: false };
+  const { token, isOAuthApp } = await resolveWriteToken(author);
 
   // If using OAuth app token, use createAsUser for attribution.
   // If using personal token, fall back to bold prefix in body.
@@ -369,6 +379,7 @@ export type CreatedIssue = {
  * Create an issue in Linear via GraphQL API.
  * When an OAuth app token is available and author is provided,
  * uses createAsUser for proper attribution.
+ * When using personal token with author, prepends author name to description.
  *
  * Returns the created issue data on success, or throws on failure.
  */
@@ -381,12 +392,20 @@ export async function createIssueInLinear(
     throw new RateLimitDeferredError("createIssueInLinear deferred due to rate limit");
   }
 
-  const { token, isOAuthApp } = author
-    ? await getWriteToken()
-    : { token: await getWorkspaceToken(), isOAuthApp: false };
+  const { token, isOAuthApp } = await resolveWriteToken(author);
 
-  const createAsUser = isOAuthApp && author ? author.authorName : undefined;
-  const displayIconUrl = isOAuthApp && author ? author.authorAvatarUrl : undefined;
+  let createAsUser: string | undefined;
+  let displayIconUrl: string | undefined;
+  let description = params.description;
+
+  if (isOAuthApp && author) {
+    createAsUser = author.authorName;
+    displayIconUrl = author.authorAvatarUrl;
+  } else if (author) {
+    // Fallback: prepend author attribution to description
+    const prefix = `*Submitted by ${author.authorName}*`;
+    description = description ? `${prefix}\n\n${description}` : prefix;
+  }
 
   const res = await fetch(LINEAR_API, {
     method: "POST",
@@ -399,7 +418,7 @@ export async function createIssueInLinear(
       variables: {
         teamId: params.teamId,
         title: params.title,
-        description: params.description ?? undefined,
+        description: description ?? undefined,
         priority: params.priority ?? undefined,
         labelIds: params.labelIds?.length ? params.labelIds : undefined,
         projectId: params.projectId ?? undefined,

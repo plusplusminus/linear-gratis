@@ -18,10 +18,15 @@ export async function POST(request: Request) {
     }
     const { user } = auth;
 
-    const body = (await request.json()) as {
-      clientId?: string;
-      clientSecret?: string;
-    };
+    let body: { clientId?: string; clientSecret?: string };
+    try {
+      body = (await request.json()) as { clientId?: string; clientSecret?: string };
+    } catch {
+      return NextResponse.json(
+        { error: "Malformed JSON payload" },
+        { status: 400 }
+      );
+    }
 
     if (!body.clientId || !body.clientSecret) {
       return NextResponse.json(
@@ -52,11 +57,15 @@ export async function POST(request: Request) {
       app: { name: appName },
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Internal server error";
-    const status = error instanceof LinearOAuthError ? 400 : 500;
+    if (error instanceof LinearOAuthError) {
+      console.error("POST /api/admin/workspace/oauth validation error:", error);
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     console.error("POST /api/admin/workspace/oauth error:", error);
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }
 
