@@ -241,6 +241,7 @@ export function IssueDetailPanel({
   const panelRef = useRef<HTMLDivElement>(null);
   const [lightboxImage, setLightboxImage] = useState<{ src: string; alt?: string } | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const mdComponents = useMarkdownComponents((src, alt) => setLightboxImage({ src, alt }));
 
@@ -283,11 +284,19 @@ export function IssueDetailPanel({
     try {
       await navigator.clipboard.writeText(getTaskUrl());
       setLinkCopied(true);
-      setTimeout(() => setLinkCopied(false), 2000);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setLinkCopied(false), 2000);
     } catch {
-      // Fallback for older browsers
+      // clipboard API unavailable — silently fail
     }
   }, [getTaskUrl]);
+
+  // Clean up copy timer on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
 
   const handleOpenNewWindow = useCallback(() => {
     window.open(getTaskUrl(), "_blank");
@@ -433,15 +442,19 @@ export function IssueDetailPanel({
               </div>
               <div className="flex items-center gap-0.5 shrink-0 ml-2">
                 <button
+                  type="button"
                   onClick={handleOpenNewWindow}
                   title="Open in new window"
+                  aria-label="Open in new window"
                   className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                 </button>
                 <button
+                  type="button"
                   onClick={handleCopyLink}
                   title="Copy task link"
+                  aria-label="Copy task link"
                   className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                 >
                   {linkCopied ? (
@@ -451,7 +464,9 @@ export function IssueDetailPanel({
                   )}
                 </button>
                 <button
+                  type="button"
                   onClick={handleClose}
+                  aria-label="Close panel"
                   className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                 >
                   <X className="w-4 h-4" />
