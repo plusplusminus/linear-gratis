@@ -48,6 +48,15 @@ async function resolveWriteToken(
   return { token: await getWorkspaceToken(), isOAuthApp: false };
 }
 
+/**
+ * Format the Authorization header value.
+ * OAuth app tokens use Bearer prefix. Personal API keys are sent raw
+ * (Linear rejects Bearer prefix on API keys).
+ */
+function authHeader(token: string, isOAuthApp: boolean): string {
+  return isOAuthApp ? `Bearer ${token.trim()}` : token.trim();
+}
+
 // -- Comment mutations ────────────────────────────────────────────────────────
 
 const COMMENT_CREATE_MUTATION = `
@@ -77,7 +86,7 @@ const COMMENT_CREATE_AS_USER_MUTATION = `
  * Returns the comment ID on success, or throws.
  */
 async function executeCommentCreate(
-  token: string,
+  authorization: string,
   query: string,
   variables: Record<string, unknown>,
   rateLimiter?: LinearRateLimiter
@@ -89,7 +98,7 @@ async function executeCommentCreate(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token.trim()}`,
+        Authorization: authorization,
       },
       body: JSON.stringify({ query, variables }),
     });
@@ -210,7 +219,7 @@ export async function pushCommentToLinear(
     : body;
 
   return executeCommentCreate(
-    token,
+    authHeader(token, isOAuthApp),
     COMMENT_CREATE_MUTATION,
     { ...baseVars, body: commentBody },
     rateLimiter
@@ -258,7 +267,7 @@ export async function updateIssueLabels(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token.trim()}`,
+      Authorization: authHeader(token, false),
     },
     body: JSON.stringify({
       query: ISSUE_UPDATE_LABELS_MUTATION,
@@ -436,7 +445,7 @@ export type CreatedIssue = {
  * Returns the created issue on success, or throws.
  */
 async function executeIssueCreate(
-  token: string,
+  authorization: string,
   query: string,
   variables: Record<string, unknown>,
   rateLimiter?: LinearRateLimiter
@@ -445,7 +454,7 @@ async function executeIssueCreate(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token.trim()}`,
+      Authorization: authorization,
     },
     body: JSON.stringify({ query, variables }),
   });
@@ -586,5 +595,5 @@ export async function createIssueInLinear(
       : prefix;
   }
 
-  return executeIssueCreate(token, ISSUE_CREATE_MUTATION, baseVars, rateLimiter);
+  return executeIssueCreate(authHeader(token, isOAuthApp), ISSUE_CREATE_MUTATION, baseVars, rateLimiter);
 }
