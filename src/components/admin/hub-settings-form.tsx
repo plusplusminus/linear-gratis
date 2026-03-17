@@ -22,6 +22,7 @@ interface TeamMapping {
   visible_label_ids: string[];
   hidden_label_ids: string[];
   auto_include_projects: boolean;
+  include_unassigned_issues: boolean;
   overview_only_project_ids: string[];
   task_priority_project_ids: string[];
   is_active: boolean;

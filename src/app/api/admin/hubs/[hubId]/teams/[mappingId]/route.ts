@@ -22,6 +22,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       auto_include_projects?: boolean;
       overview_only_project_ids?: string[];
       task_priority_project_ids?: string[];
+      include_unassigned_issues?: boolean;
       is_active?: boolean;
     };
 
@@ -90,6 +91,9 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       );
       updates.task_priority_project_ids =
         body.task_priority_project_ids.filter((id) => !effectiveOverview.has(id));
+    }
+    if (body.include_unassigned_issues !== undefined) {
+      updates.include_unassigned_issues = body.include_unassigned_issues;
     }
     if (body.is_active !== undefined) {
       updates.is_active = body.is_active;

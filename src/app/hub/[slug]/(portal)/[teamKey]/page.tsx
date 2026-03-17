@@ -97,9 +97,7 @@ export default async function TeamDashboardPage({
     .filter((p) => !overviewOnlyIds.has(p.id))
     .map((p) => p.id);
   const [issues, metadata] = await Promise.all([
-    projectIdList.length > 0
-      ? fetchHubRoadmapIssues(hub.id, projectIdList)
-      : Promise.resolve([]),
+    fetchHubRoadmapIssues(hub.id, projectIdList),
     fetchHubMetadata(hub.id, { teamId: team.id }),
   ]);
 
