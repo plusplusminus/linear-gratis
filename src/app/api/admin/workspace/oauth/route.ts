@@ -41,16 +41,21 @@ export async function POST(request: Request) {
       body.clientSecret
     );
 
-    // Store credentials
+    // Store credentials + metadata. If metadata writes fail after credentials
+    // are stored, roll back to avoid partial state.
     await setOAuthCredentials(body.clientId, body.clientSecret, user.id);
-
-    // Store metadata for display
-    await setWorkspaceSetting("linear_oauth_app_name", appName, user.id);
-    await setWorkspaceSetting(
-      "linear_oauth_connected_at",
-      new Date().toISOString(),
-      user.id
-    );
+    try {
+      await setWorkspaceSetting("linear_oauth_app_name", appName, user.id);
+      await setWorkspaceSetting(
+        "linear_oauth_connected_at",
+        new Date().toISOString(),
+        user.id
+      );
+    } catch (metadataError) {
+      console.error("Metadata write failed, rolling back credentials:", metadataError);
+      await clearOAuthCredentials();
+      throw new Error("Failed to store OAuth app metadata");
+    }
 
     return NextResponse.json({
       success: true,

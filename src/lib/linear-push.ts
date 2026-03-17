@@ -105,7 +105,7 @@ export async function pushCommentToLinear(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: isOAuthApp ? `Bearer ${token}` : token.trim(),
+        Authorization: `Bearer ${token.trim()}`,
       },
       body: JSON.stringify({
         query: COMMENT_CREATE_MUTATION,
@@ -206,7 +206,7 @@ export async function updateIssueLabels(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: token.trim(),
+      Authorization: `Bearer ${token.trim()}`,
     },
     body: JSON.stringify({
       query: ISSUE_UPDATE_LABELS_MUTATION,

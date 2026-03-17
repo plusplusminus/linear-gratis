@@ -27,7 +27,10 @@ type CachedToken = {
   expiresAt: number; // Unix timestamp in ms
 };
 
-// In-memory cache to avoid DB reads on every request
+// In-memory cache to avoid DB reads on every request.
+// NOTE: This won't persist across serverless cold starts. The DB-cached token
+// (in workspace_settings) is the primary persistent cache; this is just an
+// optimization for hot paths within a single invocation lifecycle.
 let tokenCache: CachedToken | null = null;
 
 /**
@@ -71,6 +74,14 @@ export async function getOAuthCredentials(): Promise<OAuthCredentials | null> {
       .eq("key", "linear_oauth_client_secret")
       .single(),
   ]);
+
+  // PGRST116 = "not found" from .single() — expected when OAuth isn't configured.
+  // Any other error is unexpected and should surface.
+  for (const row of [clientIdRow, clientSecretRow]) {
+    if (row.error && row.error.code !== "PGRST116") {
+      throw new Error(`Failed to read OAuth credentials: ${row.error.message}`);
+    }
+  }
 
   const clientId = clientIdRow.data?.value;
   const encryptedSecret = clientSecretRow.data?.value;
