@@ -411,7 +411,7 @@ export async function createIssueInLinear(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: isOAuthApp ? `Bearer ${token}` : token.trim(),
+      Authorization: `Bearer ${token.trim()}`,
     },
     body: JSON.stringify({
       query: ISSUE_CREATE_MUTATION,
