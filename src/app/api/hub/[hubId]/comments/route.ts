@@ -3,7 +3,6 @@ import { withHubAuthWrite, type HubAuthError } from "@/lib/hub-auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { pushCommentToLinear } from "@/lib/linear-push";
 import { logSyncEvent } from "@/lib/sync-logger";
-import { isPPMAdmin } from "@/lib/ppm-admin";
 
 export async function POST(
   request: Request,
@@ -62,13 +61,6 @@ export async function POST(
       );
     }
 
-    // PPM admins have Linear accounts — skip createAsUser so their comment
-    // posts as their actual Linear identity via the personal workspace token.
-    const isAdmin = await isPPMAdmin(user.id, user.email);
-    const author = isAdmin
-      ? undefined
-      : { authorName, authorAvatarUrl: user.profilePictureUrl ?? undefined };
-
     // Push to Linear with author attribution (createAsUser if OAuth app configured)
     try {
       const linearCommentId = await pushCommentToLinear(
@@ -76,7 +68,10 @@ export async function POST(
         body.trim(),
         parentId,
         undefined,
-        author
+        {
+          authorName,
+          authorAvatarUrl: user.profilePictureUrl ?? undefined,
+        }
       );
 
       await supabaseAdmin
