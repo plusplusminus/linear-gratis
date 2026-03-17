@@ -321,13 +321,13 @@ export function IssueDetailPanel({
 
     async function fetchIssue() {
       try {
-        const [issueRes, historyRes] = await Promise.all([
+        const [issueResult, historyResult] = await Promise.allSettled([
           fetch(`/api/hub/${hubId}/issues/${activeId}`),
           fetch(`/api/hub/${hubId}/issues/${activeId}/history`),
         ]);
 
-        if (!cancelled && issueRes.ok) {
-          const data = (await issueRes.json()) as {
+        if (!cancelled && issueResult.status === "fulfilled" && issueResult.value.ok) {
+          const data = (await issueResult.value.json()) as {
             issue: IssueDetail;
             comments: Comment[];
             hubLabels: Array<{ id: string; name: string; color: string }>;
@@ -341,8 +341,8 @@ export function IssueDetailPanel({
           setWorkflowRules(data.workflowRules ?? []);
         }
 
-        if (!cancelled && historyRes.ok) {
-          const historyData = (await historyRes.json()) as {
+        if (!cancelled && historyResult.status === "fulfilled" && historyResult.value.ok) {
+          const historyData = (await historyResult.value.json()) as {
             history: HistoryEntry[];
           };
           setHistory(historyData.history ?? []);
