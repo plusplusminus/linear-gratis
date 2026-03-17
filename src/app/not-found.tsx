@@ -653,7 +653,8 @@ function PixelDimension({ onExit }: { onExit: () => void }) {
     const isLogoHover = Math.abs(x - cx) < logoSize / 2 + 20 && Math.abs(y - logoY) < logoSize / 2 + 20
 
     if (canvasRef.current) {
-      canvasRef.current.style.cursor = (isHover || isLogoHover) ? 'pointer' : 'default'
+      const pixelPointer = `url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='21' height='24' viewBox='0 0 21 24'><rect x='6' y='0' width='3' height='3' fill='%23e9d5ff'/><rect x='3' y='3' width='3' height='3' fill='%23e9d5ff'/><rect x='6' y='3' width='3' height='3' fill='%23e9d5ff'/><rect x='0' y='6' width='3' height='3' fill='%23e9d5ff'/><rect x='3' y='6' width='3' height='3' fill='%23e9d5ff'/><rect x='6' y='6' width='3' height='3' fill='%23e9d5ff'/><rect x='0' y='9' width='3' height='3' fill='%23e9d5ff'/><rect x='3' y='9' width='3' height='3' fill='%23e9d5ff'/><rect x='6' y='9' width='3' height='3' fill='%23e9d5ff'/><rect x='9' y='9' width='3' height='3' fill='%23e9d5ff'/><rect x='12' y='9' width='3' height='3' fill='%23e9d5ff'/><rect x='0' y='12' width='3' height='3' fill='%23e9d5ff'/><rect x='3' y='12' width='3' height='3' fill='%23e9d5ff'/><rect x='6' y='12' width='3' height='3' fill='%23e9d5ff'/><rect x='9' y='12' width='3' height='3' fill='%23e9d5ff'/><rect x='12' y='12' width='3' height='3' fill='%23e9d5ff'/><rect x='15' y='12' width='3' height='3' fill='%23e9d5ff'/><rect x='18' y='12' width='3' height='3' fill='%23e9d5ff'/><rect x='0' y='15' width='3' height='3' fill='%23e9d5ff'/><rect x='3' y='15' width='3' height='3' fill='%23e9d5ff'/><rect x='0' y='18' width='3' height='3' fill='%23e9d5ff'/><rect x='3' y='18' width='3' height='3' fill='%23e9d5ff'/></svg>") 3 0, pointer`
+      canvasRef.current.style.cursor = (isHover || isLogoHover) ? pixelPointer : ''
     }
     buttonHoverRef.current = isHover
   }, [])
@@ -664,7 +665,10 @@ function PixelDimension({ onExit }: { onExit: () => void }) {
       onClick={handleClick}
       onMouseMove={handleMouseMove}
       className="fixed inset-0 z-50"
-      style={{ imageRendering: 'pixelated' }}
+      style={{
+        imageRendering: 'pixelated',
+        cursor: `url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><rect x='0' y='0' width='3' height='3' fill='%23c084fc'/><rect x='0' y='3' width='3' height='3' fill='%23c084fc'/><rect x='0' y='6' width='3' height='3' fill='%23c084fc'/><rect x='0' y='9' width='3' height='3' fill='%23c084fc'/><rect x='0' y='12' width='3' height='3' fill='%23c084fc'/><rect x='0' y='15' width='3' height='3' fill='%23c084fc'/><rect x='0' y='18' width='3' height='3' fill='%23c084fc'/><rect x='3' y='3' width='3' height='3' fill='%23c084fc'/><rect x='3' y='12' width='3' height='3' fill='%23c084fc'/><rect x='6' y='6' width='3' height='3' fill='%23c084fc'/><rect x='6' y='12' width='3' height='3' fill='%23c084fc'/><rect x='9' y='9' width='3' height='3' fill='%23c084fc'/><rect x='9' y='12' width='3' height='3' fill='%23c084fc'/><rect x='12' y='12' width='3' height='3' fill='%23c084fc'/><rect x='15' y='15' width='3' height='3' fill='%23c084fc'/><rect x='18' y='18' width='3' height='3' fill='%23c084fc'/></svg>") 0 0, auto`,
+      }}
     />
   )
 }
