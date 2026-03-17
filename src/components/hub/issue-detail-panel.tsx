@@ -283,7 +283,7 @@ export function IssueDetailPanel({
     const slug = hubIdx >= 0 ? segments[hubIdx + 1] : undefined;
     const teamKey = hubIdx >= 0 ? segments[hubIdx + 2] : undefined;
     if (!slug || !teamKey) return window.location.href;
-    return `${window.location.origin}/hub/${slug}/${teamKey}/task/${activeId}`;
+    return `${window.location.origin}/hub/${encodeURIComponent(slug)}/${encodeURIComponent(teamKey)}/task/${encodeURIComponent(activeId)}`;
   }, [activeId, pathname]);
 
   const handleCopyLink = useCallback(async () => {
