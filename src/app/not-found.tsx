@@ -1,56 +1,47 @@
+import Image from 'next/image'
+import Link from 'next/link'
+import { Button } from '@/components/ui/button'
+
+const glitches = [
+  "This page pulled a Houdini.",
+  "Looks like this page went off-grid.",
+  "Even our best engineers can't find this one.",
+  "This page is on permanent vacation.",
+  "404: Page not found. Motivation also missing.",
+  "You've reached the edge of the known internet.",
+  "This page exists in a parallel universe. Not this one.",
+  "Plot twist: the page was inside you all along. Just kidding, it's gone.",
+]
+
 export default function NotFound() {
+  // Pick a deterministic-ish message based on the current minute
+  // so it feels random per visit but works with SSR
+  const message = glitches[new Date().getMinutes() % glitches.length]
+
   return (
-    <>
-      <title>404: This page could not be found.</title>
-      <div style={styles.error}>
-        <div>
-          <style
-            dangerouslySetInnerHTML={{
-              __html: `body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}`,
-            }}
-          />
-          <h1 className="next-error-h1" style={styles.h1}>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
+      <div className="flex max-w-md flex-col items-center gap-6 text-center">
+        <Image
+          src="/pulse-logo.png"
+          alt="Pulse"
+          width={56}
+          height={56}
+          className="opacity-40 grayscale"
+        />
+
+        <div className="flex flex-col gap-2">
+          <p className="font-mono text-6xl font-bold tracking-tighter text-foreground/20">
             404
-          </h1>
-          <div style={styles.desc}>
-            <h2 style={styles.h2}>This page could not be found.</h2>
-          </div>
+          </p>
+          <p className="text-base text-muted-foreground">
+            {message}
+          </p>
         </div>
+
+        <Button asChild variant="outline" size="sm">
+          <Link href="/">Take me home</Link>
+        </Button>
       </div>
-    </>
-  );
+    </div>
+  )
 }
-
-const styles = {
-  error: {
-    fontFamily:
-      'system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji"',
-    height: "100vh",
-    textAlign: "center",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  desc: {
-    display: "inline-block",
-  },
-
-  h1: {
-    display: "inline-block",
-    margin: "0 20px 0 0",
-    padding: "0 23px 0 0",
-    fontSize: 24,
-    fontWeight: 500,
-    verticalAlign: "top",
-    lineHeight: "49px",
-  },
-
-  h2: {
-    fontSize: 14,
-    fontWeight: 400,
-    lineHeight: "49px",
-    margin: 0,
-  },
-} as const;
