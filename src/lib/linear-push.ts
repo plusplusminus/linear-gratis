@@ -90,12 +90,14 @@ export async function pushCommentToLinear(
   let createAsUser: string | null = null;
   let displayIconUrl: string | null = null;
 
-  if (isOAuthApp && author) {
-    createAsUser = author.authorName;
-    displayIconUrl = author.authorAvatarUrl ?? null;
-  } else if (author) {
+  const trimmedAuthorName = author?.authorName?.trim() || null;
+
+  if (isOAuthApp && trimmedAuthorName) {
+    createAsUser = trimmedAuthorName;
+    displayIconUrl = author?.authorAvatarUrl ?? null;
+  } else if (trimmedAuthorName) {
     // Fallback: prepend bold author name to body
-    commentBody = `**${author.authorName}:** ${body}`;
+    commentBody = `**${trimmedAuthorName}:** ${body}`;
   }
 
   const MAX_RETRIES = 3;
@@ -398,12 +400,14 @@ export async function createIssueInLinear(
   let displayIconUrl: string | undefined;
   let description = params.description;
 
-  if (isOAuthApp && author) {
-    createAsUser = author.authorName;
-    displayIconUrl = author.authorAvatarUrl;
-  } else if (author) {
+  const trimmedAuthorName = author?.authorName?.trim() || null;
+
+  if (isOAuthApp && trimmedAuthorName) {
+    createAsUser = trimmedAuthorName;
+    displayIconUrl = author?.authorAvatarUrl;
+  } else if (trimmedAuthorName) {
     // Fallback: prepend author attribution to description
-    const prefix = `*Submitted by ${author.authorName}*`;
+    const prefix = `*Submitted by ${trimmedAuthorName}*`;
     description = description ? `${prefix}\n\n${description}` : prefix;
   }
 
