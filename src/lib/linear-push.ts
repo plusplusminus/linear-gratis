@@ -94,7 +94,7 @@ export async function pushCommentToLinear(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: isOAuthApp ? `Bearer ${token}` : token.trim(),
+        Authorization: `Bearer ${token.trim()}`,
       },
       body: JSON.stringify({
         query: COMMENT_CREATE_MUTATION,
@@ -179,7 +179,9 @@ const ISSUE_UPDATE_LABELS_MUTATION = `
 
 /**
  * Update labels on a Linear issue.
- * Returns the updated label list on success.
+ * Uses the personal workspace token intentionally — label updates are admin
+ * operations with no createAsUser support on issueUpdate, so the OAuth app
+ * token would add no attribution value.
  */
 export async function updateIssueLabels(
   issueLinearId: string,
@@ -196,7 +198,7 @@ export async function updateIssueLabels(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: token.trim(),
+      Authorization: `Bearer ${token.trim()}`,
     },
     body: JSON.stringify({
       query: ISSUE_UPDATE_LABELS_MUTATION,
