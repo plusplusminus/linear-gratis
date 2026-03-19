@@ -175,15 +175,28 @@ async function fetchUserEmailsBatch(
   const map = new Map<string, string>();
   if (userIds.length === 0) return map;
 
-  // hub_members stores the email for invited users
-  const { data } = await supabaseAdmin
-    .from("hub_members")
-    .select("user_id, email")
-    .in("user_id", userIds)
-    .not("email", "is", null);
+  // Fetch from both hub_members and ppm_admins in parallel
+  const [{ data: memberData }, { data: adminData }] = await Promise.all([
+    supabaseAdmin
+      .from("hub_members")
+      .select("user_id, email")
+      .in("user_id", userIds)
+      .not("email", "is", null),
+    supabaseAdmin
+      .from("ppm_admins")
+      .select("user_id, email")
+      .in("user_id", userIds)
+      .not("email", "is", null),
+  ]);
 
-  for (const row of data || []) {
+  for (const row of memberData || []) {
     if (row.email && row.user_id) {
+      map.set(row.user_id, row.email);
+    }
+  }
+  // PPM admins fill in any user_ids not already found via hub_members
+  for (const row of adminData || []) {
+    if (row.email && row.user_id && !map.has(row.user_id)) {
       map.set(row.user_id, row.email);
     }
   }

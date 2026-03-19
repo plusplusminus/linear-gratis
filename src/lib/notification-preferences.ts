@@ -21,7 +21,7 @@ export type NotificationPreference = {
 
 const DEFAULT_PREFERENCE: Omit<NotificationPreference, "event_type"> = {
   in_app_enabled: true,
-  email_mode: "off",
+  email_mode: "daily",
   digest_time: "09:00",
   timezone: "UTC",
 };
@@ -81,7 +81,7 @@ export async function upsertPreferences(
     user_id: userId,
     event_type: p.event_type,
     in_app_enabled: p.in_app_enabled ?? true,
-    email_mode: p.email_mode ?? "off",
+    email_mode: p.email_mode ?? "daily",
     digest_time: p.digest_time ?? "09:00",
     timezone: p.timezone ?? "UTC",
     updated_at: new Date().toISOString(),

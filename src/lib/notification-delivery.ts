@@ -84,6 +84,26 @@ async function fetchHubMembers(hubId: string): Promise<HubMember[]> {
   return (data ?? []) as HubMember[];
 }
 
+/**
+ * Fetch PPM admins as pseudo-members eligible for notifications on any hub.
+ */
+async function fetchPpmAdmins(): Promise<HubMember[]> {
+  const { data, error } = await supabaseAdmin
+    .from("ppm_admins")
+    .select("user_id, email");
+
+  if (error) {
+    console.error("fetchPpmAdmins error:", error);
+    return [];
+  }
+
+  return (data ?? []).map((a) => ({
+    user_id: a.user_id,
+    email: a.email,
+    role: "admin",
+  }));
+}
+
 // -- Queue management --------------------------------------------------------
 
 async function insertQueueRow(params: {
@@ -183,10 +203,11 @@ export async function processImmediateEmails(
   eventType: string
 ): Promise<void> {
   try {
-    const [event, hub, members] = await Promise.all([
+    const [event, hub, members, admins] = await Promise.all([
       fetchNotificationEvent(eventId),
       fetchHubInfo(hubId),
       fetchHubMembers(hubId),
+      fetchPpmAdmins(),
     ]);
 
     if (!event || !hub) {
@@ -194,8 +215,16 @@ export async function processImmediateEmails(
       return;
     }
 
+    // Merge hub members + PPM admins, dedupe by user_id
+    const seen = new Set<string>();
+    const allRecipients = [...members, ...admins].filter((m) => {
+      if (!m.user_id || seen.has(m.user_id)) return false;
+      seen.add(m.user_id);
+      return true;
+    });
+
     // Filter to members with both user_id and email
-    const eligibleMembers = members.filter(
+    const eligibleMembers = allRecipients.filter(
       (m): m is HubMember & { user_id: string; email: string } =>
         m.user_id !== null && m.email !== null
     );
