@@ -4,7 +4,7 @@ import { processDigests } from "@/lib/notification-digest";
 import { captureServerEvent, flushPostHog } from "@/lib/posthog-server";
 import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 
-export async function POST(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const cronSecret = request.headers.get("authorization");
   const expected = `Bearer ${process.env.CRON_SECRET}`;
 
