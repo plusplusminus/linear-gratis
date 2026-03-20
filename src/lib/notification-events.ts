@@ -244,13 +244,33 @@ function generateIssueSummary(
   return null;
 }
 
-function generateCommentSummary(
+async function resolveCommentAuthor(data: Record<string, unknown>): Promise<string> {
+  // Linear webhook includes user.name for native Linear users
+  const webhookUserName = (data.user as { name?: string })?.name;
+  if (webhookUserName) return webhookUserName;
+
+  // For createAsUser comments (Pulse client users), the webhook user
+  // is the API app — not the actual author. Look up from hub_comments.
+  const commentId = data.id as string | undefined;
+  if (commentId) {
+    const { data: hubComment } = await supabaseAdmin
+      .from("hub_comments")
+      .select("author_name")
+      .eq("linear_comment_id", commentId)
+      .single();
+    if (hubComment?.author_name) return hubComment.author_name;
+  }
+
+  return "Someone";
+}
+
+async function generateCommentSummary(
   action: string,
   data: Record<string, unknown>
-): { eventType: NotificationEventType; summary: string; metadata: Record<string, unknown> } | null {
+): Promise<{ eventType: NotificationEventType; summary: string; metadata: Record<string, unknown> } | null> {
   if (action === "remove") return null;
 
-  const userName = (data.user as { name?: string })?.name ?? "Someone";
+  const userName = await resolveCommentAuthor(data);
   const issueIdentifier =
     (data.issue as { identifier?: string })?.identifier ?? "an issue";
   const body = (data.body as string) ?? "";
@@ -262,8 +282,8 @@ function generateCommentSummary(
       summary: `New comment on ${issueIdentifier} by ${userName}`,
       metadata: {
         excerpt,
-        issue_identifier: issueIdentifier,
-        issue_id: (data.issue as { id?: string })?.id,
+        _issue_id: (data.issue as { id?: string })?.id,
+        _issue_identifier: issueIdentifier,
       },
     };
   }
@@ -274,8 +294,8 @@ function generateCommentSummary(
     summary: `Comment updated on ${issueIdentifier} by ${userName}`,
     metadata: {
       excerpt,
-      issue_identifier: issueIdentifier,
-      issue_id: (data.issue as { id?: string })?.id,
+      _issue_id: (data.issue as { id?: string })?.id,
+      _issue_identifier: issueIdentifier,
     },
   };
 }
@@ -536,7 +556,7 @@ export async function emitNotificationEventsForWebhook(
         result = generateIssueSummary(action, data, updatedFrom);
         break;
       case "Comment":
-        result = generateCommentSummary(action, data);
+        result = await generateCommentSummary(action, data);
         break;
       case "Project":
         result = generateProjectSummary(action, data, updatedFrom);

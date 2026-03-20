@@ -25,6 +25,9 @@ export interface ImmediateNotificationProps {
   deepLinkUrl: string
 }
 
+/** Keys prefixed with _ are internal / used for linking — never shown in the email */
+const HIDDEN_KEYS = new Set(['team_key', 'excerpt', '_issue_id', '_issue_identifier'])
+
 export function ImmediateNotification({
   hubName,
   hubSlug,
@@ -32,6 +35,10 @@ export function ImmediateNotification({
   deepLinkUrl,
 }: ImmediateNotificationProps) {
   const previewText = `${event.summary} — ${hubName}`
+  const excerpt = event.metadata?.excerpt
+  const visibleMeta = event.metadata
+    ? Object.entries(event.metadata).filter(([k]) => !HIDDEN_KEYS.has(k) && !k.startsWith('_'))
+    : []
 
   return (
     <Html>
@@ -52,22 +59,22 @@ export function ImmediateNotification({
               </Text>
             )}
 
-            {event.metadata && Object.keys(event.metadata).length > 0 ? (
+            {(excerpt || visibleMeta.length > 0) && (
               <Section style={metadataSection}>
-                {Object.entries(event.metadata).map(([key, value]) => (
+                {excerpt && (
+                  <Text style={excerptStyle}>{excerpt}</Text>
+                )}
+                {visibleMeta.map(([key, value]) => (
                   <Text key={key} style={metadataLine}>
                     <span style={{ color: '#888888' }}>{key}:</span> {value}
                   </Text>
                 ))}
-                <Link href={deepLinkUrl} style={viewLink}>
-                  View &rarr;
-                </Link>
               </Section>
-            ) : (
-              <Link href={deepLinkUrl} style={viewLink}>
-                View &rarr;
-              </Link>
             )}
+
+            <Link href={deepLinkUrl} style={viewLink}>
+              View issue on Pulse &rarr;
+            </Link>
           </Section>
 
           <EmailFooter hubSlug={hubSlug} />
@@ -121,6 +128,14 @@ const metadataSection = {
   borderRadius: '6px',
   padding: '12px 16px',
   margin: '12px 0 20px',
+} as const
+
+const excerptStyle = {
+  color: '#444444',
+  fontSize: '14px',
+  lineHeight: '22px',
+  margin: '0 0 4px',
+  fontStyle: 'italic' as const,
 } as const
 
 const metadataLine = {

@@ -8,7 +8,7 @@ interface EventRowProps {
   metadata?: Record<string, string>
 }
 
-const HIDDEN_KEYS = new Set(['_', 'team_key'])
+const HIDDEN_KEYS = new Set(['_', 'team_key', 'excerpt'])
 
 export function EventRow({ summary, timestamp, deepLinkUrl, actorName, metadata }: EventRowProps) {
   const meta = metadata ?? {}

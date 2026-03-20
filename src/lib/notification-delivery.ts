@@ -38,12 +38,22 @@ type HubInfo = {
 
 // -- Deep link construction --------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function buildDeepLinkUrl(hubSlug: string, _entityType: string, _entityId: string): string {
-  // Deep links go to the hub's main page — entity-specific routing
-  // would need team key which we don't always have in the event.
-  // Hub landing is the safest default.
-  return `${getAppUrl()}/hub/${hubSlug}`;
+function buildDeepLinkUrl(
+  hubSlug: string,
+  entityType: string,
+  entityId: string,
+  metadata?: Record<string, unknown>
+): string {
+  const base = `${getAppUrl()}/hub/${hubSlug}`;
+  const teamKey = metadata?.team_key as string | undefined;
+
+  // Issue or comment — link to the task page if we have team_key
+  if ((entityType === "issue" || entityType === "comment") && teamKey) {
+    const issueId = (metadata?._issue_id as string) ?? entityId;
+    return `${base}/${teamKey}/task/${issueId}`;
+  }
+
+  return base;
 }
 
 // -- Fetch helpers -----------------------------------------------------------
@@ -165,7 +175,7 @@ async function sendNotificationEmail(params: {
   hub: HubInfo;
 }): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const { email, event, hub } = params;
-  const deepLinkUrl = buildDeepLinkUrl(hub.slug, event.entity_type, event.entity_id);
+  const deepLinkUrl = buildDeepLinkUrl(hub.slug, event.entity_type, event.entity_id, event.metadata);
 
   const element = createElement(ImmediateNotification, {
     hubName: hub.name,
