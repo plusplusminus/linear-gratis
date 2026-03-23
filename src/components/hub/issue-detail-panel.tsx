@@ -818,11 +818,6 @@ export function CommentBubble({
         <span className="text-xs font-medium">
           {comment.user.name}
         </span>
-        {isHub && (
-          <span className="text-[9px] font-medium px-1 py-0 rounded bg-primary/10 text-primary">
-            Client
-          </span>
-        )}
         {isTeam && !isHub && (
           <span className="text-[9px] font-medium px-1 py-0 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400">
             Team
