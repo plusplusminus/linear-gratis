@@ -8,8 +8,10 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import { CommentComposer } from "./comment-composer";
+import { AdminLinearConnectBanner } from "./admin-linear-connect-banner";
 import { LabelEditor } from "./label-editor";
 import { ImageLightbox } from "./image-lightbox";
+import { useAdminLinearGate } from "@/hooks/use-admin-linear-gate";
 import {
   X,
   Circle,
@@ -228,6 +230,7 @@ export function IssueDetailPanel({
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
+  const { blocked: adminLinearBlocked } = useAdminLinearGate();
   const [issue, setIssue] = useState<IssueDetail | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [replyingTo, setReplyingTo] = useState<{ parentId: string; authorName: string } | null>(null);
@@ -594,28 +597,32 @@ export function IssueDetailPanel({
               )}
             </div>
 
-            {/* Comment composer — hidden for view_only users */}
+            {/* Comment composer — hidden for view_only users, blocked for unconnected admins */}
             {!isViewOnly && issue && (
-              <CommentComposer
-                hubId={hubId}
-                issueLinearId={issue.id}
-                replyingTo={replyingTo}
-                onCancelReply={() => setReplyingTo(null)}
-                onCommentAdded={(comment) => {
-                  if (comment.parentId) {
-                    // Insert reply under its parent thread
-                    setComments((prev) =>
-                      prev.map((c) =>
-                        c.linearId === comment.parentId || c.id === comment.parentId
-                          ? { ...c, children: [...(c.children ?? []), comment] }
-                          : c
-                      )
-                    );
-                  } else {
-                    setComments((prev) => [...prev, comment]);
-                  }
-                }}
-              />
+              adminLinearBlocked ? (
+                <AdminLinearConnectBanner context="comment" />
+              ) : (
+                <CommentComposer
+                  hubId={hubId}
+                  issueLinearId={issue.id}
+                  replyingTo={replyingTo}
+                  onCancelReply={() => setReplyingTo(null)}
+                  onCommentAdded={(comment) => {
+                    if (comment.parentId) {
+                      // Insert reply under its parent thread
+                      setComments((prev) =>
+                        prev.map((c) =>
+                          c.linearId === comment.parentId || c.id === comment.parentId
+                            ? { ...c, children: [...(c.children ?? []), comment] }
+                            : c
+                        )
+                      );
+                    } else {
+                      setComments((prev) => [...prev, comment]);
+                    }
+                  }}
+                />
+              )
             )}
           </>
         ) : null}

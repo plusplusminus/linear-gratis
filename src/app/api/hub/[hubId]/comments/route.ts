@@ -3,6 +3,7 @@ import { withHubAuthWrite, type HubAuthError } from "@/lib/hub-auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { pushCommentToLinear } from "@/lib/linear-push";
 import { isPPMAdmin } from "@/lib/ppm-admin";
+import { isAdminLinearConnected } from "@/lib/admin-linear-oauth";
 import { logSyncEvent } from "@/lib/sync-logger";
 
 export async function POST(
@@ -40,6 +41,21 @@ export async function POST(
 
     // Check if user is a PPM admin (their personal Linear token will be used if available)
     const isAdmin = await isPPMAdmin(user.id, user.email);
+
+    // PPM admins must connect their Linear account before creating comments
+    if (isAdmin) {
+      const connected = await isAdminLinearConnected(user.id);
+      if (!connected) {
+        return NextResponse.json(
+          {
+            error: "linear_not_connected",
+            message:
+              "Connect your Linear account in admin settings before creating issues/comments",
+          },
+          { status: 403 }
+        );
+      }
+    }
 
     // Insert comment locally
     const { data: comment, error: insertError } = await supabaseAdmin
