@@ -1,5 +1,6 @@
 import { getWorkspaceToken } from "./workspace";
 import { getWriteToken } from "./linear-oauth";
+import { getAdminLinearToken } from "./admin-linear-oauth";
 import { LinearRateLimiter } from "./linear-rate-limiter";
 
 const LINEAR_API = "https://api.linear.app/graphql";
@@ -27,16 +28,43 @@ export type AuthorAttribution = {
 
 /**
  * Resolve the appropriate token for a write operation.
- * Only looks up the OAuth app token when author info is provided
- * (avoids unnecessary DB lookups otherwise).
+ *
+ * Priority:
+ * 1. If adminUserId is provided, try their personal Linear OAuth token.
+ *    When found, return it with isAdminPersonal=true (no createAsUser needed).
+ * 2. If author info is provided, use the workspace OAuth app token (createAsUser).
+ * 3. Otherwise fall back to the workspace personal token.
  */
 async function resolveWriteToken(
-  author?: AuthorAttribution
-): Promise<{ token: string; isOAuthApp: boolean }> {
-  if (author) {
-    return getWriteToken();
+  author?: AuthorAttribution,
+  adminUserId?: string
+): Promise<{ token: string; isOAuthApp: boolean; isAdminPersonal: boolean }> {
+  // Try admin's personal Linear token first
+  if (adminUserId) {
+    try {
+      const adminToken = await getAdminLinearToken(adminUserId);
+      if (adminToken) {
+        return {
+          token: adminToken.accessToken,
+          isOAuthApp: false,
+          isAdminPersonal: true,
+        };
+      }
+    } catch (err) {
+      console.warn(
+        `[resolveWriteToken] Failed to get admin token for ${adminUserId}, falling back:`,
+        err
+      );
+    }
   }
-  return { token: await getWorkspaceToken(), isOAuthApp: false };
+
+  // Existing logic: OAuth app token for client users with author info
+  if (author) {
+    const result = await getWriteToken();
+    return { ...result, isAdminPersonal: false };
+  }
+
+  return { token: await getWorkspaceToken(), isOAuthApp: false, isAdminPersonal: false };
 }
 
 // -- Comment mutations ────────────────────────────────────────────────────────
@@ -76,23 +104,27 @@ export async function pushCommentToLinear(
   body: string,
   parentId?: string,
   rateLimiter?: LinearRateLimiter,
-  author?: AuthorAttribution
+  author?: AuthorAttribution,
+  adminUserId?: string
 ): Promise<string> {
   if (rateLimiter && !rateLimiter.canProceed()) {
     throw new RateLimitDeferredError("pushCommentToLinear deferred due to rate limit");
   }
 
-  const { token, isOAuthApp } = await resolveWriteToken(author);
+  const { token, isOAuthApp, isAdminPersonal } = await resolveWriteToken(author, adminUserId);
 
+  // If using admin's personal token, the action IS from that Linear user — no attribution needed.
   // If using OAuth app token, use createAsUser for attribution.
-  // If using personal token, fall back to bold prefix in body.
+  // If using workspace personal token, fall back to bold prefix in body.
   let commentBody = body;
   let createAsUser: string | null = null;
   let displayIconUrl: string | null = null;
 
   const trimmedAuthorName = author?.authorName?.trim() || null;
 
-  if (isOAuthApp && trimmedAuthorName) {
+  if (isAdminPersonal) {
+    // Personal admin token: comment will appear as the admin's Linear user — no createAsUser needed
+  } else if (isOAuthApp && trimmedAuthorName) {
     createAsUser = trimmedAuthorName;
     displayIconUrl = author?.authorAvatarUrl ?? null;
   } else if (trimmedAuthorName) {
@@ -388,13 +420,14 @@ export type CreatedIssue = {
 export async function createIssueInLinear(
   params: CreateIssueParams,
   rateLimiter?: LinearRateLimiter,
-  author?: AuthorAttribution
+  author?: AuthorAttribution,
+  adminUserId?: string
 ): Promise<CreatedIssue> {
   if (rateLimiter && !rateLimiter.canProceed()) {
     throw new RateLimitDeferredError("createIssueInLinear deferred due to rate limit");
   }
 
-  const { token, isOAuthApp } = await resolveWriteToken(author);
+  const { token, isOAuthApp, isAdminPersonal } = await resolveWriteToken(author, adminUserId);
 
   let createAsUser: string | undefined;
   let displayIconUrl: string | undefined;
@@ -402,7 +435,9 @@ export async function createIssueInLinear(
 
   const trimmedAuthorName = author?.authorName?.trim() || null;
 
-  if (isOAuthApp && trimmedAuthorName) {
+  if (isAdminPersonal) {
+    // Personal admin token: issue will be created as the admin's Linear user — no attribution needed
+  } else if (isOAuthApp && trimmedAuthorName) {
     createAsUser = trimmedAuthorName;
     displayIconUrl = author?.authorAvatarUrl;
   } else if (trimmedAuthorName) {

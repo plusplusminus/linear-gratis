@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withHubAuthWrite, type HubAuthError } from "@/lib/hub-auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { pushCommentToLinear } from "@/lib/linear-push";
+import { isPPMAdmin } from "@/lib/ppm-admin";
 import { logSyncEvent } from "@/lib/sync-logger";
 
 export async function POST(
@@ -37,6 +38,9 @@ export async function POST(
       .filter(Boolean)
       .join(" ") || user.email;
 
+    // Check if user is a PPM admin (their personal Linear token will be used if available)
+    const isAdmin = await isPPMAdmin(user.id, user.email);
+
     // Insert comment locally
     const { data: comment, error: insertError } = await supabaseAdmin
       .from("hub_comments")
@@ -71,7 +75,8 @@ export async function POST(
         {
           authorName,
           authorAvatarUrl: user.profilePictureUrl ?? undefined,
-        }
+        },
+        isAdmin ? user.id : undefined
       );
 
       await supabaseAdmin

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { withHubAuthWrite, type HubAuthError } from "@/lib/hub-auth";
 import { getHubVisibleLabelIds } from "@/lib/hub-read";
 import { createIssueInLinear } from "@/lib/linear-push";
+import { isPPMAdmin } from "@/lib/ppm-admin";
+import { isAdminLinearConnected } from "@/lib/admin-linear-oauth";
 
 export async function POST(
   request: Request,
@@ -56,6 +58,9 @@ export async function POST(
       .filter(Boolean)
       .join(" ") || user.email;
 
+    // Check if user is a PPM admin (their personal Linear token will be used if available)
+    const isAdmin = await isPPMAdmin(user.id, user.email);
+
     const issue = await createIssueInLinear(
       {
         teamId: body.teamId,
@@ -69,7 +74,8 @@ export async function POST(
       {
         authorName,
         authorAvatarUrl: user.profilePictureUrl ?? undefined,
-      }
+      },
+      isAdmin ? user.id : undefined
     );
 
     return NextResponse.json({ issue });

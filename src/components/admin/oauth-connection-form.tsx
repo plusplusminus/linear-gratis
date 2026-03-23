@@ -89,7 +89,7 @@ export function OAuthConnectionForm() {
   if (loading) {
     return (
       <div className="max-w-lg">
-        <h2 className="text-lg font-semibold mb-4">Comment Attribution</h2>
+        <h2 className="text-lg font-semibold mb-4">Client Attribution</h2>
         <div className="h-32 rounded-lg bg-muted/50 animate-pulse" />
       </div>
     );
@@ -99,10 +99,10 @@ export function OAuthConnectionForm() {
 
   return (
     <div className="max-w-lg">
-      <h2 className="text-lg font-semibold mb-1">Comment Attribution</h2>
+      <h2 className="text-lg font-semibold mb-1">Client Attribution</h2>
       <p className="text-sm text-muted-foreground mb-4">
-        Connect a Linear OAuth app so client comments show the author&apos;s name in
-        Linear instead of the workspace token owner.
+        Connect a Linear OAuth app so client comments and issues show the
+        author&apos;s name in Linear instead of the workspace token owner.
       </p>
 
       {connected ? (
@@ -139,7 +139,7 @@ export function OAuthConnectionForm() {
             <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/50 rounded px-2.5 py-1.5">
               <Users className="w-3.5 h-3.5 shrink-0" />
               <span>
-                Client comments appear as &ldquo;Author Name (via{" "}
+                Client comments and issues appear as &ldquo;Client Name (via{" "}
                 {status?.app?.name ?? "your app"})&rdquo; in Linear
               </span>
             </div>
