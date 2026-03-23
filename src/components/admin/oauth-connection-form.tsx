@@ -89,7 +89,7 @@ export function OAuthConnectionForm() {
   if (loading) {
     return (
       <div className="max-w-lg">
-        <h2 className="text-lg font-semibold mb-4">Client Attribution</h2>
+        <h2 className="text-lg font-semibold mb-4">Linear OAuth App</h2>
         <div className="h-32 rounded-lg bg-muted/50 animate-pulse" />
       </div>
     );
@@ -99,10 +99,11 @@ export function OAuthConnectionForm() {
 
   return (
     <div className="max-w-lg">
-      <h2 className="text-lg font-semibold mb-1">Client Attribution</h2>
+      <h2 className="text-lg font-semibold mb-1">Linear OAuth App</h2>
       <p className="text-sm text-muted-foreground mb-4">
-        Connect a Linear OAuth app so client comments and issues show the
-        author&apos;s name in Linear instead of the workspace token owner.
+        Configure the OAuth app that powers client attribution and admin account
+        linking. Client comments and issues will show the author&apos;s name in
+        Linear, and admins can connect their personal Linear accounts below.
       </p>
 
       {connected ? (

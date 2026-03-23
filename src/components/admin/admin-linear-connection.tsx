@@ -12,8 +12,13 @@ interface AdminLinearStatus {
   connectedAt: string | null;
 }
 
+interface OAuthAppStatus {
+  configured: boolean;
+}
+
 export function AdminLinearConnection() {
   const [status, setStatus] = useState<AdminLinearStatus | null>(null);
+  const [oauthAppConfigured, setOauthAppConfigured] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
   const searchParams = useSearchParams();
@@ -50,12 +55,28 @@ export function AdminLinearConnection() {
 
   async function fetchStatus() {
     try {
-      const res = await fetch("/api/admin/oauth/linear/status");
-      if (!res.ok) throw new Error("Failed to fetch");
-      const data: AdminLinearStatus = await res.json();
-      setStatus(data);
+      // Check both the per-user status and whether the OAuth app is configured
+      const [statusRes, oauthRes] = await Promise.all([
+        fetch("/api/admin/oauth/linear/status"),
+        fetch("/api/admin/workspace/oauth"),
+      ]);
+
+      if (statusRes.ok) {
+        const data: AdminLinearStatus = await statusRes.json();
+        setStatus(data);
+      } else {
+        setStatus({ connected: false, linearUserName: null, linearUserEmail: null, connectedAt: null });
+      }
+
+      if (oauthRes.ok) {
+        const oauthData: OAuthAppStatus = await oauthRes.json();
+        setOauthAppConfigured(oauthData.configured);
+      } else {
+        setOauthAppConfigured(false);
+      }
     } catch {
       setStatus({ connected: false, linearUserName: null, linearUserEmail: null, connectedAt: null });
+      setOauthAppConfigured(false);
     } finally {
       setLoading(false);
     }
@@ -159,8 +180,27 @@ export function AdminLinearConnection() {
             </button>
           </div>
         </div>
+      ) : oauthAppConfigured === false ? (
+        /* OAuth app not configured — show dependency message */
+        <div className="border border-border rounded-lg p-6 bg-card">
+          <div className="flex items-center gap-2.5 mb-3">
+            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+              <User className="w-4 h-4 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm font-medium">Not available</p>
+              <p className="text-xs text-muted-foreground">
+                Requires the Linear OAuth App to be configured first
+              </p>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Set up the <span className="font-medium text-foreground">Linear OAuth App</span> section
+            above, then return here to connect your personal account.
+          </p>
+        </div>
       ) : (
-        /* Disconnected state */
+        /* Disconnected state — OAuth app is configured, ready to connect */
         <div className="border border-border rounded-lg p-6 bg-card">
           <div className="flex items-center gap-2.5 mb-4">
             <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
