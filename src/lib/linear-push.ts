@@ -155,9 +155,9 @@ export async function pushCommentToLinear(
         variables: {
           issueId: issueLinearId,
           body: commentBody,
-          parentId: parentId ?? null,
-          createAsUser,
-          displayIconUrl,
+          ...(parentId ? { parentId } : {}),
+          ...(createAsUser ? { createAsUser } : {}),
+          ...(displayIconUrl ? { displayIconUrl } : {}),
         },
       }),
     });
