@@ -6,6 +6,15 @@ import { LinearRateLimiter } from "./linear-rate-limiter";
 const LINEAR_API = "https://api.linear.app/graphql";
 
 /**
+ * Build the correct Authorization header for a Linear token.
+ * API keys (lin_api_...) must NOT use the Bearer prefix.
+ * OAuth tokens require the Bearer prefix.
+ */
+function linearAuthHeader(token: string): string {
+  return token.startsWith("lin_api_") ? token : `Bearer ${token}`;
+}
+
+/**
  * Thrown when a push operation is skipped because the rate limiter
  * indicates we're too close to the budget ceiling. Callers can catch
  * this specifically to log "deferred" instead of "error".
@@ -139,7 +148,7 @@ export async function pushCommentToLinear(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token.trim()}`,
+        Authorization: linearAuthHeader(token.trim()),
       },
       body: JSON.stringify({
         query: COMMENT_CREATE_MUTATION,
@@ -240,7 +249,7 @@ export async function updateIssueLabels(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token.trim()}`,
+      Authorization: linearAuthHeader(token.trim()),
     },
     body: JSON.stringify({
       query: ISSUE_UPDATE_LABELS_MUTATION,
@@ -450,7 +459,7 @@ export async function createIssueInLinear(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token.trim()}`,
+      Authorization: linearAuthHeader(token.trim()),
     },
     body: JSON.stringify({
       query: ISSUE_CREATE_MUTATION,
