@@ -176,6 +176,7 @@ export async function PATCH(
       );
     }
 
+    const { user } = auth;
     const { commentId } = (await request.json()) as { commentId?: string };
     if (!commentId) {
       return NextResponse.json(
@@ -183,6 +184,10 @@ export async function PATCH(
         { status: 400 }
       );
     }
+
+    // Check if user is a PPM admin (use their personal Linear token if available)
+    const isAdmin = await isPPMAdmin(user.id, user.email);
+    const adminUserId = isAdmin ? user.id : undefined;
 
     // Fetch the failed comment
     const { data: comment, error: fetchError } = await supabaseAdmin
@@ -211,7 +216,8 @@ export async function PATCH(
         undefined,
         {
           authorName: comment.author_name,
-        }
+        },
+        adminUserId
       );
 
       await supabaseAdmin
