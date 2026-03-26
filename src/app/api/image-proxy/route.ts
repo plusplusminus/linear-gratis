@@ -36,6 +36,9 @@ export async function GET(request: NextRequest) {
     const headers: Record<string, string> = {
       "Content-Type": contentType,
       "Cache-Control": "public, max-age=86400, s-maxage=86400",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'none'; img-src 'self'",
+      "Referrer-Policy": "no-referrer",
     };
     if (contentLength) {
       headers["Content-Length"] = contentLength;
@@ -43,6 +46,10 @@ export async function GET(request: NextRequest) {
 
     return new NextResponse(body, { status: 200, headers });
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.startsWith("No Linear API token configured")) {
+      return NextResponse.json({ error: "Workspace Linear token not configured" }, { status: 503 });
+    }
     console.error("Image proxy error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
