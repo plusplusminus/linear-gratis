@@ -7,6 +7,7 @@ import { POSTHOG_EVENTS } from "@/lib/posthog-events";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
+import { proxyLinearImageUrl } from "@/lib/image-proxy";
 import { CommentComposer } from "./comment-composer";
 import { AdminLinearConnectBanner } from "./admin-linear-connect-banner";
 import { LabelEditor } from "./label-editor";
@@ -134,7 +135,7 @@ function MarkdownImage({
   onImageClick: (src: string, alt?: string) => void;
 }) {
   const [broken, setBroken] = useState(false);
-  const imgSrc = typeof src === "string" ? src : undefined;
+  const imgSrc = typeof src === "string" ? proxyLinearImageUrl(src) : undefined;
 
   if (broken || !imgSrc) {
     return (
