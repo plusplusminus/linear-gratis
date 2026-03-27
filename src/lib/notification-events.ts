@@ -7,6 +7,7 @@ import {
   isInitiativeVisibleToHub,
   type HubInfo,
 } from "@/lib/hub-visibility";
+import { isClientFacing } from "@/lib/hub-read";
 import { processImmediateEmails } from "@/lib/notification-delivery";
 
 // -- Types -------------------------------------------------------------------
@@ -100,6 +101,8 @@ function extractActorName(data: Record<string, unknown>): string | null {
   // For other entities, the actor info is not reliably available.
   const user = data.user as { name?: string } | undefined;
   if (user?.name) return user.name;
+  const creator = data.creator as { name?: string } | undefined;
+  if (creator?.name) return creator.name;
   const assignee = data.assignee as { name?: string } | undefined;
   if (assignee?.name) return assignee.name;
   return null;
@@ -152,7 +155,7 @@ function generateIssueSummary(
     return {
       eventType: "new_issue",
       summary: `New issue ${identifier}: ${title}`,
-      metadata: { title },
+      metadata: {},
     };
   }
 
@@ -270,16 +273,21 @@ async function generateCommentSummary(
 ): Promise<{ eventType: NotificationEventType; summary: string; metadata: Record<string, unknown> } | null> {
   if (action === "remove") return null;
 
+  const body = (data.body as string) ?? "";
+
+  // Only notify clients about comments with the trigger prefix (heyclient, pulse).
+  // Internal comments must never reach the client notification pipeline.
+  if (!isClientFacing(body)) return null;
+
   const userName = await resolveCommentAuthor(data);
   const issueIdentifier =
     (data.issue as { identifier?: string })?.identifier ?? "an issue";
-  const body = (data.body as string) ?? "";
   const excerpt = body.length > 100 ? body.slice(0, 100) + "..." : body;
 
   if (action === "create") {
     return {
       eventType: "comment",
-      summary: `New comment on ${issueIdentifier} by ${userName}`,
+      summary: `New comment on ${issueIdentifier}`,
       metadata: {
         excerpt,
         _issue_id: (data.issue as { id?: string })?.id,
@@ -291,7 +299,7 @@ async function generateCommentSummary(
   // action === "update" — comment edited
   return {
     eventType: "comment",
-    summary: `Comment updated on ${issueIdentifier} by ${userName}`,
+    summary: `Comment updated on ${issueIdentifier}`,
     metadata: {
       excerpt,
       _issue_id: (data.issue as { id?: string })?.id,
