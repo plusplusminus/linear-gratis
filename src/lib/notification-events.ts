@@ -270,7 +270,7 @@ async function resolveCommentAuthor(data: Record<string, unknown>): Promise<stri
 async function generateCommentSummary(
   action: string,
   data: Record<string, unknown>
-): Promise<{ eventType: NotificationEventType; summary: string; metadata: Record<string, unknown> } | null> {
+): Promise<{ eventType: NotificationEventType; summary: string; metadata: Record<string, unknown>; actorName?: string } | null> {
   if (action === "remove") return null;
 
   const body = (data.body as string) ?? "";
@@ -288,6 +288,7 @@ async function generateCommentSummary(
     return {
       eventType: "comment",
       summary: `New comment on ${issueIdentifier}`,
+      actorName: userName,
       metadata: {
         excerpt,
         _issue_id: (data.issue as { id?: string })?.id,
@@ -300,6 +301,7 @@ async function generateCommentSummary(
   return {
     eventType: "comment",
     summary: `Comment updated on ${issueIdentifier}`,
+    actorName: userName,
     metadata: {
       excerpt,
       _issue_id: (data.issue as { id?: string })?.id,
@@ -557,7 +559,7 @@ export async function emitNotificationEventsForWebhook(
     if (!entityType) return;
 
     // Generate summary based on entity type
-    let result: { eventType: NotificationEventType; summary: string; metadata: Record<string, unknown> } | null = null;
+    let result: { eventType: NotificationEventType; summary: string; metadata: Record<string, unknown>; actorName?: string } | null = null;
 
     switch (type) {
       case "Issue":
@@ -583,7 +585,7 @@ export async function emitNotificationEventsForWebhook(
     const teamId = extractTeamId(type, data);
     const teamKey = extractTeamKey(type, data);
     const entityId = (data.id as string) ?? "unknown";
-    const actorName = extractActorName(data);
+    const actorName = result.actorName ?? extractActorName(data);
 
     // Enrich metadata with team_key for deep linking in UI
     const metadata: Record<string, unknown> = {
