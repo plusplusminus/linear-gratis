@@ -31,7 +31,8 @@ export async function POST(
     }
 
     const email = body.email.trim().toLowerCase();
-    const role = body.role === "view_only" ? "view_only" : "default";
+    const explicitRole = body.role === "view_only" || body.role === "default" ? body.role : undefined;
+    const role: HubMemberRole = explicitRole ?? "default";
 
     // Verify hub exists and has a WorkOS org
     const { data: hub } = await supabaseAdmin
@@ -99,7 +100,7 @@ export async function POST(
         .from("hub_members")
         .update({
           workos_invitation_id: invitationId,
-          role,
+          ...(explicitRole ? { role: explicitRole } : {}),
         })
         .eq("id", existing.id)
         .select()
