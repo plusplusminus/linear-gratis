@@ -190,29 +190,25 @@ export function ProjectTabs({
             </div>
           </div>
 
-          {priorityMode === "rank" ? (
-            <TaskRankingView
-              projectId={projectId}
-              tasks={issues.map((issue) => ({
+          {(() => {
+            // Only show unstarted/backlog/triage tasks for prioritisation — exclude
+            // started (In Progress/In Review), completed, and cancelled.
+            const priorityTasks = issues
+              .filter((issue) => !["started", "completed", "cancelled"].includes(issue.state.type))
+              .map((issue) => ({
                 id: issue.id,
                 title: issue.title,
                 identifier: issue.identifier,
                 status: issue.state,
                 labels: issue.labels,
-              }))}
-            />
-          ) : (
-            <TaskRiceScoringView
-              projectId={projectId}
-              tasks={issues.map((issue) => ({
-                id: issue.id,
-                title: issue.title,
-                identifier: issue.identifier,
-                status: issue.state,
-                labels: issue.labels,
-              }))}
-            />
-          )}
+              }));
+
+            return priorityMode === "rank" ? (
+              <TaskRankingView projectId={projectId} tasks={priorityTasks} />
+            ) : (
+              <TaskRiceScoringView projectId={projectId} tasks={priorityTasks} />
+            );
+          })()}
         </div>
       )}
     </div>
