@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { ListOrdered, Calculator } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -78,6 +78,21 @@ export function ProjectTabs({
   const [priorityMode, setPriorityMode] = useState<"rank" | "rice">(
     (searchParams.get("priorityMode") as "rank" | "rice") || "rank"
   );
+  // Exclude started (In Progress/In Review), completed, and cancelled tasks from priority views
+  const priorityTasks = useMemo(
+    () =>
+      issues
+        .filter((issue) => !["started", "completed", "cancelled"].includes(issue.state.type))
+        .map((issue) => ({
+          id: issue.id,
+          title: issue.title,
+          identifier: issue.identifier,
+          status: issue.state,
+          labels: issue.labels,
+        })),
+    [issues]
+  );
+
   const hasOverviewContent =
     isOverviewOnly ||
     !!project.content ||
@@ -190,25 +205,11 @@ export function ProjectTabs({
             </div>
           </div>
 
-          {(() => {
-            // Only show unstarted/backlog/triage tasks for prioritisation — exclude
-            // started (In Progress/In Review), completed, and cancelled.
-            const priorityTasks = issues
-              .filter((issue) => !["started", "completed", "cancelled"].includes(issue.state.type))
-              .map((issue) => ({
-                id: issue.id,
-                title: issue.title,
-                identifier: issue.identifier,
-                status: issue.state,
-                labels: issue.labels,
-              }));
-
-            return priorityMode === "rank" ? (
-              <TaskRankingView projectId={projectId} tasks={priorityTasks} />
-            ) : (
-              <TaskRiceScoringView projectId={projectId} tasks={priorityTasks} />
-            );
-          })()}
+          {priorityMode === "rank" ? (
+            <TaskRankingView projectId={projectId} tasks={priorityTasks} />
+          ) : (
+            <TaskRiceScoringView projectId={projectId} tasks={priorityTasks} />
+          )}
         </div>
       )}
     </div>
